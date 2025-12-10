@@ -1,0 +1,206 @@
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { CartProvider } from "@/contexts/CartContext";
+import { DarkModeProvider } from "@/contexts/DarkModeContext";
+import NotFound from "./pages/NotFound";
+import LandingPage from "./pages/LandingPage";
+import Login from "./pages/auth/Login";
+import Signup from "./pages/auth/Signup";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
+import OAuthCallback from "./pages/auth/OAuthCallback";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
+import CustomerProtectedRoute from "./components/auth/CustomerProtectedRoute";
+import Dashboard from "./pages/dashboard/Dashboard";
+import ProductsManager from "./pages/dashboard/ProductsManager";
+import CategoriesManager from "./pages/dashboard/CategoriesManager";
+import OrdersManager from "./pages/dashboard/OrdersManager";
+import CustomersManager from "./pages/dashboard/CustomersManager";
+import ReportsPage from "./pages/dashboard/ReportsPage";
+import Settings from "./pages/dashboard/Settings";
+import DomainManagement from "./pages/dashboard/DomainManagement";
+import TemplatesPage from "./pages/dashboard/TemplatesPage";
+import MarketSetup from "./pages/dashboard/MarketSetup";
+import NavigationEditor from "./pages/dashboard/NavigationEditor";
+import ChatInterface from "./pages/dashboard/ChatInterface";
+import StorefrontEditor from "./pages/dashboard/StorefrontEditor";
+import Management from "./pages/dashboard/Management";
+import AppBuilder from "./pages/dashboard/AppBuilder";
+import InstalledApps from "./pages/dashboard/InstalledApps";
+import MarketingDashboard from "./pages/dashboard/MarketingDashboard";
+import SmartLinePage from "./pages/dashboard/SmartLinePage";
+import SupportPage from "./pages/dashboard/SupportPage";
+import ThemesStore from "./pages/dashboard/ThemesStore";
+import AppsStore from "./pages/dashboard/AppsStore";
+import Home from "./pages/storefront/Home";
+import Products from "./pages/storefront/Products";
+import ProductDetail from "./pages/storefront/ProductDetail";
+import Cart from "./pages/storefront/Cart";
+import Checkout from "./pages/storefront/Checkout";
+import Profile from "./pages/storefront/Profile";
+import Orders from "./pages/storefront/Orders";
+import AccountProfile from "./pages/storefront/AccountProfile";
+import OrderDetail from "./pages/storefront/OrderDetail";
+import Collection from "./pages/storefront/Collection";
+import Categories from "./pages/storefront/Categories";
+import CategoryDetail from "./pages/storefront/CategoryDetail";
+import DynamicPage from "./pages/storefront/DynamicPage";
+import PagesManager from "./pages/dashboard/PagesManager";
+import PageBuilderPage from "./pages/dashboard/PageBuilderPage";
+import DashboardProfile from "./pages/dashboard/DashboardProfile";
+import Help from "./pages/dashboard/Help";
+import WalletTransactions from "./pages/dashboard/WalletTransactions";
+import ActivityLogs from "./pages/dashboard/ActivityLogs";
+import Chat from "./pages/dashboard/Chat";
+import Reports from "./pages/dashboard/Reports";
+import { StorefrontLayout } from "./components/storefront/StorefrontLayout";
+import { DashboardLayout } from "./components/dashboard/DashboardLayout";
+import { TenantRouter } from "./TenantRouter";
+import SystemAdminPanel from "./pages/SystemAdminPanel";
+import './i18n'; // Initialize i18n
+import './styles/theme.css'; // Import theme CSS
+// import './styles/theme-force.css'; // Force theme application - DISABLED to preserve dashboard design
+import './styles/dark-mode-visibility-fix.css'; // Fix invisible text in dark mode
+import PartnerWithUs from './pages/PartnerWithUs';
+
+const queryClient = new QueryClient();
+
+// Helper to check if we are on the main domain
+const isMainDomain = () => {
+  const hostname = window.location.hostname;
+  
+  // Main domains (app/admin access)
+  const mainDomains = ['localhost', '127.0.0.1', "www.saa'ah.com", "saa'ah.com", "app.saa'ah.com"];
+  
+  // Check if it's exactly a main domain (no subdomain)
+  if (mainDomains.includes(hostname)) {
+    return true;
+  }
+  
+  // Check for subdomain pattern (e.g., store.localhost, myshop.localhost)
+  if (hostname.includes('.localhost')) {
+    // This is a subdomain of localhost (tenant storefront)
+    return false;
+  }
+  
+  // Check for subdomain of saa'ah.com (e.g., store.saa'ah.com)
+  if (hostname.endsWith(".saa'ah.com") && !mainDomains.includes(hostname)) {
+    return false;
+  }
+  
+  // Custom domains are always tenant domains
+  // If it's not a main domain and not localhost, it's a custom domain
+  if (!mainDomains.includes(hostname) && hostname !== 'localhost') {
+    return false;
+  }
+  
+  return true;
+};
+
+const App = () => {
+  const isMain = isMainDomain();
+
+  return (
+    <DarkModeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <CartProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+            {isMain ? (
+              <Routes>
+                {/* Landing Page */}
+                <Route path="/" element={<LandingPage />} />
+                
+                {/* Partner with Us */}
+                <Route path="/partner" element={<PartnerWithUs />} />
+                
+                {/* Hidden System Admin Panel - Secret URL */}
+                <Route path="/system-admin-x7k9p2" element={<SystemAdminPanel />} />
+                
+                {/* Auth Routes (No Layout) */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Signup />} />
+                <Route path="/auth/login" element={<Login />} />
+                <Route path="/auth/signup" element={<Signup />} />
+                <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+                <Route path="/auth/reset-password" element={<ResetPassword />} />
+                <Route path="/oauth/callback" element={<OAuthCallback />} />
+                
+                {/* Storefront Preview Routes (With Layout) - Keep these for previewing on main domain */}
+                <Route element={<StorefrontLayout />}>
+                  <Route path="/store" element={<Home />} />
+                  <Route path="/products" element={<Products />} />
+                  <Route path="/products/:id" element={<ProductDetail />} />
+                  <Route path="/collections/:id" element={<Collection />} />
+                  <Route path="/categories" element={<Categories />} />
+                  <Route path="/categories/:id" element={<CategoryDetail />} />
+                  <Route path="/cart" element={<Cart />} />
+                  <Route path="/checkout" element={<Checkout />} />
+                  <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                  <Route path="/account/orders" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
+                  <Route path="/account/profile" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
+                  <Route path="/orders/:id" element={<CustomerProtectedRoute><OrderDetail /></CustomerProtectedRoute>} />
+                  <Route path="/:slug" element={<DynamicPage />} />
+                </Route>
+                
+                {/* Market Setup (Protected, No Dashboard Layout) */}
+                <Route path="/setup" element={<ProtectedRoute><MarketSetup /></ProtectedRoute>} />
+                
+                {/* Dashboard Routes (Protected, With Dashboard Layout) */}
+                <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/dashboard/profile" element={<DashboardProfile />} />
+                  <Route path="/dashboard/products" element={<ProductsManager />} />
+                  <Route path="/dashboard/categories" element={<CategoriesManager />} />
+                  <Route path="/dashboard/orders" element={<OrdersManager />} />
+                  <Route path="/dashboard/customers" element={<CustomersManager />} />
+                  <Route path="/dashboard/reports" element={<ReportsPage />} />
+                  <Route path="/dashboard/pages" element={<PagesManager />} />
+                  <Route path="/dashboard/pages/new" element={<PageBuilderPage />} />
+                  <Route path="/dashboard/pages/:id" element={<PageBuilderPage />} />
+                  <Route path="/dashboard/chat" element={<ChatInterface />} />
+                  <Route path="/dashboard/storefront" element={<StorefrontEditor />} />
+                  <Route path="/dashboard/navigation" element={<NavigationEditor />} />
+                  <Route path="/dashboard/store-settings" element={<Settings />} />
+                  <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
+                  <Route path="/dashboard/smart-line" element={<SmartLinePage />} />
+                  <Route path="/dashboard/design" element={<ThemesStore />} />
+                  <Route path="/dashboard/apps" element={<AppsStore />} />
+                  <Route path="/dashboard/management" element={<Management />} />
+                  <Route path="/dashboard/app-builder" element={<AppBuilder />} />
+                  <Route path="/dashboard/installed-apps" element={<InstalledApps />} />
+                  <Route path="/dashboard/domain" element={<DomainManagement />} />
+                  <Route path="/dashboard/templates" element={<TemplatesPage />} />
+                  <Route path="/dashboard/wallet" element={<WalletTransactions />} />
+                  <Route path="/dashboard/activity-logs" element={<ActivityLogs />} />
+                  <Route path="/dashboard/chat-team" element={<Chat />} />
+                  <Route path="/dashboard/reports" element={<Reports />} />
+                  <Route path="/dashboard/support" element={<SupportPage />} />
+                  <Route path="/dashboard/help" element={<Help />} />
+                  {/* Redirect legacy settings route */}
+                  <Route path="/dashboard/settings" element={<Settings />} />
+                </Route>
+                
+                {/* Fallback */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            ) : (
+              <TenantRouter />
+            )}
+          </BrowserRouter>
+        </TooltipProvider>
+      </CartProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+    </DarkModeProvider>
+  );
+};
+
+export default App;

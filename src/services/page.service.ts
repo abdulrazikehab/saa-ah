@@ -1,0 +1,63 @@
+import { apiClient } from './core/api-client';
+import type { Page, CreatePageData, PageHistory } from './types';
+
+export const pageService = {
+  getPages: async (): Promise<Page[]> => {
+    const response = await apiClient.fetch(`${apiClient.coreUrl}/pages`, {
+      requireAuth: true,
+    });
+    // After central unwrapping, response is the array of pages
+    return Array.isArray(response) ? response : [];
+  },
+
+
+
+  getPage: async (id: string): Promise<Page> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/${id}`, {
+      requireAuth: true,
+    });
+  },
+
+  getPageBySlug: async (slug: string): Promise<Page> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/slug/${slug}`, {
+      requireAuth: false, // Public endpoint for viewing pages on subdomains
+    });
+  },
+
+  createPage: async (data: CreatePageData): Promise<Page> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  },
+
+  updatePage: async (id: string, data: Partial<CreatePageData>): Promise<Page> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  },
+
+  deletePage: async (id: string): Promise<void> => {
+    await apiClient.fetch(`${apiClient.coreUrl}/pages/${id}`, {
+      method: 'DELETE',
+      requireAuth: true,
+    });
+  },
+
+  getHistory: async (id: string): Promise<PageHistory[]> => {
+    const response = await apiClient.fetch(`${apiClient.coreUrl}/pages/${id}/history`, {
+      requireAuth: true,
+    });
+    return Array.isArray(response) ? response : [];
+  },
+
+  restoreVersion: async (id: string, historyId: string): Promise<Page> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/${id}/restore/${historyId}`, {
+      method: 'POST',
+      requireAuth: true,
+    });
+  },
+};
