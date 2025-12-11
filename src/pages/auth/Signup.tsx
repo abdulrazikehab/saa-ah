@@ -159,7 +159,12 @@ export default function Signup() {
   };
 
   const handleGoogleSignIn = () => {
-    window.location.href = `${import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001'}/auth/google`;
+    const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001';
+    // Production URL already includes /auth, dev needs it appended
+    const googleAuthUrl = authBaseUrl.includes('localhost')
+      ? `${authBaseUrl}/auth/google`
+      : `${authBaseUrl}/google`;
+    window.location.href = googleAuthUrl;
   };
 
   return (
@@ -246,10 +251,10 @@ export default function Signup() {
         <div className="relative z-10">
           <Link to="/" className="inline-flex flex-col gap-4 group">
             <div className="flex items-center gap-4">
-              <img src="/branding/saaah-logo-full.png" alt="Saa'ah - سِعَة" className="h-20 w-auto object-contain bg-transparent group-hover:scale-110 transition-transform" />
+              <img src="/branding/saeaa-logo.png" alt="Saeaa - سِعَة" className="h-20 w-auto object-contain bg-transparent group-hover:scale-110 transition-transform" />
               <div className="flex flex-col">
                 <h1 className="text-4xl font-bold text-white">سِعَة</h1>
-                <p className="text-xl font-semibold text-purple-200">Saa'ah</p>
+                <p className="text-xl font-semibold text-purple-200">Saeaa</p>
               </div>
             </div>
             <p className="text-white/80 text-sm">منصة أسواقك الرقمية | Your Digital Markets Platform</p>
@@ -292,10 +297,10 @@ export default function Signup() {
           {/* Mobile Logo with Bilingual Branding */}
           <Link to="/" className="lg:hidden flex flex-col items-center gap-3 mb-8 group">
             <div className="flex items-center gap-3">
-              <img src="/branding/saaah-logo-full.png" alt="Saa'ah - سِعَة" className="h-16 w-auto object-contain bg-transparent group-hover:scale-110 transition-transform" />
+              <img src="/branding/saeaa-logo.png" alt="Saeaa - سِعَة" className="h-16 w-auto object-contain bg-transparent group-hover:scale-110 transition-transform" />
               <div className="flex flex-col">
                 <h1 className="text-3xl font-bold gradient-text">سِعَة</h1>
-                <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">Saa'ah</p>
+                <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">Saeaa</p>
               </div>
             </div>
             <p className="text-gray-600 dark:text-gray-400 text-xs text-center">منصة أسواقك الرقمية | Your Digital Markets Platform</p>

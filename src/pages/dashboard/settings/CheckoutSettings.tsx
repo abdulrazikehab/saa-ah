@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Save, ShoppingCart, UserPlus, Mail, Phone, ShieldCheck, Loader2 } from 'lucide-react';
+import { coreApi } from '@/lib/api';
 
 export default function CheckoutSettings() {
   const { toast } = useToast();
@@ -30,45 +31,27 @@ export default function CheckoutSettings() {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('/api/guest-checkout/settings', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data);
+      const response = await coreApi.get('/checkout/settings').catch(() => null);
+      if (response) {
+        setSettings(response);
       }
-    } catch (error) {
-      console.error('Failed to load settings:', error);
+    } catch (error: any) {
+      // Settings might not exist yet
     }
   };
 
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/guest-checkout/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(settings),
+      await coreApi.put('/checkout/settings', settings);
+      toast({
+        title: 'تم الحفظ',
+        description: 'تم حفظ إعدادات الطلبات بنجاح',
       });
-
-      if (response.ok) {
-        toast({
-          title: 'تم الحفظ',
-          description: 'تم حفظ إعدادات الطلبات بنجاح',
-        });
-      } else {
-        throw new Error('Failed to save');
-      }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'خطأ',
-        description: 'فشل حفظ الإعدادات',
+        description: error?.message || 'فشل حفظ الإعدادات',
         variant: 'destructive',
       });
     } finally {

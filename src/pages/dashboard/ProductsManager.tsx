@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Download, Upload, Edit, Trash2, Eye, Package, AlertCircle, Image as ImageIcon, X, Tag, Globe, TrendingUp, Settings } from 'lucide-react';
+import { Plus, Search, Filter, Download, Upload, Edit, Trash2, Eye, Package, AlertCircle, Image as ImageIcon, X, Tag, Globe, TrendingUp, Settings, FolderTree, Store } from 'lucide-react';
 import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,19 +7,57 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 interface Category {
   id: string;
   name: string;
-  nameAr: string;
+  nameAr?: string;
+  parentId?: string;
+}
+
+interface CategoryResponse {
+  id: string;
+  name: string;
+  nameAr?: string;
+  parentId?: string;
+}
+
+interface ProductApiResponse {
+  id: string;
+  name: string;
+  nameAr?: string;
+  description?: string;
+  descriptionAr?: string;
+  price?: number | string;
+  compareAtPrice?: number;
+  costPerItem?: number;
+  sku?: string;
+  barcode?: string;
+  lowStockThreshold?: number;
+  images?: Array<string | { url: string }>;
+  categories?: Array<{ category?: Category } | Category>;
+  variants?: Array<{ inventoryQuantity?: number }>;
+  isAvailable?: boolean;
+  featured?: boolean;
+  createdAt?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  weight?: string;
+  dimensions?: string;
+  unit?: { id: string };
+  productId?: string;
+  odooProductId?: string;
+  brand?: { id: string };
+  suppliers?: Array<{ supplierId?: string; supplier?: { id: string } }>;
 }
 
 interface Product {
@@ -47,9 +85,15 @@ interface Product {
 }
 
 export default function ProductsManager() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [units, setUnits] = useState<Array<{ id: string; name: string; nameAr?: string; code: string; symbol?: string; cost: number }>>([]);
+  const [brands, setBrands] = useState<Array<{ id: string; name: string; nameAr?: string; code?: string }>>([]);
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string; nameAr?: string; discountRate: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -80,46 +124,104 @@ export default function ProductsManager() {
     metaDescription: '',
     weight: '',
     dimensions: '',
+    unitId: '',
+    productId: '',
+    odooProductId: '',
+    brandId: '',
+    categoryIds: [] as string[],
+    supplierIds: [] as string[],
   });
   const [productImages, setProductImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle URL parameters for pre-filling form from Hierarchical Explorer
+  useEffect(() => {
+    const openAdd = searchParams.get('openAdd');
+    const editId = searchParams.get('editId');
+    const brandId = searchParams.get('brandId');
+    const categoryIdsParam = searchParams.get('categoryIds');
+    
+    if (openAdd === 'true' && !loading) {
+      // Pre-fill form data for new product
+      const categoryIds = categoryIdsParam ? categoryIdsParam.split(',') : [];
+      
+      setFormData(prev => ({
+        ...prev,
+        brandId: brandId || '',
+        categoryIds: categoryIds,
+        categoryId: categoryIds.length > 0 ? categoryIds[categoryIds.length - 1] : '',
+      }));
+      
+      // Reset editing state and open dialog
+      setEditingProduct(null);
+      setProductImages([]);
+      setIsAddDialogOpen(true);
+      
+      // Clear URL params after processing
+      setSearchParams({});
+    }
+    
+    // Handle edit product from URL
+    if (editId && !loading && products.length > 0) {
+      const productToEdit = products.find(p => p.id === editId);
+      if (productToEdit) {
+        openEditDialog(productToEdit);
+        // Clear URL params after processing
+        setSearchParams({});
+      }
+    }
+  }, [searchParams, loading, setSearchParams, products]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       console.log('🔍 Calling coreApi.getProducts()...');
-      const [productsData, categoriesData] = await Promise.all([
-        coreApi.getProducts({ limit: '1000' } as any),
-        coreApi.getCategories()
+      const [productsData, categoriesData, unitsData, brandsData, suppliersData] = await Promise.all([
+        coreApi.getProducts({ limit: 1000 }),
+        coreApi.getCategories(),
+        coreApi.get('/units').catch(() => []), // Load units, ignore if not available
+        coreApi.get('/brands').catch(() => []), // Load brands, ignore if not available
+        coreApi.get('/suppliers').catch(() => []) // Load suppliers, ignore if not available
       ]);
 
-      const mappedCategories = (categoriesData || []).map((c: any) => ({
+      const mappedCategories = (categoriesData || []).map((c: CategoryResponse) => ({
         id: c.id,
         name: c.name,
-        nameAr: c.nameAr || c.name
+        nameAr: c.nameAr || c.name,
+        parentId: c.parentId || undefined
       }));
       setCategories(mappedCategories);
+      
+      // API client automatically unwraps { success: true, data: T } format
+      // So unitsData, brandsData, suppliersData are already the arrays
+      setUnits(Array.isArray(unitsData) ? unitsData : []);
+      setBrands(Array.isArray(brandsData) ? brandsData : []);
+      setSuppliers(Array.isArray(suppliersData) ? suppliersData : []);
 
-      console.log('📦 Raw products count:', productsData.length);
-      if (productsData.length > 0) {
-        console.log('📦 First product RAW:', JSON.stringify(productsData[0], null, 2));
+      // Cast to ProductApiResponse[] for proper typing of raw data
+      const rawProducts = productsData as unknown as ProductApiResponse[];
+      
+      console.log('📦 Raw products count:', rawProducts.length);
+      if (rawProducts.length > 0) {
+        console.log('📦 First product RAW:', JSON.stringify(rawProducts[0], null, 2));
         console.log('📦 First product fields:', {
-          id: productsData[0].id,
-          name: productsData[0].name,
-          nameAr: productsData[0].nameAr,
-          price: productsData[0].price,
-          priceType: typeof productsData[0].price,
-          images: productsData[0].images,
-          variants: productsData[0].variants,
-          categories: productsData[0].categories
+          id: rawProducts[0].id,
+          name: rawProducts[0].name,
+          nameAr: rawProducts[0].nameAr,
+          price: rawProducts[0].price,
+          priceType: typeof rawProducts[0].price,
+          images: rawProducts[0].images,
+          variants: rawProducts[0].variants,
+          categories: rawProducts[0].categories
         });
       }
 
-      const mappedProducts: Product[] = productsData.map((p: any) => ({
+      const mappedProducts: Product[] = rawProducts.map((p: ProductApiResponse) => ({
         id: p.id,
         name: p.name,
         nameAr: p.nameAr || '',
@@ -132,8 +234,8 @@ export default function ProductsManager() {
         barcode: p.barcode,
         stock: p.variants?.[0]?.inventoryQuantity || 0,
         lowStockThreshold: p.lowStockThreshold || 10,
-        images: p.images?.map((img: any) => typeof img === 'string' ? img : img.url) || [],
-        category: p.categories?.[0]?.category || p.categories?.[0],
+        images: p.images?.map((img) => typeof img === 'string' ? img : img.url) || [],
+        category: (p.categories?.[0] as { category?: Category })?.category || p.categories?.[0] as Category,
         status: p.isAvailable ? 'ACTIVE' : 'DRAFT',
         featured: p.featured || false,
         createdAt: p.createdAt || new Date().toISOString(),
@@ -178,18 +280,21 @@ export default function ProductsManager() {
 
     setUploadingImage(true);
     try {
-      const formData = new FormData();
+      const uploadFormData = new FormData();
       for (let i = 0; i < files.length; i++) {
-        formData.append('images', files[i]);
+        uploadFormData.append('images', files[i]);
       }
 
-      const res = await coreApi.post('/upload/product-images', formData, {
+      interface ImageUploadResponse {
+        images?: Array<{ secureUrl?: string; url?: string }>;
+      }
+      const res = await coreApi.post('/upload/product-images', uploadFormData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         requireAuth: true
-      });
+      }) as ImageUploadResponse;
 
       if (res.images && res.images.length > 0) {
-        const newImageUrls = res.images.map((img: any) => img.secureUrl || img.url);
+        const newImageUrls = res.images.map((img) => img.secureUrl || img.url || '');
         setProductImages([...productImages, ...newImageUrls]);
         toast({ title: 'نجح', description: 'تم رفع الصور بنجاح' });
       }
@@ -226,7 +331,7 @@ export default function ProductsManager() {
         isPublished: formData.status === 'ACTIVE',
         seoTitle: formData.metaTitle || undefined,
         seoDescription: formData.metaDescription || undefined,
-        categoryIds: formData.categoryId ? [formData.categoryId] : [],
+        categoryIds: formData.categoryIds.length > 0 ? formData.categoryIds : (formData.categoryId ? [formData.categoryId] : []),
         images: productImages.map((url, index) => ({
           url,
           altText: formData.name, // Use English name
@@ -235,6 +340,11 @@ export default function ProductsManager() {
         featured: formData.featured,
         weight: formData.weight ? parseFloat(formData.weight) : undefined,
         dimensions: formData.dimensions || undefined,
+        unitId: formData.unitId || undefined,
+        productId: formData.productId || undefined,
+        odooProductId: formData.odooProductId || undefined,
+        brandId: formData.brandId || undefined,
+        supplierIds: formData.supplierIds.length > 0 ? formData.supplierIds : undefined,
         variants: [{
           name: 'Default',
           sku: formData.sku || undefined,
@@ -246,10 +356,10 @@ export default function ProductsManager() {
 
       if (editingProduct) {
         await coreApi.updateProduct(editingProduct.id, productData);
-        toast({ title: 'نجح', description: 'تم تحديث المنتج بنجاح' });
+        toast({ title: t('common.success'), description: t('dashboard.products.editProduct') + ' ' + t('common.success') });
       } else {
         await coreApi.createProduct(productData);
-        toast({ title: 'نجح', description: 'تم إضافة المنتج بنجاح' });
+        toast({ title: t('common.success'), description: t('dashboard.products.addProduct') + ' ' + t('common.success') });
       }
 
       setIsAddDialogOpen(false);
@@ -260,24 +370,24 @@ export default function ProductsManager() {
       console.error('Failed to save product:', error);
       toast({
         title: 'خطأ',
-        description: 'فشل حفظ المنتج',
+        description: t('common.error') + ': ' + t('dashboard.products.addProduct'),
         variant: 'destructive',
       });
     }
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
+    if (!confirm(t('dashboard.products.delete') + '?')) return;
 
     try {
       await coreApi.deleteProduct(id);
-      toast({ title: 'نجح', description: 'تم حذف المنتج بنجاح' });
+      toast({ title: t('common.success'), description: t('dashboard.products.delete') + ' ' + t('common.success') });
       loadData();
     } catch (error) {
       console.error('Failed to delete product:', error);
       toast({
         title: 'خطأ',
-        description: 'فشل حذف المنتج',
+        description: t('common.error') + ': ' + t('dashboard.products.delete'),
         variant: 'destructive',
       });
     }
@@ -304,12 +414,28 @@ export default function ProductsManager() {
       metaDescription: '',
       weight: '',
       dimensions: '',
+      unitId: '',
+      productId: '',
+      odooProductId: '',
+      brandId: '',
+      categoryIds: [],
+      supplierIds: [],
     });
     setProductImages([]);
   };
 
   const openEditDialog = (product: Product) => {
     setEditingProduct(product);
+    // Extended product type for form data
+    interface ExtendedProduct extends Product {
+      categories?: Array<{ category?: { id: string }; id?: string }>;
+      unit?: { id: string };
+      productId?: string;
+      odooProductId?: string;
+      brand?: { id: string };
+      suppliers?: Array<{ supplierId?: string; supplier?: { id: string } }>;
+    }
+    const extProduct = product as ExtendedProduct;
     setFormData({
       name: product.name,
       nameAr: product.nameAr,
@@ -323,6 +449,7 @@ export default function ProductsManager() {
       stock: (product.stock || 0).toString(),
       lowStockThreshold: (product.lowStockThreshold || 0).toString(),
       categoryId: product.category?.id || '',
+      categoryIds: extProduct.categories?.map((c) => c.category?.id || c.id || '').filter(Boolean) || (product.category?.id ? [product.category.id] : []),
       status: product.status,
       featured: product.featured,
       tags: '',
@@ -330,6 +457,11 @@ export default function ProductsManager() {
       metaDescription: product.metaDescription || '',
       weight: product.weight || '',
       dimensions: product.dimensions || '',
+      unitId: extProduct.unit?.id || '',
+      productId: extProduct.productId || '',
+      odooProductId: extProduct.odooProductId || '',
+      brandId: extProduct.brand?.id || '',
+      supplierIds: extProduct.suppliers?.map((s) => s.supplierId || s.supplier?.id || '').filter(Boolean) || [],
     });
     setProductImages(product.images || []);
     setIsAddDialogOpen(true);
@@ -347,7 +479,7 @@ export default function ProductsManager() {
 
   const getStockBadge = (stock: number, threshold: number) => {
     if (stock === 0) {
-      return <Badge variant="outline" className="bg-red-500/10 text-red-700 border-red-500/20">نفذ</Badge>;
+      return <Badge variant="outline" className="bg-red-500/10 text-red-700 border-red-500/20">{t('dashboard.products.depleted')}</Badge>;
     }
     if (stock <= threshold) {
       return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">منخفض</Badge>;
@@ -399,7 +531,7 @@ export default function ProductsManager() {
     
     toast({
       title: 'نجح',
-      description: 'تم تصدير المنتجات بنجاح',
+        description: t('dashboard.products.exportSuccess'),
     });
   };
 
@@ -459,23 +591,23 @@ export default function ProductsManager() {
           });
           successCount++;
         } catch (error) {
-          console.error('Failed to import product:', row.Name, error);
+          // Error logged to backend
           errorCount++;
         }
       }
 
       toast({
-        title: 'تم الاستيراد',
-        description: `تم استيراد ${successCount} منتج بنجاح${errorCount > 0 ? `, فشل ${errorCount}` : ''}`,
+        title: t('dashboard.products.import'),
+        description: t('dashboard.products.importSuccess', { count: successCount, errors: errorCount > 0 ? `, ${t('dashboard.products.importError')} ${errorCount}` : '' }),
       });
       
       loadData();
       e.target.value = '';
-    } catch (error) {
-      console.error('Import error:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : t('dashboard.products.importError');
       toast({ 
         title: 'خطأ', 
-        description: 'فشل استيراد الملف', 
+        description: errorMessage, 
         variant: 'destructive' 
       });
     }
@@ -493,21 +625,35 @@ export default function ProductsManager() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">المنتجات</h1>
-          <p className="text-sm text-gray-500 mt-1">إدارة منتجات المتجر والمخزون</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('dashboard.products.title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('dashboard.products.subtitle')}</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" onClick={resetForm}>
-              <Plus className="h-4 w-4" />
-              إضافة منتج
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            onClick={() => navigate('/dashboard/hierarchical')}
+          >
+            <FolderTree className="h-4 w-4" />
+            المستكشف الهرمي
+          </Button>
+          <Button 
+            className="gap-2" 
+            onClick={() => {
+              setEditingProduct(null);
+              resetForm();
+              setIsAddDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            {t('dashboard.products.addProduct')}
+          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{editingProduct ? 'تعديل المنتج' : 'إضافة منتج جديد'}</DialogTitle>
+              <DialogTitle>{editingProduct ? t('dashboard.products.editProduct') : t('dashboard.products.addNewProduct')}</DialogTitle>
               <DialogDescription>
-                أدخل تفاصيل المنتج أدناه
+                {t('dashboard.products.enterProductDetails')}
               </DialogDescription>
             </DialogHeader>
             
@@ -594,23 +740,83 @@ export default function ProductsManager() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="productId">معرف المنتج (Product ID)</Label>
+                    <Input
+                      id="productId"
+                      value={formData.productId}
+                      onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
+                      placeholder="معرف المنتج (اختياري)"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="odooProductId">معرف Odoo</Label>
+                    <Input
+                      id="odooProductId"
+                      value={formData.odooProductId}
+                      onChange={(e) => setFormData({ ...formData, odooProductId: e.target.value })}
+                      placeholder="معرف Odoo (اختياري)"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <Label htmlFor="category">الفئة</Label>
+                  <Label htmlFor="brandId">العلامة التجارية</Label>
                   <Select 
-                    value={formData.categoryId} 
-                    onValueChange={(value) => setFormData({ ...formData, categoryId: value })}
+                    value={formData.brandId} 
+                    onValueChange={(value) => setFormData({ ...formData, brandId: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="اختر الفئة" />
+                      <SelectValue placeholder="اختر العلامة التجارية (اختياري)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map((category) => (
+                      {brands.map((brand) => (
+                        <SelectItem key={brand.id} value={brand.id}>
+                          {brand.nameAr || brand.name} {brand.code && `(${brand.code})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="categories">الفئات (يمكن اختيار أكثر من فئة)</Label>
+                  <Select 
+                    value="" 
+                    onValueChange={(value) => {
+                      if (value && !formData.categoryIds.includes(value)) {
+                        setFormData({ ...formData, categoryIds: [...formData.categoryIds, value] });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر فئة لإضافتها" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(cat => !formData.categoryIds.includes(cat.id)).map((category) => (
                         <SelectItem key={category.id} value={category.id}>
                           {category.nameAr || category.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {formData.categoryIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {formData.categoryIds.map((catId) => {
+                        const category = categories.find(c => c.id === catId);
+                        return category ? (
+                          <Badge key={catId} variant="secondary" className="flex items-center gap-1">
+                            {category.nameAr || category.name}
+                            <X 
+                              className="h-3 w-3 cursor-pointer" 
+                              onClick={() => setFormData({ ...formData, categoryIds: formData.categoryIds.filter(id => id !== catId) })}
+                            />
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -683,6 +889,26 @@ export default function ProductsManager() {
                       placeholder="SKU-001"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="unitId">الوحدة</Label>
+                  <Select
+                    value={formData.unitId}
+                    onValueChange={(value) => setFormData({ ...formData, unitId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر الوحدة (اختياري)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {units.map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          {unit.nameAr || unit.name} ({unit.code}) - {Number(unit.cost).toFixed(2)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">التكلفة المعروضة بالعملة الأساسية</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -773,6 +999,45 @@ export default function ProductsManager() {
                   <p className="text-sm text-purple-900 dark:text-purple-100">إعدادات متقدمة للمنتج</p>
                 </div>
 
+                <div>
+                  <Label htmlFor="suppliers">الموردين (يمكن اختيار أكثر من مورد)</Label>
+                  <Select 
+                    value="" 
+                    onValueChange={(value) => {
+                      if (value && !formData.supplierIds.includes(value)) {
+                        setFormData({ ...formData, supplierIds: [...formData.supplierIds, value] });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر مورد لإضافته" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.filter(sup => !formData.supplierIds.includes(sup.id)).map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.nameAr || supplier.name} - خصم: {Number(supplier.discountRate).toFixed(2)}%
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.supplierIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {formData.supplierIds.map((supId) => {
+                        const supplier = suppliers.find(s => s.id === supId);
+                        return supplier ? (
+                          <Badge key={supId} variant="secondary" className="flex items-center gap-1">
+                            {supplier.nameAr || supplier.name} ({Number(supplier.discountRate).toFixed(2)}%)
+                            <X 
+                              className="h-3 w-3 cursor-pointer" 
+                              onClick={() => setFormData({ ...formData, supplierIds: formData.supplierIds.filter(id => id !== supId) })}
+                            />
+                          </Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="weight">الوزن (كجم)</Label>
@@ -842,21 +1107,22 @@ export default function ProductsManager() {
                 <Button variant="outline" asChild className="gap-2">
                   <Link to={`/products/${editingProduct.id}`} target="_blank">
                     <Eye className="h-4 w-4" />
-                    عرض في المتجر
+                    {t('dashboard.products.viewInStore')}
                   </Link>
                 </Button>
               )}
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  إلغاء
+                  {t('dashboard.products.cancel')}
                 </Button>
                 <Button onClick={handleSaveProduct}>
-                  {editingProduct ? 'تحديث' : 'إضافة'}
+                  {editingProduct ? t('dashboard.products.update') : t('dashboard.products.add')}
                 </Button>
               </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -865,7 +1131,7 @@ export default function ProductsManager() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">إجمالي المنتجات</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.products.totalProducts')}</p>
                 <p className="text-2xl font-bold mt-1">{stats.total}</p>
               </div>
               <Package className="h-8 w-8 text-blue-500 opacity-50" />
@@ -877,7 +1143,7 @@ export default function ProductsManager() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">منتجات نشطة</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.products.activeProducts')}</p>
                 <p className="text-2xl font-bold mt-1">{stats.active}</p>
               </div>
               <Package className="h-8 w-8 text-green-500 opacity-50" />
@@ -889,7 +1155,7 @@ export default function ProductsManager() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">مخزون منخفض</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.products.lowStock')}</p>
                 <p className="text-2xl font-bold mt-1">{stats.lowStock}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-yellow-500 opacity-50" />
@@ -901,7 +1167,7 @@ export default function ProductsManager() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">نفذ من المخزون</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.products.outOfStock')}</p>
                 <p className="text-2xl font-bold mt-1">{stats.outOfStock}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-red-500 opacity-50" />
@@ -911,16 +1177,27 @@ export default function ProductsManager() {
       </div>
 
       {/* Tabs and Table */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={(value) => {
+        setActiveTab(value);
+        // Clear badge counts when tab is clicked (mark as viewed)
+        if (value === 'low-stock' || value === 'out-of-stock') {
+          // The badges will still show the current count, but this marks the tab as viewed
+          // If you want to actually clear the counts, you'd need to track viewed state separately
+        }
+      }} className="w-full">
         <TabsList className="mb-4">
-          <TabsTrigger value="all">جميع المنتجات</TabsTrigger>
+          <TabsTrigger value="all">{t('dashboard.products.allProducts')}</TabsTrigger>
           <TabsTrigger value="low-stock" className="gap-2">
-            قرب النفاذ
-            <Badge variant="secondary" className="h-5 px-1.5 min-w-[1.25rem]">{stats.lowStock}</Badge>
+            {t('dashboard.products.nearDepletion')}
+            {activeTab !== 'low-stock' && stats.lowStock > 0 && (
+              <Badge variant="secondary" className="h-5 px-1.5 min-w-[1.25rem]">{stats.lowStock}</Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="out-of-stock" className="gap-2">
-            نفذت الكمية
-            <Badge variant="secondary" className="h-5 px-1.5 min-w-[1.25rem]">{stats.outOfStock}</Badge>
+            {t('dashboard.products.quantityDepleted')}
+            {activeTab !== 'out-of-stock' && stats.outOfStock > 0 && (
+              <Badge variant="secondary" className="h-5 px-1.5 min-w-[1.25rem]">{stats.outOfStock}</Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -930,7 +1207,7 @@ export default function ProductsManager() {
             <div className="flex-1 relative">
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="البحث بالاسم أو SKU..."
+                placeholder={t('dashboard.products.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pr-10"
@@ -942,19 +1219,19 @@ export default function ProductsManager() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">جميع الحالات</SelectItem>
-                <SelectItem value="ACTIVE">نشط</SelectItem>
-                <SelectItem value="DRAFT">مسودة</SelectItem>
-                <SelectItem value="ARCHIVED">مؤرشف</SelectItem>
+                <SelectItem value="all">{t('dashboard.products.allStatuses')}</SelectItem>
+                <SelectItem value="ACTIVE">{t('dashboard.products.active')}</SelectItem>
+                <SelectItem value="DRAFT">{t('dashboard.products.draft')}</SelectItem>
+                <SelectItem value="ARCHIVED">{t('dashboard.products.archived')}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filterCategory} onValueChange={setFilterCategory}>
               <SelectTrigger className="w-[180px]">
                 <Filter className="h-4 w-4 ml-2" />
-                <SelectValue placeholder="الفئة" />
+                <SelectValue placeholder={t('dashboard.products.category')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">جميع الفئات</SelectItem>
+                <SelectItem value="all">{t('dashboard.products.allCategories')}</SelectItem>
                 {categories.map((category) => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.nameAr || category.name}
@@ -965,7 +1242,7 @@ export default function ProductsManager() {
             <div className="flex gap-2">
               <Button variant="outline" className="gap-2" onClick={handleExportProducts}>
                 <Download className="h-4 w-4" />
-                تصدير
+                {t('dashboard.products.export')}
               </Button>
               <div className="relative">
                 <Input
@@ -976,7 +1253,7 @@ export default function ProductsManager() {
                 />
                 <Button variant="outline" className="gap-2">
                   <Upload className="h-4 w-4" />
-                  استيراد
+                  {t('dashboard.products.import')}
                 </Button>
               </div>
             </div>
@@ -990,23 +1267,27 @@ export default function ProductsManager() {
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-12">
               <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold mb-2">لا توجد منتجات</h3>
-              <p className="text-gray-500 mb-4">ابدأ بإضافة منتجك الأول</p>
-              <Button onClick={() => setIsAddDialogOpen(true)}>
+              <h3 className="text-xl font-semibold mb-2">{t('dashboard.products.noProducts')}</h3>
+              <p className="text-gray-500 mb-4">{t('dashboard.products.startAddingFirst')}</p>
+              <Button onClick={() => {
+                setEditingProduct(null);
+                resetForm();
+                setIsAddDialogOpen(true);
+              }}>
                 <Plus className="h-4 w-4 ml-2" />
-                إضافة منتج
+                {t('dashboard.products.addProduct')}
               </Button>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>المنتج</TableHead>
+                  <TableHead>{t('dashboard.products.product')}</TableHead>
                   <TableHead>SKU</TableHead>
-                  <TableHead>السعر</TableHead>
-                  <TableHead>المخزون</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>الإجراءات</TableHead>
+                  <TableHead>{t('dashboard.products.price')}</TableHead>
+                  <TableHead>{t('dashboard.products.stock')}</TableHead>
+                  <TableHead>{t('dashboard.products.status')}</TableHead>
+                  <TableHead>{t('dashboard.products.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1286,7 +1567,7 @@ export default function ProductsManager() {
                 >
                   <Link to={`/products/${viewingProduct.id}`} target="_blank">
                     <Eye className="h-4 w-4" />
-                    عرض في المتجر
+                    {t('dashboard.products.viewInStore')}
                   </Link>
                 </Button>
               </div>

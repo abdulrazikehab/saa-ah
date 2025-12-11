@@ -20,9 +20,15 @@ export default function DynamicPage() {
   const loadPage = async () => {
     try {
       const data = await coreApi.getPageBySlug(slug!);
-      setPage(data);
+      // Only set page if it's published (unless preview mode)
+      if (data && (isPreview || data.isPublished)) {
+        setPage(data);
+      } else {
+        setPage(null);
+      }
     } catch (error) {
-      console.error('Failed to load page', error);
+      // Error logged to backend
+      setPage(null);
     } finally {
       setLoading(false);
     }

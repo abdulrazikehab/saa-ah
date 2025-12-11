@@ -46,8 +46,15 @@ export default function PagesManager() {
       return `${protocol}//${subdomain}.localhost${portPart}/${slug}`;
     }
     
-    // For production
-    return `${protocol}//${subdomain}.saa'ah.com/${slug}`;
+    // For production - detect domain from current hostname
+    if (window.location.hostname.includes('saeaa.net')) {
+      return `${protocol}//${subdomain}.saeaa.net/${slug}`;
+    }
+    if (window.location.hostname.includes('saeaa.com')) {
+      return `${protocol}//${subdomain}.saeaa.com/${slug}`;
+    }
+    // Fallback to saeaa.com
+    return `${protocol}//${subdomain}.saeaa.com/${slug}`;
   };
 
   useEffect(() => {

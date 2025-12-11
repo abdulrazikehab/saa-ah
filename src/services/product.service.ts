@@ -13,11 +13,9 @@ export const productService = {
   // Products
   getProducts: async (params?: ProductQueryParams): Promise<Product[]> => {
     const url = `${apiClient.coreUrl}/products?${new URLSearchParams(params as Record<string, string>)}`;
-    console.log('🌐 Fetching products from URL:', url);
     const response = await apiClient.fetch(url, {
       requireAuth: true,
     });
-    console.log('🌐 Response received:', response);
     // Backend returns { data: [...], meta: {...} } or just [...]
     // After central unwrapping, response is already the data object
     return (response as { data: Product[] })?.data || (response as Product[]) || [];

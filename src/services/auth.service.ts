@@ -8,7 +8,6 @@ export const authService = {
 
   login: async (data: LoginData): Promise<{ id: string; email: string; role: string; tenantId: string; avatar?: string | null; accessToken: string; refreshToken: string }> => {
     const fingerprint = await getDeviceFingerprint();
-    console.log('🔐 Generated Device Fingerprint:', fingerprint);
     return apiClient.fetch(`${apiClient.authUrl}/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ ...data, fingerprint }),
@@ -19,6 +18,7 @@ export const authService = {
     const fingerprint = await getDeviceFingerprint();
     return apiClient.fetch(`${apiClient.authUrl}/auth/signup`, {
       method: 'POST',
+      credentials: 'include', // Include cookies
       body: JSON.stringify({ ...data, fingerprint }),
     });
   },
@@ -55,10 +55,18 @@ export const authService = {
     });
   },
 
-  refreshToken: (refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> =>
+  refreshToken: (): Promise<{ accessToken: string; refreshToken: string }> =>
     apiClient.fetch(`${apiClient.authUrl}/auth/refresh`, {
       method: 'POST',
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include', // Include cookies
+      body: JSON.stringify({}), // Token will come from cookie
+    }),
+
+  logout: (): Promise<{ message: string }> =>
+    apiClient.fetch(`${apiClient.authUrl}/auth/logout`, {
+      method: 'POST',
+      requireAuth: true,
+      credentials: 'include',
     }),
 
   me: (): Promise<{ user: UserProfile }> =>
@@ -94,6 +102,38 @@ export const authService = {
     apiClient.fetch(`${apiClient.authUrl}/auth/kyc/${verificationId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, notes }),
+      requireAuth: true,
+    }),
+
+  // Store/Market Management
+  getUserMarkets: (): Promise<Array<{
+    id: string;
+    name: string;
+    subdomain: string;
+    plan: string;
+    status: string;
+    createdAt: string;
+    isOwner: boolean;
+    isActive: boolean;
+  }>> =>
+    apiClient.fetch(`${apiClient.authUrl}/auth/markets`, {
+      requireAuth: true,
+    }),
+
+  switchStore: (tenantId: string): Promise<{ success: boolean; tenantId: string }> =>
+    apiClient.fetch(`${apiClient.authUrl}/auth/markets/switch`, {
+      method: 'POST',
+      body: JSON.stringify({ tenantId }),
+      requireAuth: true,
+    }),
+
+  canCreateMarket: (): Promise<{ allowed: boolean; currentCount: number; limit: number }> =>
+    apiClient.fetch(`${apiClient.authUrl}/auth/markets/can-create`, {
+      requireAuth: true,
+    }),
+
+  getMarketLimit: (): Promise<{ limit: number; currentCount: number }> =>
+    apiClient.fetch(`${apiClient.authUrl}/auth/markets/limit`, {
       requireAuth: true,
     }),
 };

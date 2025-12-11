@@ -5,17 +5,23 @@ import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardHeader } from './DashboardHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardBanner from './DashboardBanner';
+import { useTranslation } from 'react-i18next';
 
 export const DashboardLayout = () => {
+  const { i18n } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { user } = useAuth();
+  
+  const isRTL = i18n.language === 'ar';
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="flex">
+    <div className="min-h-screen bg-background" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex flex-col lg:flex-row">
         {/* Desktop Sidebar */}
-        <aside className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 bg-card border-l z-40 transition-all duration-300 ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'}`}>
+        <aside className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 bg-card z-40 transition-all duration-300 ${
+          isRTL ? 'right-0 border-l' : 'left-0 border-r'
+        } ${sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'}`}>
           <DashboardSidebar 
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -24,13 +30,17 @@ export const DashboardLayout = () => {
 
         {/* Mobile Sidebar */}
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-          <SheetContent side="right" className="w-64 p-0">
+          <SheetContent side={isRTL ? 'right' : 'left'} className="w-[280px] sm:w-80 p-0 overflow-hidden">
             <DashboardSidebar />
           </SheetContent>
         </Sheet>
 
         {/* Main Content */}
-        <div className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'lg:mr-20' : 'lg:mr-64'}`}>
+        <div className={`flex-1 w-full transition-all duration-300 ${
+          isRTL 
+            ? (sidebarCollapsed ? 'lg:mr-20' : 'lg:mr-64')
+            : (sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64')
+        }`}>
           {/* Header */}
           <DashboardHeader 
             onMenuClick={() => setSidebarOpen(true)}
@@ -40,9 +50,11 @@ export const DashboardLayout = () => {
           />
 
           {/* Page Content */}
-          <main className="p-4 sm:p-6 lg:p-8">
+          <main className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-[1920px] mx-auto w-full">
             <DashboardBanner />
-            <Outlet />
+            <div className="mt-4 sm:mt-6">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>

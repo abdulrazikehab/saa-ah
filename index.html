@@ -1,25 +1,47 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Saa'ah - سِعَة | منصة التجارة الإلكترونية</title>
-    <meta name="description" content="Create your online store in minutes with Saa'ah - سِعَة" />
-    <meta name="author" content="Saa'ah - سِعَة" />
+    <title>Saeaa - سِعَة | منصة التجارة الإلكترونية</title>
+    <meta name="description" content="Create your online store in minutes with Saeaa - سِعَة" />
+    <meta name="author" content="Saeaa - سِعَة" />
 
-    <meta property="og:title" content="Saa'ah - سِعَة | E-commerce Platform" />
-    <meta property="og:description" content="Create your online store in minutes with Saa'ah" />
+    <meta property="og:title" content="Saeaa - سِعَة | E-commerce Platform" />
+    <meta property="og:description" content="Create your online store in minutes with Saeaa" />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/branding/saaah-logo-full.png" />
+    <meta property="og:image" content="/branding/saeaa-logo.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@SaaahPlatform" />
-    <meta name="twitter:image" content="/branding/saaah-logo-full.png" />
-    <link rel="icon" type="image/png" href="/branding/saaah-logo-full.png" id="favicon" />
+    <meta name="twitter:site" content="@SaeaaPlatform" />
+    <meta name="twitter:image" content="/branding/saeaa-logo.png" />
+    <link rel="icon" type="image/png" href="/branding/saeaa-logo.png" id="favicon" />
+    <script>
+      // Set direction before React loads based on saved language
+      (function() {
+        var lang = localStorage.getItem('language') || localStorage.getItem('i18nextLng') || 'ar';
+        var dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = dir;
+        document.documentElement.setAttribute('dir', dir);
+        document.documentElement.classList.add(dir);
+      })();
+    </script>
   </head>
 
   <body>
     <div id="root"></div>
+    <script>
+      // Apply direction to body immediately
+      (function() {
+        var lang = localStorage.getItem('language') || localStorage.getItem('i18nextLng') || 'ar';
+        var dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.body.dir = dir;
+        document.body.setAttribute('dir', dir);
+        document.body.style.direction = dir;
+        document.body.classList.add(dir);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

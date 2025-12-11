@@ -11,6 +11,7 @@ import {
   Percent
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 interface Partner {
   id: string;
@@ -46,7 +47,7 @@ export default function PartnerManager() {
   const loadPartners = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/partners', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/partners', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       setPartners(response.partners || response || []);
     } catch (error) {
       console.error('Failed to load partners:', error);
@@ -67,7 +68,7 @@ export default function PartnerManager() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await coreApi.post('/admin/master/partners', formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post('/admin/master/partners', formData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Partner created successfully'
@@ -89,7 +90,7 @@ export default function PartnerManager() {
     if (!editingPartner) return;
     
     try {
-      await coreApi.put(`/admin/master/partners/${editingPartner.id}`, formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.put(`/admin/master/partners/${editingPartner.id}`, formData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Partner updated successfully'
@@ -109,7 +110,7 @@ export default function PartnerManager() {
     if (!confirm('Are you sure you want to delete this partner?')) return;
     
     try {
-      await coreApi.delete(`/admin/master/partners/${id}`, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.delete(`/admin/master/partners/${id}`, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Partner deleted'

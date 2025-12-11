@@ -10,7 +10,9 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  Menu
+  Menu,
+  Store,
+  Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +39,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageToggle } from '@/components/LanguageToggle';
+import { StoreSwitcher } from '@/components/dashboard/StoreSwitcher';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -44,6 +47,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
+import { authService } from '@/services/auth.service';
 
 interface DashboardHeaderProps {
   onMenuClick?: () => void;
@@ -63,52 +68,130 @@ interface Notification {
 
 export const DashboardHeader = ({ 
   onMenuClick, 
-  userName = "سيل كلاود",
+  userName = "User",
   userEmail = "admin@example.com",
   userAvatar 
 }: DashboardHeaderProps) => {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const [dateRange, setDateRange] = useState('month');
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user, refreshUser } = useAuth();
   const { toast } = useToast();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [markets, setMarkets] = useState<Array<{ id: string; name: string; subdomain: string }>>([]);
+  const [checkingMarkets, setCheckingMarkets] = useState(false);
+
+  useEffect(() => {
+    loadMarkets();
+  }, []);
+
+  const loadMarkets = async () => {
+    try {
+      const marketsData = await authService.getUserMarkets();
+      setMarkets(marketsData);
+    } catch (error) {
+      console.error('Failed to load markets:', error);
+    }
+  };
+
+  const handleMarketButtonClick = async () => {
+    if (checkingMarkets) return;
+    
+    try {
+      setCheckingMarkets(true);
+      const marketsData = await authService.getUserMarkets();
+      const canCreateData = await authService.canCreateMarket();
+      
+      // Filter out current market
+      const otherMarkets = marketsData.filter(m => m.id !== user?.tenantId);
+      
+      if (otherMarkets.length > 0) {
+        // Switch to the first other market
+        await authService.switchStore(otherMarkets[0].id);
+        await refreshUser();
+        toast({
+          title: t('common.success'),
+          description: 'تم التبديل إلى المتجر بنجاح',
+        });
+        window.location.reload();
+      } else if (canCreateData.allowed) {
+        // No other markets, create a new one
+        navigate('/dashboard/market-setup');
+      } else {
+        toast({
+          title: t('common.info'),
+          description: 'لا يمكنك إنشاء متجر جديد. تم الوصول إلى الحد الأقصى.',
+        });
+      }
+    } catch (error: unknown) {
+      console.error('Failed to handle market action:', error);
+      const errorMessage = error instanceof Error ? error.message : 'فشلت العملية';
+      toast({
+        title: t('common.error'),
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setCheckingMarkets(false);
+    }
+  };
 
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
+        interface OrderItem {
+          id: string;
+          status: string;
+          orderNumber: string;
+          totalAmount: number;
+          createdAt: string;
+        }
+        interface ProductVariant {
+          inventoryQuantity: number;
+          trackInventory: boolean;
+        }
+        interface ProductItem {
+          id: string;
+          name: string;
+          variants?: ProductVariant[];
+        }
         const [ordersRes, productsRes] = await Promise.all([
-          coreApi.get('/orders', { requireAuth: true }),
-          coreApi.get('/products', { requireAuth: true })
+          coreApi.get('/orders', { requireAuth: true }) as Promise<{ orders?: OrderItem[] }>,
+          coreApi.get('/products', { requireAuth: true }) as Promise<{ products?: ProductItem[] }>
         ]);
 
         const newNotifications: Notification[] = [];
 
         // Check for pending orders
-        const pendingOrders = (ordersRes.orders || []).filter((o: any) => o.status === 'PENDING');
-        pendingOrders.forEach((order: any) => {
+        const pendingOrders = (ordersRes.orders || []).filter((o) => o.status === 'PENDING');
+        pendingOrders.forEach((order) => {
           newNotifications.push({
             id: `order-${order.id}`,
             type: 'order',
-            title: 'طلب جديد',
-            message: `طلب جديد #${order.orderNumber} بقيمة ${order.totalAmount}`,
-            time: new Date(order.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+            title: t('dashboard.header.newOrder'),
+            message: t('dashboard.header.newOrderMessage', { 
+              orderNumber: order.orderNumber, 
+              amount: order.totalAmount 
+            }),
+            time: new Date(order.createdAt).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
             read: false
           });
         });
 
         // Check for low stock
-        const lowStockProducts = (productsRes.products || []).filter((p: any) => 
-            p.variants?.some((v: any) => v.inventoryQuantity < 5 && v.trackInventory)
+        const lowStockProducts = (productsRes.products || []).filter((p) => 
+            p.variants?.some((v) => v.inventoryQuantity < 5 && v.trackInventory)
         );
         
-        lowStockProducts.forEach((product: any) => {
+        lowStockProducts.forEach((product) => {
              newNotifications.push({
                 id: `stock-${product.id}`,
                 type: 'stock',
-                title: 'تنبيه مخزون',
-                message: `المنتج "${product.name}" أوشك على النفاد`,
-                time: 'الآن',
+                title: t('dashboard.header.lowStockAlert'),
+                message: t('dashboard.header.lowStockMessage', { productName: product.name }),
+                time: t('dashboard.header.now'),
                 read: false
              });
         });
@@ -122,7 +205,7 @@ export const DashboardHeader = ({
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [t, i18n.language]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -133,74 +216,111 @@ export const DashboardHeader = ({
 
   const handleDownload = () => {
     toast({
-      title: 'جاري التحميل',
-      description: 'سيتم تحميل التقرير قريباً',
+      title: t('dashboard.header.download'),
+      description: t('dashboard.header.download', 'Report will be downloaded soon'),
     });
   };
 
   const handleFilter = () => {
     toast({
-      title: 'تصفية',
-      description: 'تم تطبيق التصفية الافتراضية',
+      title: t('dashboard.header.filter'),
+      description: t('dashboard.header.filter', 'Default filter applied'),
     });
   };
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8 gap-4">
+      <div className="flex h-14 sm:h-16 items-center justify-between px-3 sm:px-4 md:px-6 lg:px-8 gap-2 sm:gap-4">
         {/* Left Section - Mobile Menu + Search */}
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
             onClick={onMenuClick}
+            aria-label="فتح القائمة"
           >
             <Menu className="h-5 w-5" />
           </Button>
 
-          {/* Saa'ah Logo */}
-          <div className="hidden md:flex items-center mr-6">
-            <img src="/branding/saaah-logo-full.png" alt="Saa'ah - سِعَة" className="h-8 object-contain bg-transparent" />
+          {/* Saeaa Logo */}
+          <div className={`hidden sm:flex items-center flex-shrink-0 ${isRTL ? 'mr-2 md:mr-6' : 'ml-2 md:ml-6'}`}>
+            <img src="/branding/saeaa-logo.png" alt="Saeaa - سِعَة" className="h-7 sm:h-8 object-contain bg-transparent" />
           </div>
 
-          {/* Search Bar */}
-          <div className="relative hidden md:flex flex-1 max-w-md">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="بحث رقم الطلب، رقم المنتج، اسم العميل..."
-              className="pr-10 bg-muted/50 border-0 focus-visible:ring-1"
-            />
-          </div>
         </div>
 
         {/* Center Section - Date Range Selector */}
-        <div className="hidden lg:flex items-center gap-2">
+        <div className="hidden xl:flex items-center gap-2 flex-shrink-0">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-[280px] bg-muted/50 border-0">
-              <Calendar className="h-4 w-4 ml-2 text-muted-foreground" />
+            <SelectTrigger className="w-[240px] xl:w-[280px] bg-muted/50 border-0 h-9">
+              <Calendar className={`h-4 w-4 text-muted-foreground ${isRTL ? 'ml-2' : 'mr-2'}`} />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="week">نوفمبر 1, 2025 - نوفمبر 7, 2025</SelectItem>
-              <SelectItem value="month">نوفمبر 1, 2025 - نوفمبر 30, 2025</SelectItem>
-              <SelectItem value="year">يناير 1, 2025 - ديسمبر 31, 2025</SelectItem>
-              <SelectItem value="custom">تخصيص التاريخ</SelectItem>
+              <SelectItem value="week">
+                {(() => {
+                  const now = new Date();
+                  const start = new Date(now);
+                  start.setDate(start.getDate() - 7);
+                  const locale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+                  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+                  return `${start.toLocaleDateString(locale, options)} - ${now.toLocaleDateString(locale, options)}`;
+                })()}
+              </SelectItem>
+              <SelectItem value="month">
+                {(() => {
+                  const now = new Date();
+                  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+                  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                  const locale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+                  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+                  return `${start.toLocaleDateString(locale, options)} - ${end.toLocaleDateString(locale, options)}`;
+                })()}
+              </SelectItem>
+              <SelectItem value="year">
+                {(() => {
+                  const now = new Date();
+                  const start = new Date(now.getFullYear(), 0, 1);
+                  const end = new Date(now.getFullYear(), 11, 31);
+                  const locale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+                  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+                  return `${start.toLocaleDateString(locale, options)} - ${end.toLocaleDateString(locale, options)}`;
+                })()}
+              </SelectItem>
+              <SelectItem value="custom">{t('dashboard.header.customDate')}</SelectItem>
             </SelectContent>
           </Select>
 
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleDownload}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleDownload} title={t('dashboard.header.download')}>
             <Download className="h-4 w-4" />
           </Button>
 
-          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleFilter}>
+          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleFilter} title={t('dashboard.header.filter')}>
             <Filter className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Right Section - Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* Create/Switch Market Button */}
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="gap-2 hidden sm:flex"
+            onClick={handleMarketButtonClick}
+            disabled={checkingMarkets}
+          >
+            <Store className="h-4 w-4" />
+            <span className="hidden md:inline">
+              {checkingMarkets ? 'جاري التحميل...' : markets.filter(m => m.id !== user?.tenantId).length > 0 ? 'تبديل المتجر' : 'إنشاء متجر'}
+            </span>
+            <Plus className="h-4 w-4 md:hidden" />
+          </Button>
+          
+          {/* Store Switcher */}
+          <StoreSwitcher />
+
           {/* Theme Toggle */}
           <ThemeToggle />
 
@@ -210,23 +330,23 @@ export const DashboardHeader = ({
           {/* Notifications */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 sm:h-10 sm:w-10">
+                <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
                 {unreadCount > 0 && (
                   <Badge 
                     variant="destructive" 
-                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                    className="absolute -top-0.5 -right-0.5 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center p-0 text-[10px] sm:text-xs"
                   >
-                    {unreadCount}
+                    {unreadCount > 9 ? '9+' : unreadCount}
                   </Badge>
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="end">
+            <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm p-0" align="end">
               <div className="flex items-center justify-between p-4 border-b">
-                <h3 className="font-semibold">التنبيهات</h3>
+                <h3 className="font-semibold">{t('dashboard.header.notifications')}</h3>
                 <Button variant="ghost" size="sm" className="h-8 text-xs">
-                  مسح الكل
+                  {t('dashboard.header.clearAll')}
                 </Button>
               </div>
               <ScrollArea className="h-[400px]">
@@ -270,21 +390,21 @@ export const DashboardHeader = ({
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 px-2">
-                <Avatar className="h-8 w-8">
+              <Button variant="ghost" className="gap-1.5 sm:gap-2 px-1.5 sm:px-2 h-9 sm:h-10">
+                <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
                   <AvatarImage src={userAvatar} alt={userName} />
-                  <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
-                    {userName.charAt(0)}
+                  <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-xs sm:text-sm">
+                    {userName.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-medium">{userName}</span>
-                  <span className="text-xs text-muted-foreground">{userEmail}</span>
+                  <span className="text-xs sm:text-sm font-medium truncate max-w-[120px]">{userName}</span>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[120px]">{userEmail}</span>
                 </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground hidden sm:block" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-56 sm:w-64">
               <DropdownMenuLabel>
                 <div className="flex flex-col">
                   <span>{userName}</span>
@@ -295,21 +415,21 @@ export const DashboardHeader = ({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate('/dashboard/profile')}>
-                <User className="ml-2 h-4 w-4" />
-                <span>الملف الشخصي</span>
+                <User className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                <span>{t('dashboard.header.profile')}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
-                <Settings className="ml-2 h-4 w-4" />
-                <span>الإعدادات</span>
+                <Settings className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                <span>{t('dashboard.header.settings')}</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/dashboard/help')}>
-                <HelpCircle className="ml-2 h-4 w-4" />
-                <span>المساعدة والدعم</span>
+                <HelpCircle className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                <span>{t('dashboard.header.helpAndSupport')}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={handleLogout}>
-                <LogOut className="ml-2 h-4 w-4" />
-                <span>تسجيل الخروج</span>
+                <LogOut className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                <span>{t('dashboard.header.logout')}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -317,13 +437,13 @@ export const DashboardHeader = ({
       </div>
 
       {/* Mobile Search Bar */}
-      <div className="md:hidden px-4 pb-3">
+      <div className="lg:hidden px-3 sm:px-4 pb-2 sm:pb-3 border-t">
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground ${isRTL ? 'right-3' : 'left-3'}`} />
           <Input
             type="search"
-            placeholder="بحث..."
-            className="pr-10 bg-muted/50 border-0"
+            placeholder={t('dashboard.header.searchPlaceholder')}
+            className={`bg-muted/50 border-0 h-9 text-sm ${isRTL ? 'pr-10' : 'pl-10'}`}
           />
         </div>
       </div>

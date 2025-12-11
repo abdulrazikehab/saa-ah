@@ -14,9 +14,12 @@ export const getStorefrontUrl = (subdomain?: string): string => {
     return `${protocol}//${subdomain}.localhost${portPart}`;
   }
 
-  // For production (saa'ah.com)
-  if (currentHost.includes("saa'ah.com")) {
-    return `${protocol}//${subdomain}.saa'ah.com`;
+  // For production (saeaa.com or saeaa.net)
+  if (currentHost.includes('saeaa.com')) {
+    return `${protocol}//${subdomain}.saeaa.com`;
+  }
+  if (currentHost.includes('saeaa.net')) {
+    return `${protocol}//${subdomain}.saeaa.net`;
   }
 
   // For custom domains, return the subdomain URL

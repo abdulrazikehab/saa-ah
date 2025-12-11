@@ -24,8 +24,8 @@ export default function DomainManagement() {
     try {
       const data = await coreApi.getDomain();
       setDomain(data);
-    } catch (error) {
-      console.error('Failed to load domain:', error);
+    } catch (error: any) {
+      // Silently fail - domain might not be set up yet
     }
   };
 
@@ -59,7 +59,9 @@ export default function DomainManagement() {
     });
   };
 
-  const defaultDomain = domain?.subdomain || "mystore.saa'ah.com";
+  // Detect production domain from current hostname
+  const prodDomain = window.location.hostname.includes('saeaa.net') ? 'saeaa.net' : 'saeaa.com';
+  const defaultDomain = domain?.subdomain || `mystore.${prodDomain}`;
   const customDomainValue = domain?.customDomain || '';
   const isVerified = domain?.verified || false;
 
@@ -123,7 +125,7 @@ export default function DomainManagement() {
                     className="max-w-[200px]"
                     dir="ltr"
                   />
-                  <span className="text-muted-foreground text-sm" dir="ltr">.saa'ah.com</span>
+                  <span className="text-muted-foreground text-sm" dir="ltr">.{prodDomain}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button size="sm" onClick={handleUpdateSubdomain} disabled={loading}>حفظ</Button>
@@ -286,11 +288,11 @@ export default function DomainManagement() {
                       </Button>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm font-mono">Value: cname.saa'ah.com</span>
+                      <span className="text-sm font-mono">Value: cname.{prodDomain}</span>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => copyToClipboard('cname.saa\'ah.com')}
+                        onClick={() => copyToClipboard(`cname.${prodDomain}`)}
                       >
                         <Copy className="h-3 w-3" />
                       </Button>

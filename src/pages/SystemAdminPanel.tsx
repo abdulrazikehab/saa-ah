@@ -5,7 +5,7 @@ import {
   Shield, Activity, Users, CreditCard, Database, Lock, 
   Globe, Sun, Moon, X, Menu, Search, Bell, LogOut, 
   Layers, Zap, CheckCircle, RefreshCcw, Gift, Handshake, 
-  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2
+  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { coreApi } from '@/lib/api';
@@ -17,7 +17,11 @@ import PartnerManager from './master-dashboard/PartnerManager';
 import PlansManager from './master-dashboard/PlansManager';
 import FeatureControlManager from './master-dashboard/FeatureControlManager';
 import UserGiftsManager from './master-dashboard/UserGiftsManager';
+import UserManagement from './master-dashboard/UserManagement';
+
 import AiSettingsManager from './master-dashboard/AiSettingsManager';
+import { APP_VERSION } from '../version';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 // Translations
 const translations = {
@@ -27,6 +31,7 @@ const translations = {
     dashboard: 'Dashboard',
     overview: 'Overview',
     tenants: 'Tenants',
+    users: 'Users',
     plans: 'Plans',
     features: 'Features',
     gifts: 'Gifts',
@@ -93,6 +98,7 @@ const translations = {
     dashboard: 'لوحة التحكم',
     overview: 'نظرة عامة',
     tenants: 'المستأجرين',
+    users: 'المستخدمين',
     plans: 'الخطط',
     features: 'المميزات',
     gifts: 'الهدايا',
@@ -159,6 +165,7 @@ interface AuditLog {
   id: string;
   action: string;
   details: string;
+  url?: string;
   ipAddress?: string;
   resourceType?: string;
   resourceId?: string;
@@ -233,10 +240,25 @@ export default function SystemAdminPanel() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [securityEvents, setSecurityEvents] = useState<AuditLog[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [errorLogs, setErrorLogs] = useState<AuditLog[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<AuditLog[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [logSubTab, setLogSubTab] = useState<'security' | 'audit'>('security');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'management' | 'overview' | 'tenants' | 'gateways' | 'partners' | 'plans' | 'features' | 'gifts' | 'database' | 'ai' | 'customers'>('dashboard');
+  const [logSubTab, setLogSubTab] = useState<'security' | 'audit' | 'errors' | 'all'>('security');
+  const [userFilter, setUserFilter] = useState('');
+  // Professional filters
+  const [severityFilter, setSeverityFilter] = useState<string>('');
+  const [actionTypeFilter, setActionTypeFilter] = useState<string>('');
+  const [dateFromFilter, setDateFromFilter] = useState<string>('');
+  const [dateToFilter, setDateToFilter] = useState<string>('');
+  const [timeFilter, setTimeFilter] = useState<string>(''); // Time filter: last hour, 24h, 7d, 30d, all
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  // User details modal
+  const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
+  const [userLogs, setUserLogs] = useState<AuditLog[]>([]);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'management' | 'overview' | 'tenants' | 'gateways' | 'partners' | 'plans' | 'features' | 'gifts' | 'database' | 'ai' | 'customers' | 'analytics' | 'users'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -251,8 +273,78 @@ export default function SystemAdminPanel() {
   const t = translations[language];
   const isRTL = language === 'ar';
 
-  // Secret password
-  const ADMIN_PASSWORD = "BlackBox2025Admin!";
+  // Admin API key from environment variable
+  const ADMIN_PASSWORD = getAdminApiKey();
+
+  // Normalize any log shape from backend/auth service so UI is robust
+  const normalizeLogs = useCallback((raw: any, type: 'security' | 'audit' | 'error') => {
+    const list = (raw?.logs) || (raw?.data?.logs) || (raw?.data) || raw || [];
+    if (!Array.isArray(list)) return [];
+    return list.map((log, index) => {
+      const id = log.id || log._id || `${type}-${index}-${log.createdAt || Date.now()}`;
+      const severity = log.severity || log.level || (type === 'security' ? 'LOW' : type === 'error' ? 'HIGH' : undefined);
+      const action = log.action || log.event || log.type || (type === 'error' ? 'ERROR' : 'UNKNOWN');
+      // Handle details from different sources (activityLog uses details object, auditLog uses details string)
+      let details = '';
+      if (log.details) {
+        if (typeof log.details === 'string') {
+          details = log.details;
+        } else if (typeof log.details === 'object' && log.details.message) {
+          details = log.details.message;
+        } else if (typeof log.details === 'object') {
+          details = JSON.stringify(log.details);
+        }
+      }
+      details = details || log.message || log.description || (log.metadata?.message) || '';
+      
+      // Extract URL from different sources
+      let url = '';
+      if (log.details && typeof log.details === 'object' && log.details.url) {
+        url = log.details.url;
+      } else if (log.metadata) {
+        if (typeof log.metadata === 'object' && log.metadata.url) {
+          url = log.metadata.url;
+        } else if (typeof log.metadata === 'string') {
+          try {
+            const parsed = JSON.parse(log.metadata);
+            if (parsed.url) url = parsed.url;
+          } catch (e) {
+            // Not JSON, ignore
+          }
+        }
+      }
+      // Also check if URL is directly in the action (format: "METHOD /path")
+      if (!url && log.action && log.action.includes(' ')) {
+        const parts = log.action.split(' ');
+        if (parts.length >= 2) {
+          url = parts.slice(1).join(' ');
+        }
+      }
+      
+      const createdAt = log.createdAt || log.timestamp || new Date().toISOString();
+      
+      // Handle user info from different sources (activityLog uses actorId, auditLog uses userId)
+      const userEmail = log.user?.email || log.userEmail || log.email || (log.metadata?.userEmail);
+      const userName = log.user?.name || log.userName || log.name || (log.metadata?.userName);
+      
+      const tenantName = log.tenant?.name || log.tenantName || log.storeName || log.shopName;
+      const resourceType = log.resourceType || log.entity || log.model || (log.metadata?.resourceType) || (type === 'error' ? 'SYSTEM' : '');
+      const resourceId = log.resourceId || log.entityId || log.targetId || '';
+      return {
+        ...log,
+        id,
+        severity,
+        action,
+        details,
+        url,
+        createdAt,
+        resourceType,
+        resourceId,
+        user: userEmail ? { email: userEmail, name: userName } : (log.user || { email: 'System' }),
+        tenant: tenantName ? { name: tenantName } : log.tenant,
+      } as AuditLog;
+    });
+  }, []);
 
   // Check for existing admin session on mount
   useEffect(() => {
@@ -268,7 +360,7 @@ export default function SystemAdminPanel() {
       const response = await coreApi.get('/admin/master/overview', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
       setDashboardStats(response);
     } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
+      // Error logged to backend
     } finally {
       setStatsLoading(false);
     }
@@ -279,51 +371,99 @@ export default function SystemAdminPanel() {
       const response = await coreApi.get('/admin/master/system-health', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
       setSystemHealth(response);
     } catch (error) {
-      console.error('Failed to fetch system health:', error);
+      // Error logged to backend
     }
   }, []);
 
   const fetchSecurityEvents = useCallback(async () => {
     try {
-      const data = await coreApi.get('/admin/master/security-events', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
-      if (data.logs) {
-        setSecurityEvents(data.logs);
-        if (logSubTab === 'security') {
-          setFilteredLogs(data.logs);
+      // Fetch from both auth and core backends
+      const [authData, coreData] = await Promise.allSettled([
+        apiClient.get(`${apiClient.authUrl}/auth/security-events`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        coreApi.get('/admin/master/security-events', { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
+      ]);
+      
+      const authLogs = authData.status === 'fulfilled' ? normalizeLogs(authData.value, 'security') : [];
+      const coreLogs = coreData.status === 'fulfilled' ? normalizeLogs(coreData.value, 'security') : [];
+      
+      // Merge and deduplicate by id
+      const merged = [...authLogs, ...coreLogs].reduce((acc, log) => {
+        if (!acc.find(l => l.id === log.id)) {
+          acc.push(log);
         }
-      } else if (Array.isArray(data)) {
-        setSecurityEvents(data);
-        if (logSubTab === 'security') {
-          setFilteredLogs(data);
-        }
+        return acc;
+      }, [] as AuditLog[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      setSecurityEvents(merged);
+      if (logSubTab === 'security') {
+        setFilteredLogs(merged);
       }
     } catch (error) {
-      console.error('Failed to fetch security events:', error);
+      // Error logged to backend
+      setSecurityEvents([]);
     }
-  }, [logSubTab]);
+  }, [logSubTab, toast]);
+
+  const fetchErrorLogs = useCallback(async () => {
+    try {
+      // Fetch all error logs from both auth and core backends (with high limit to get all)
+      const [authData, coreData] = await Promise.allSettled([
+        apiClient.get(`${apiClient.authUrl}/auth/error-logs?limit=10000`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        coreApi.get('/admin/master/error-logs?limit=10000', { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })),
+      ]);
+      
+      const authLogs = authData.status === 'fulfilled' ? normalizeLogs(authData.value, 'error') : [];
+      const coreLogs = coreData.status === 'fulfilled' ? normalizeLogs(coreData.value, 'error') : [];
+      
+      // Merge and deduplicate by id
+      const merged = [...authLogs, ...coreLogs].reduce((acc, log) => {
+        if (!acc.find(l => l.id === log.id)) {
+          acc.push(log);
+        }
+        return acc;
+      }, [] as AuditLog[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      setErrorLogs(merged);
+      if (logSubTab === 'errors') {
+        setFilteredLogs(merged);
+      }
+    } catch (error) {
+      setErrorLogs([]);
+    }
+  }, [logSubTab, normalizeLogs]);
 
   const fetchAuditLogs = useCallback(async () => {
     try {
-      const data = await coreApi.get('/admin/master/audit-logs', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
-      if (data.logs) {
-        setAuditLogs(data.logs);
-        if (logSubTab === 'audit') {
-          setFilteredLogs(data.logs);
+      // Fetch from both auth and core backends
+      const [authData, coreData] = await Promise.allSettled([
+        apiClient.get(`${apiClient.authUrl}/auth/audit-logs`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        coreApi.get('/admin/master/audit-logs', { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
+      ]);
+      
+      const authLogs = authData.status === 'fulfilled' ? normalizeLogs(authData.value, 'audit') : [];
+      const coreLogs = coreData.status === 'fulfilled' ? normalizeLogs(coreData.value, 'audit') : [];
+      
+      // Merge and deduplicate by id
+      const merged = [...authLogs, ...coreLogs].reduce((acc, log) => {
+        if (!acc.find(l => l.id === log.id)) {
+          acc.push(log);
         }
-      } else if (Array.isArray(data)) {
-        setAuditLogs(data);
-        if (logSubTab === 'audit') {
-          setFilteredLogs(data);
-        }
+        return acc;
+      }, [] as AuditLog[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      setAuditLogs(merged);
+      if (logSubTab === 'audit') {
+        setFilteredLogs(merged);
       }
     } catch (error) {
-      console.error('Failed to fetch audit logs:', error);
+      // Error logged to backend
+      setAuditLogs([]);
     }
-  }, [logSubTab]);
+  }, [logSubTab, toast]);
 
   const fetchLogs = useCallback(async () => {
-    await Promise.all([fetchSecurityEvents(), fetchAuditLogs()]);
-  }, [fetchSecurityEvents, fetchAuditLogs]);
+    await Promise.all([fetchSecurityEvents(), fetchAuditLogs(), fetchErrorLogs()]);
+  }, [fetchSecurityEvents, fetchAuditLogs, fetchErrorLogs]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -341,7 +481,7 @@ export default function SystemAdminPanel() {
       const data = await coreApi.get('/admin/master/customers', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
       setCustomerFingerprints(data);
     } catch (error) {
-      console.error('Failed to fetch customer fingerprints:', error);
+      // Error logged to backend
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -359,25 +499,146 @@ export default function SystemAdminPanel() {
 
   // Update filtered logs when sub-tab changes
   useEffect(() => {
-    const currentLogs = logSubTab === 'security' ? securityEvents : auditLogs;
+    let currentLogs: AuditLog[] = [];
+    if (logSubTab === 'security') {
+      currentLogs = securityEvents;
+    } else if (logSubTab === 'audit') {
+      currentLogs = auditLogs;
+    } else if (logSubTab === 'errors') {
+      currentLogs = errorLogs;
+    } else if (logSubTab === 'all') {
+      // Combine all logs (security events + audit logs + error logs)
+      currentLogs = [...securityEvents, ...auditLogs, ...errorLogs].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
     setFilteredLogs(currentLogs);
     setSearchTerm('');
-  }, [logSubTab, securityEvents, auditLogs]);
+    setUserFilter('');
+    setCurrentPage(1); // Reset to first page when tab changes
+  }, [logSubTab, securityEvents, auditLogs, errorLogs]);
 
   useEffect(() => {
-    const currentLogs = logSubTab === 'security' ? securityEvents : auditLogs;
+    let currentLogs: AuditLog[] = [];
+    if (logSubTab === 'security') {
+      currentLogs = securityEvents;
+    } else if (logSubTab === 'audit') {
+      currentLogs = auditLogs;
+    } else if (logSubTab === 'errors') {
+      currentLogs = errorLogs;
+    } else if (logSubTab === 'all') {
+      currentLogs = [...securityEvents, ...auditLogs, ...errorLogs].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
+    
+    // Apply user filter
+    if (userFilter) {
+      const lowerUser = userFilter.toLowerCase();
+      currentLogs = currentLogs.filter(log => 
+        (log.user?.email || '').toLowerCase().includes(lowerUser)
+      );
+    }
+    
+    // Apply severity filter
+    if (severityFilter) {
+      currentLogs = currentLogs.filter(log => log.severity === severityFilter);
+    }
+    
+    // Apply action type filter
+    if (actionTypeFilter) {
+      currentLogs = currentLogs.filter(log => 
+        (log.action || '').toLowerCase().includes(actionTypeFilter.toLowerCase())
+      );
+    }
+    
+    // Apply date range filter
+    if (dateFromFilter) {
+      const fromDate = new Date(dateFromFilter);
+      currentLogs = currentLogs.filter(log => new Date(log.createdAt) >= fromDate);
+    }
+    if (dateToFilter) {
+      const toDate = new Date(dateToFilter);
+      toDate.setHours(23, 59, 59, 999);
+      currentLogs = currentLogs.filter(log => new Date(log.createdAt) <= toDate);
+    }
+    
+    // Apply time filter (last hour, 24h, 7d, 30d)
+    if (timeFilter) {
+      const now = new Date();
+      let cutoffDate: Date;
+      switch (timeFilter) {
+        case '1h':
+          cutoffDate = new Date(now.getTime() - 60 * 60 * 1000);
+          break;
+        case '24h':
+          cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          cutoffDate = new Date(0); // All time
+      }
+      if (timeFilter !== 'all') {
+        currentLogs = currentLogs.filter(log => new Date(log.createdAt) >= cutoffDate);
+      }
+    }
+    
+    // Apply search filter
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       setFilteredLogs(currentLogs.filter(log => 
         (log.action || '').toLowerCase().includes(lower) || 
         (log.details || '').toLowerCase().includes(lower) ||
+        (log.url || '').toLowerCase().includes(lower) ||
         (log.ipAddress || '').includes(lower) ||
         (log.user?.email || '').toLowerCase().includes(lower)
       ));
     } else {
       setFilteredLogs(currentLogs);
     }
-  }, [searchTerm, logSubTab, securityEvents, auditLogs]);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [searchTerm, userFilter, severityFilter, actionTypeFilter, dateFromFilter, dateToFilter, timeFilter, logSubTab, securityEvents, auditLogs, errorLogs]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
+
+  // View user details - all activities and errors
+  const viewUserDetails = (email: string) => {
+    setSelectedUserEmail(email);
+    const allLogs = [...securityEvents, ...auditLogs].filter(log => 
+      (log.user?.email || '').toLowerCase() === email.toLowerCase()
+    ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setUserLogs(allLogs);
+    setShowUserModal(true);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchTerm('');
+    setUserFilter('');
+    setSeverityFilter('');
+    setActionTypeFilter('');
+    setDateFromFilter('');
+    setDateToFilter('');
+    setTimeFilter('');
+  };
+
+  // Get unique action types from logs
+  const getActionTypes = () => {
+    const actions = new Set<string>();
+    [...securityEvents, ...auditLogs].forEach(log => {
+      if (log.action) actions.add(log.action);
+    });
+    return Array.from(actions);
+  };
 
   const handleResetDatabase = async () => {
     if (!confirm('ARE YOU SURE? This will delete ALL data. This action cannot be undone.')) return;
@@ -394,7 +655,7 @@ export default function SystemAdminPanel() {
       fetchDashboardStats();
       fetchSystemHealth();
     } catch (error) {
-      console.error('Failed to reset database:', error);
+      // Error logged to backend
       toast({
         variant: 'destructive',
         title: '❌ Error',
@@ -430,6 +691,7 @@ export default function SystemAdminPanel() {
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
     { id: 'overview', label: t.overview, icon: Activity },
     { id: 'tenants', label: t.tenants, icon: Users },
+    { id: 'users', label: t.users, icon: Users },
     { id: 'plans', label: t.plans, icon: Layers },
     { id: 'features', label: t.features, icon: Zap },
     { id: 'ai', label: t.aiAssistant, icon: Bot },
@@ -438,6 +700,7 @@ export default function SystemAdminPanel() {
     { id: 'partners', label: t.partners, icon: Handshake },
     { id: 'database', label: t.database, icon: Database },
     { id: 'customers', label: t.customers, icon: Fingerprint },
+    { id: 'analytics', label: language === 'ar' ? 'التحليلات' : 'Analytics', icon: Activity },
     { id: 'logs', label: t.securityLogs, icon: Shield },
   ];
 
@@ -656,6 +919,10 @@ export default function SystemAdminPanel() {
                 <LogOut className="w-5 h-5" />
                 <span className="font-medium">{t.logout}</span>
               </button>
+              
+              <div className={`mt-4 text-center text-xs ${theme.textDim}`}>
+                v{APP_VERSION}
+              </div>
             </div>
           </motion.aside>
         )}
@@ -889,6 +1156,7 @@ export default function SystemAdminPanel() {
             )}
             {activeTab === 'overview' && <MasterOverview />}
             {activeTab === 'tenants' && <TenantManagement />}
+            {activeTab === 'users' && <UserManagement />}
             {activeTab === 'gateways' && <PaymentGatewayManager />}
             {activeTab === 'partners' && <PartnerManager />}
             {activeTab === 'plans' && <PlansManager />}
@@ -1061,44 +1329,166 @@ export default function SystemAdminPanel() {
                     {language === 'ar' ? 'سجلات التدقيق' : 'Audit Logs'}
                     <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs">{auditLogs.length}</span>
                   </button>
+                  <button
+                    onClick={() => setLogSubTab('errors')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      logSubTab === 'errors' 
+                        ? 'bg-red-500 text-white' 
+                        : `${theme.card} ${theme.textMuted} hover:bg-red-500/20`
+                    }`}
+                  >
+                    <Ban className="w-4 h-4 inline-block mr-2" />
+                    {language === 'ar' ? 'سجل الأخطاء' : 'Error Logs'}
+                    <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                      {errorLogs.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setLogSubTab('all')}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      logSubTab === 'all' 
+                        ? 'bg-cyan-500 text-white' 
+                        : `${theme.card} ${theme.textMuted} hover:bg-cyan-500/20`
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 inline-block mr-2" />
+                    {language === 'ar' ? 'جميع السجلات' : 'All Logs'}
+                    <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                      {securityEvents.length + auditLogs.length + errorLogs.length}
+                    </span>
+                  </button>
                 </div>
 
                 <div className={`${cardStyle} rounded-2xl overflow-hidden`}>
                   <div className={`p-4 border-b ${theme.border}`}>
-                    <div className="relative">
-                      <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 ${theme.textDim}`} />
-                      <input
-                        type="text"
-                        placeholder={t.searchLogs}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className={`w-full ${theme.input} border rounded-lg py-2 ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} text-sm ${theme.text} focus:outline-none ${theme.focus}`}
-                      />
+                    <div className="flex gap-4 flex-wrap">
+                      {/* Search input */}
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 ${theme.textDim}`} />
+                        <input
+                          type="text"
+                          placeholder={t.searchLogs}
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className={`w-full ${theme.input} border rounded-lg py-2 ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                        />
+                      </div>
+                      {/* User filter input */}
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Users className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 w-4 h-4 ${theme.textDim}`} />
+                        <input
+                          type="text"
+                          placeholder={language === 'ar' ? 'تصفية حسب المستخدم...' : 'Filter by user email...'}
+                          value={userFilter}
+                          onChange={(e) => setUserFilter(e.target.value)}
+                          className={`w-full ${theme.input} border rounded-lg py-2 ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Professional Filters Row */}
+                    <div className="flex gap-3 flex-wrap mt-4 items-center">
+                      {/* Severity Filter */}
+                      <select
+                        value={severityFilter}
+                        onChange={(e) => setSeverityFilter(e.target.value)}
+                        className={`${theme.input} border rounded-lg py-2 px-3 text-sm ${theme.text} focus:outline-none ${theme.focus} min-w-[140px]`}
+                      >
+                        <option value="">{language === 'ar' ? 'جميع المستويات' : 'All Severities'}</option>
+                        <option value="LOW">{language === 'ar' ? 'منخفض' : 'LOW'}</option>
+                        <option value="MEDIUM">{language === 'ar' ? 'متوسط' : 'MEDIUM'}</option>
+                        <option value="HIGH">{language === 'ar' ? 'عالي' : 'HIGH'}</option>
+                        <option value="CRITICAL">{language === 'ar' ? 'حرج' : 'CRITICAL'}</option>
+                      </select>
+                      
+                      {/* Action Type Filter */}
+                      <select
+                        value={actionTypeFilter}
+                        onChange={(e) => setActionTypeFilter(e.target.value)}
+                        className={`${theme.input} border rounded-lg py-2 px-3 text-sm ${theme.text} focus:outline-none ${theme.focus} min-w-[140px]`}
+                      >
+                        <option value="">{language === 'ar' ? 'جميع الأنواع' : 'All Actions'}</option>
+                        {getActionTypes().map((action) => (
+                          <option key={action} value={action}>{action}</option>
+                        ))}
+                      </select>
+                      
+                      {/* Date From */}
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs ${theme.textMuted}`}>{language === 'ar' ? 'من:' : 'From:'}</span>
+                        <input
+                          type="date"
+                          value={dateFromFilter}
+                          onChange={(e) => setDateFromFilter(e.target.value)}
+                          className={`${theme.input} border rounded-lg py-2 px-3 text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                        />
+                      </div>
+                      
+                      {/* Date To */}
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs ${theme.textMuted}`}>{language === 'ar' ? 'إلى:' : 'To:'}</span>
+                        <input
+                          type="date"
+                          value={dateToFilter}
+                          onChange={(e) => setDateToFilter(e.target.value)}
+                          className={`${theme.input} border rounded-lg py-2 px-3 text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                        />
+                      </div>
+                      
+                      {/* Time Filter */}
+                      <select
+                        value={timeFilter}
+                        onChange={(e) => setTimeFilter(e.target.value)}
+                        className={`${theme.input} border rounded-lg py-2 px-3 text-sm ${theme.text} focus:outline-none ${theme.focus} min-w-[140px]`}
+                      >
+                        <option value="">{language === 'ar' ? 'جميع الأوقات' : 'All Time'}</option>
+                        <option value="1h">{language === 'ar' ? 'آخر ساعة' : 'Last Hour'}</option>
+                        <option value="24h">{language === 'ar' ? 'آخر 24 ساعة' : 'Last 24 Hours'}</option>
+                        <option value="7d">{language === 'ar' ? 'آخر 7 أيام' : 'Last 7 Days'}</option>
+                        <option value="30d">{language === 'ar' ? 'آخر 30 يوم' : 'Last 30 Days'}</option>
+                      </select>
+                      
+                      {/* Clear Filters Button */}
+                      <button
+                        onClick={clearFilters}
+                        className={`px-4 py-2 ${theme.card} ${theme.border} border rounded-lg ${theme.textMuted} hover:bg-red-500/20 hover:text-red-400 transition-colors text-sm flex items-center gap-2`}
+                      >
+                        <X className="w-4 h-4" />
+                        {language === 'ar' ? 'مسح' : 'Clear'}
+                      </button>
+                      
+                      {/* Results count */}
+                      <span className={`text-sm ${theme.textMuted} ml-auto`}>
+                        {language === 'ar' 
+                          ? `${filteredLogs.length} نتيجة`
+                          : `${filteredLogs.length} results`}
+                      </span>
                     </div>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
+                    <table className="w-full text-sm text-left table-auto" style={{ tableLayout: 'auto' }}>
                       <thead className={`${isDarkMode ? 'bg-gray-800/50' : 'bg-slate-50'} ${theme.textMuted}`}>
                         <tr>
                           {logSubTab === 'security' ? (
                             <>
-                              <th className="px-4 py-3 font-medium">{t.severity}</th>
-                              <th className="px-4 py-3 font-medium">{t.action}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'النظام' : 'OS'}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'الموقع' : 'Location'}</th>
-                              <th className="px-4 py-3 font-medium">{t.userIp}</th>
-                              <th className="px-4 py-3 font-medium">{t.time}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{t.severity}</th>
+                              <th className="px-2 py-3 font-medium min-w-[150px]">{t.action}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{language === 'ar' ? 'النظام' : 'OS'}</th>
+                              <th className="px-2 py-3 font-medium min-w-[120px]">{language === 'ar' ? 'الموقع' : 'Location'}</th>
+                              <th className="px-2 py-3 font-medium min-w-[150px]">{t.userIp}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{t.time}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                             </>
                           ) : (
                             <>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'الإجراء' : 'Action'}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'النوع' : 'Resource'}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'المستخدم' : 'User'}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'المتجر' : 'Tenant'}</th>
-                              <th className="px-4 py-3 font-medium">{t.time}</th>
-                              <th className="px-4 py-3 font-medium">{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
+                              <th className="px-2 py-3 font-medium min-w-[150px]">{language === 'ar' ? 'الإجراء' : 'Action'}</th>
+                              <th className="px-2 py-3 font-medium min-w-[200px]">{language === 'ar' ? 'الرابط' : 'URL'}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{language === 'ar' ? 'النوع' : 'Resource'}</th>
+                              <th className="px-2 py-3 font-medium min-w-[150px]">{language === 'ar' ? 'المستخدم / العميل' : 'User / Customer'}</th>
+                              <th className="px-2 py-3 font-medium min-w-[120px]">{language === 'ar' ? 'المتجر' : 'Tenant'}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{t.time}</th>
+                              <th className="px-2 py-3 font-medium whitespace-nowrap">{language === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                             </>
                           )}
                         </tr>
@@ -1106,7 +1496,7 @@ export default function SystemAdminPanel() {
                       <tbody className={`divide-y ${isDarkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
                         {filteredLogs.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className={`px-6 py-12 text-center ${theme.textMuted}`}>
+                            <td colSpan={logSubTab === 'security' ? 7 : 8} className={`px-6 py-12 text-center ${theme.textMuted}`}>
                               {logSubTab === 'security' ? (
                                 <>
                                   <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -1127,7 +1517,7 @@ export default function SystemAdminPanel() {
                             </td>
                           </tr>
                         ) : logSubTab === 'security' ? (
-                          filteredLogs.map((log) => (
+                          paginatedLogs.map((log) => (
                             <tr key={log.id} className={`${theme.cardHover} transition-colors`}>
                               <td className="px-4 py-4">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1139,20 +1529,20 @@ export default function SystemAdminPanel() {
                                   {log.severity}
                                 </span>
                               </td>
-                              <td className={`px-4 py-4 ${theme.text}`}>
-                                <div className="font-medium">{log.action}</div>
-                                <div className={`text-xs ${theme.textMuted} max-w-xs truncate`}>{log.details}</div>
+                              <td className={`px-2 py-4 ${theme.text}`}>
+                                <div className="font-medium break-words">{log.action}</div>
+                                <div className={`text-xs ${theme.textMuted} break-words line-clamp-2`}>{log.details || '...'}</div>
                               </td>
-                              <td className={`px-4 py-4 ${theme.text}`}>
+                              <td className={`px-2 py-4 ${theme.text}`}>
                                 <div className="flex items-center gap-1">
-                                  <Monitor className="w-3 h-3" />
-                                  <span className="text-sm">{typeof log.metadata === 'object' ? log.metadata?.os : 'Unknown'}</span>
+                                  <Monitor className="w-3 h-3 flex-shrink-0" />
+                                  <span className="text-sm break-words">{typeof log.metadata === 'object' ? log.metadata?.os : 'Unknown'}</span>
                                 </div>
                               </td>
-                              <td className={`px-4 py-4 ${theme.text}`}>
+                              <td className={`px-2 py-4 ${theme.text}`}>
                                 <div className="flex items-center gap-1">
-                                  <MapPin className="w-3 h-3" />
-                                  <span className="text-sm">
+                                  <MapPin className="w-3 h-3 flex-shrink-0" />
+                                  <span className="text-sm break-words">
                                     {typeof log.metadata === 'object' && log.metadata?.city && log.metadata?.country 
                                       ? `${log.metadata.city}, ${log.metadata.country}` 
                                       : typeof log.metadata === 'object' ? log.metadata?.country || '-' : '-'}
@@ -1164,15 +1554,25 @@ export default function SystemAdminPanel() {
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-4">
-                                <div className={theme.text}>{log.user?.email || t.system}</div>
-                                <div className={`text-xs ${theme.textDim}`}>{log.ipAddress}</div>
+                              <td className="px-2 py-4">
+                                <div className={`${theme.text} break-words`}>{log.user?.email || t.system}</div>
+                                <div className={`text-xs ${theme.textDim} break-words`}>{log.ipAddress}</div>
                               </td>
-                              <td className={`px-4 py-4 ${theme.textDim}`}>
+                              <td className={`px-2 py-4 ${theme.textDim} whitespace-nowrap`}>
                                 {new Date(log.createdAt).toLocaleString()}
                               </td>
-                              <td className="px-4 py-4">
+                              <td className="px-2 py-4">
                                 <div className="flex items-center gap-2">
+                                  {/* View User Activity Button */}
+                                  {log.user?.email && (
+                                    <button
+                                      onClick={() => viewUserDetails(log.user?.email || '')}
+                                      className="p-1.5 rounded-lg bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors"
+                                      title={language === 'ar' ? 'عرض نشاط المستخدم' : 'View User Activity'}
+                                    >
+                                      <Users className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => toast({ 
                                       title: language === 'ar' ? 'تفاصيل الحدث' : 'Event Details', 
@@ -1199,35 +1599,53 @@ export default function SystemAdminPanel() {
                             </tr>
                           ))
                         ) : (
-                          filteredLogs.map((log) => (
+                          paginatedLogs.map((log) => (
                             <tr key={log.id} className={`${theme.cardHover} transition-colors`}>
-                              <td className={`px-4 py-4 ${theme.text}`}>
-                                <div className="font-medium">{log.action}</div>
+                              <td className={`px-2 py-4 ${theme.text}`}>
+                                <div className="font-medium break-words">{log.action}</div>
+                                <div className={`text-xs ${theme.textMuted} break-words line-clamp-2`}>{log.details || log.resourceType || '—'}</div>
                               </td>
-                              <td className={`px-4 py-4 ${theme.text}`}>
-                                <span className="px-2 py-1 bg-purple-500/10 text-purple-500 rounded text-xs">
+                              <td className={`px-2 py-4 ${theme.text}`}>
+                                <code className={`text-xs ${theme.textMuted} break-all font-mono`}>
+                                  {log.url || '-'}
+                                </code>
+                              </td>
+                              <td className={`px-2 py-4 ${theme.text}`}>
+                                <span className="px-2 py-1 bg-purple-500/10 text-purple-500 rounded text-xs whitespace-nowrap">
                                   {log.resourceType || '-'}
                                 </span>
                               </td>
-                              <td className={`px-4 py-4 ${theme.text}`}>
-                                {log.user?.email || t.system}
+                              <td className={`px-2 py-4 ${theme.text}`}>
+                                <div className="font-medium break-words">{log.user?.email || (log as any).userEmail || t.system}</div>
+                                <div className={`text-xs ${theme.textDim} break-words`}>{log.user?.name || (log as any).userName || ''}</div>
                               </td>
-                              <td className={`px-4 py-4 ${theme.text}`}>
-                                {log.tenant?.name || '-'}
+                              <td className={`px-2 py-4 ${theme.text} break-words`}>
+                                {log.tenant?.name || (log as any).tenantName || '-'}
                               </td>
-                              <td className={`px-4 py-4 ${theme.textDim}`}>
+                              <td className={`px-2 py-4 ${theme.textDim} whitespace-nowrap`}>
                                 {new Date(log.createdAt).toLocaleString()}
                               </td>
-                              <td className="px-4 py-4">
-                                <button
-                                  onClick={() => toast({ 
-                                    title: language === 'ar' ? 'تفاصيل' : 'Details', 
-                                    description: log.details 
-                                  })}
-                                  className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
+                              <td className="px-2 py-4">
+                                <div className="flex items-center gap-2">
+                                  {log.user?.email && (
+                                    <button
+                                      onClick={() => viewUserDetails(log.user?.email || '')}
+                                      className="p-1.5 rounded-lg bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors"
+                                      title={language === 'ar' ? 'عرض نشاط المستخدم' : 'View User Activity'}
+                                    >
+                                      <Users className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => toast({ 
+                                      title: language === 'ar' ? 'تفاصيل' : 'Details', 
+                                      description: log.details 
+                                    })}
+                                    className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))
@@ -1235,12 +1653,322 @@ export default function SystemAdminPanel() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Pagination Controls */}
+                  {filteredLogs.length > 0 && (
+                    <div className={`p-4 border-t ${theme.border} flex flex-col sm:flex-row items-center justify-between gap-4`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm ${theme.textMuted}`}>
+                          {language === 'ar' ? 'عرض' : 'Show'}
+                        </span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className={`${theme.input} border rounded-lg py-1 px-2 text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                        >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                        <span className={`text-sm ${theme.textMuted}`}>
+                          {language === 'ar' ? 'لكل صفحة' : 'per page'}
+                        </span>
+                      </div>
+
+                      <div className={`text-sm ${theme.textMuted}`}>
+                        {language === 'ar' 
+                          ? `صفحة ${currentPage} من ${totalPages} (${filteredLogs.length} ${filteredLogs.length === 1 ? 'نتيجة' : 'نتيجة'})`
+                          : `Page ${currentPage} of ${totalPages} (${filteredLogs.length} ${filteredLogs.length === 1 ? 'result' : 'results'})`}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className={`p-2 rounded-lg border ${theme.border} ${
+                            currentPage === 1 
+                              ? `${theme.textDim} cursor-not-allowed opacity-50` 
+                              : `${theme.textMuted} hover:${theme.accentText} hover:border-violet-500`
+                          } transition-colors`}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        
+                        {/* Page Numbers */}
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCurrentPage(pageNum)}
+                                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                                  currentPage === pageNum
+                                    ? `${theme.accent} text-white`
+                                    : `${theme.card} ${theme.border} border ${theme.textMuted} hover:${theme.accentText}`
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          className={`p-2 rounded-lg border ${theme.border} ${
+                            currentPage === totalPages 
+                              ? `${theme.textDim} cursor-not-allowed opacity-50` 
+                              : `${theme.textMuted} hover:${theme.accentText} hover:border-violet-500`
+                          } transition-colors`}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'analytics' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-3xl font-bold ${theme.text}`}>
+                    {language === 'ar' ? 'التحليلات' : 'Analytics'}
+                  </h2>
+                </div>
+
+                {/* Google Analytics Setup */}
+                <div className={`${cardStyle} rounded-2xl p-6`}>
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="p-3 bg-orange-500/10 rounded-xl">
+                      <Activity className="w-8 h-8 text-orange-500" />
+                    </div>
+                    <div>
+                      <h3 className={`text-xl font-bold ${theme.text}`}>
+                        {language === 'ar' ? 'Google Analytics' : 'Google Analytics'}
+                      </h3>
+                      <p className={theme.textMuted}>
+                        {language === 'ar' ? 'اربط حسابك لعرض إحصائيات المتجر' : 'Connect your account to view store statistics'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`p-6 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-xl mb-6`}>
+                    <h4 className={`font-medium ${theme.text} mb-4`}>
+                      {language === 'ar' ? 'إعداد Google Analytics' : 'Google Analytics Setup'}
+                    </h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className={`block text-sm ${theme.textMuted} mb-2`}>
+                          {language === 'ar' ? 'معرف القياس (Measurement ID)' : 'Measurement ID'}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="G-XXXXXXXXXX"
+                          className={`w-full ${theme.input} border rounded-lg py-2 px-4 ${theme.text} focus:outline-none ${theme.focus}`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm ${theme.textMuted} mb-2`}>
+                          {language === 'ar' ? 'مفتاح API (اختياري)' : 'API Key (Optional)'}
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••••••"
+                          className={`w-full ${theme.input} border rounded-lg py-2 px-4 ${theme.text} focus:outline-none ${theme.focus}`}
+                        />
+                      </div>
+                      <button className="px-6 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium rounded-lg hover:from-orange-600 hover:to-amber-600 transition-all">
+                        {language === 'ar' ? 'حفظ الإعدادات' : 'Save Settings'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Analytics Overview Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    {[
+                      { label: language === 'ar' ? 'الزوار اليوم' : 'Visitors Today', value: '-', icon: Users, color: 'blue' },
+                      { label: language === 'ar' ? 'مشاهدات الصفحات' : 'Page Views', value: '-', icon: Eye, color: 'green' },
+                      { label: language === 'ar' ? 'معدل الارتداد' : 'Bounce Rate', value: '-', icon: Activity, color: 'yellow' },
+                      { label: language === 'ar' ? 'متوسط الجلسة' : 'Avg. Session', value: '-', icon: Monitor, color: 'purple' },
+                    ].map((stat, i) => (
+                      <div key={i} className={`${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} p-4 rounded-xl`}>
+                        <div className={`p-2 bg-${stat.color}-500/10 rounded-lg w-fit mb-2`}>
+                          <stat.icon className={`w-5 h-5 text-${stat.color}-500`} />
+                        </div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{stat.value}</div>
+                        <div className={`text-sm ${theme.textMuted}`}>{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={`p-8 text-center ${theme.textMuted} ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-xl`}>
+                    <Activity className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium">
+                      {language === 'ar' ? 'لم يتم ربط Google Analytics بعد' : 'Google Analytics not connected yet'}
+                    </p>
+                    <p className={`text-sm mt-2 ${theme.textDim}`}>
+                      {language === 'ar' 
+                        ? 'أدخل معرف القياس الخاص بك لعرض البيانات' 
+                        : 'Enter your Measurement ID to view data'}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
           </motion.div>
         </main>
       </div>
+
+      {/* User Details Modal */}
+      <AnimatePresence>
+        {showUserModal && selectedUserEmail && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowUserModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`${theme.card} rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className={`p-6 border-b ${theme.border} flex items-center justify-between`}>
+                <div>
+                  <h3 className={`text-xl font-bold ${theme.text}`}>
+                    {language === 'ar' ? 'نشاط المستخدم' : 'User Activity'}
+                  </h3>
+                  <p className={`text-sm ${theme.textMuted} mt-1`}>
+                    <Users className="w-4 h-4 inline-block mr-2" />
+                    {selectedUserEmail}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowUserModal(false)}
+                  className={`p-2 rounded-lg ${theme.cardHover} transition-colors`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Stats Summary */}
+              <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 border-b border-gray-700">
+                <div className={`${theme.card} p-4 rounded-xl text-center`}>
+                  <div className="text-2xl font-bold text-blue-500">{userLogs.length}</div>
+                  <div className={`text-xs ${theme.textMuted}`}>{language === 'ar' ? 'إجمالي السجلات' : 'Total Logs'}</div>
+                </div>
+                <div className={`${theme.card} p-4 rounded-xl text-center`}>
+                  <div className="text-2xl font-bold text-green-500">
+                    {userLogs.filter(l => l.severity === 'LOW' || l.severity === 'MEDIUM' || !l.severity).length}
+                  </div>
+                  <div className={`text-xs ${theme.textMuted}`}>{language === 'ar' ? 'عادي' : 'Normal'}</div>
+                </div>
+                <div className={`${theme.card} p-4 rounded-xl text-center`}>
+                  <div className="text-2xl font-bold text-amber-500">
+                    {userLogs.filter(l => l.severity === 'HIGH').length}
+                  </div>
+                  <div className={`text-xs ${theme.textMuted}`}>{language === 'ar' ? 'تحذيرات' : 'Warnings'}</div>
+                </div>
+                <div className={`${theme.card} p-4 rounded-xl text-center`}>
+                  <div className="text-2xl font-bold text-red-500">
+                    {userLogs.filter(l => l.severity === 'CRITICAL').length}
+                  </div>
+                  <div className={`text-xs ${theme.textMuted}`}>{language === 'ar' ? 'أخطاء' : 'Errors'}</div>
+                </div>
+              </div>
+              
+              {/* Logs List */}
+              <div className="overflow-y-auto max-h-[50vh] p-4 space-y-3">
+                {userLogs.length === 0 ? (
+                  <div className={`text-center py-12 ${theme.textMuted}`}>
+                    <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>{language === 'ar' ? 'لا توجد سجلات لهذا المستخدم' : 'No logs found for this user'}</p>
+                  </div>
+                ) : (
+                  userLogs.map((log) => (
+                    <div 
+                      key={log.id} 
+                      className={`${theme.card} p-4 rounded-xl border ${
+                        log.severity === 'CRITICAL' ? 'border-red-500/50 bg-red-500/5' :
+                        log.severity === 'HIGH' ? 'border-amber-500/50 bg-amber-500/5' :
+                        theme.border
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            {log.severity && (
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                log.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
+                                log.severity === 'HIGH' ? 'bg-amber-500/20 text-amber-400' :
+                                log.severity === 'MEDIUM' ? 'bg-blue-500/20 text-blue-400' :
+                                'bg-green-500/20 text-green-400'
+                              }`}>
+                                {log.severity}
+                              </span>
+                            )}
+                            <span className={`font-medium ${theme.text}`}>
+                              {log.action}
+                            </span>
+                          </div>
+                          <p className={`text-sm ${theme.textMuted}`}>
+                            {log.details || '-'}
+                          </p>
+                          <div className={`flex items-center gap-4 mt-2 text-xs ${theme.textDim}`}>
+                            {log.ipAddress && (
+                              <span className="flex items-center gap-1">
+                                <Globe className="w-3 h-3" />
+                                {log.ipAddress}
+                              </span>
+                            )}
+                            {typeof log.metadata === 'object' && log.metadata && 'os' in log.metadata && (
+                              <span className="flex items-center gap-1">
+                                <Monitor className="w-3 h-3" />
+                                {(log.metadata as { os: string }).os}
+                              </span>
+                            )}
+                            {typeof log.metadata === 'object' && log.metadata && 'country' in log.metadata && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {(log.metadata as { city?: string; country: string }).city || ''} {(log.metadata as { country: string }).country}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className={`text-xs ${theme.textDim} whitespace-nowrap`}>
+                          {new Date(log.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

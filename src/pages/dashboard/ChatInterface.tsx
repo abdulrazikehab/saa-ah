@@ -51,7 +51,11 @@ export default function ChatInterface() {
     if (!user) return;
 
     const token = localStorage.getItem('token');
-    const socketInstance = io(`${import.meta.env.VITE_CORE_BASE_URL || 'http://localhost:3002'}/chat`, {
+    // Get core URL - for production it's https://saeaa.net/api, for dev it's http://localhost:3002
+    const coreBaseUrl = import.meta.env.VITE_CORE_API_URL || 'http://localhost:3002';
+    // Remove /api from production URL for socket connection, or use as-is for dev
+    const socketUrl = coreBaseUrl.replace(/\/api$/, '') || 'http://localhost:3002';
+    const socketInstance = io(`${socketUrl}/chat`, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });

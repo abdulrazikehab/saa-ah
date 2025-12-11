@@ -7,7 +7,10 @@ const getBaseUrl = (defaultPort: string) => {
     ? import.meta.env.VITE_AUTH_API_URL 
     : import.meta.env.VITE_CORE_API_URL;
   
-  if (envUrl) return envUrl;
+  if (envUrl) {
+    // Remove trailing slashes for consistency
+    return envUrl.replace(/\/+$/, '');
+  }
   
   // For local development, use localhost with the appropriate port
   // This works from both main domain and subdomains
@@ -15,8 +18,14 @@ const getBaseUrl = (defaultPort: string) => {
 };
 
 const AUTH_BASE_URL = getBaseUrl('3001');
-const baseUrl = getBaseUrl('3002');
-const CORE_BASE_URL = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
+const coreBaseUrl = getBaseUrl('3002');
+
+// Handle CORE_BASE_URL - if it already ends with /api, use as is, otherwise append /api
+// Production URL already includes /api (https://saeaa.net/api)
+// Development needs /api appended (http://localhost:3002/api)
+const CORE_BASE_URL = coreBaseUrl.endsWith('/api') 
+  ? coreBaseUrl 
+  : `${coreBaseUrl}${coreBaseUrl.endsWith('/') ? '' : '/'}api`;
 
 export interface ApiOptions extends RequestInit {
   requireAuth?: boolean;
@@ -48,19 +57,38 @@ const processQueue = (error: Error | null, token: string | null = null) => {
   failedQueue = [];
 };
 
+// Helper function to get cookie value
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
+}
+
 async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = localStorage.getItem('refreshToken');
+  // Check if we have a refresh token (cookie or localStorage)
+  const refreshToken = getCookie('refreshToken') || localStorage.getItem('refreshToken');
   if (!refreshToken) {
     return null;
   }
 
   try {
-    const response = await fetch(`${AUTH_BASE_URL}/auth/refresh`, {
+    // Send refresh token in body only if not in cookie (fallback)
+    const body = getCookie('refreshToken') ? {} : JSON.stringify({ refreshToken });
+    // Build refresh URL - handle both cases:
+    // Production: https://saeaa.net/auth/refresh
+    // Development: http://localhost:3001/auth/refresh
+    const refreshUrl = AUTH_BASE_URL.includes('localhost') 
+      ? `${AUTH_BASE_URL}/auth/refresh`
+      : `${AUTH_BASE_URL}/refresh`;
+    
+    const response = await fetch(refreshUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include', // Include cookies
+      body,
     });
 
     if (!response.ok) {
@@ -68,11 +96,15 @@ async function refreshAccessToken(): Promise<string | null> {
     }
 
     const data = await response.json();
+    // Cookies are set by the server, but also store in localStorage as fallback
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     
     return data.accessToken;
   } catch (error) {
+    // Clear both cookies and localStorage on error
+    document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
@@ -95,7 +127,9 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
   }
 
   if (requireAuth) {
-    const token = localStorage.getItem('accessToken');
+    // Try to get token from cookie first, then localStorage as fallback
+    const cookieToken = getCookie('accessToken');
+    const token = cookieToken || localStorage.getItem('accessToken');
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -117,6 +151,7 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
+      credentials: options.credentials || 'include', // Include cookies in requests (can be overridden)
       signal: controller.signal,
     });
     
@@ -187,8 +222,7 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     if (error instanceof ApiError) {
       throw error;
     }
-    // Network errors
-    console.error('API Request Failed:', error);
+    // Network errors - logged to backend error logs
     toast.error('Network error. Please check your connection.');
     throw new ApiError(500, 'Network error');
   }

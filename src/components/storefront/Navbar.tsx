@@ -21,7 +21,7 @@ export const Navbar = () => {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/branding/saaah-logo-full.png" alt="Saa'ah" className="h-10 w-auto" />
+            <img src="/branding/saeaa-logo.png" alt="Saeaa" className="h-10 w-auto" />
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             {navigation.map((item) => (

@@ -5,8 +5,10 @@ import { Package, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { coreApi } from '@/lib/api';
+import { useTranslation } from 'react-i18next';
 
 export default function DashboardBanner() {
+  const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
@@ -70,8 +72,8 @@ export default function DashboardBanner() {
                 />
               </div>
               <div className="text-white">
-                <h3 className="text-xl font-bold mb-1">منتجات ASUS - أسس</h3>
-                <p className="text-white/90 text-sm">بطاقات الألعاب، شدات PUBG، وبطاقات PlayStation</p>
+                <h3 className="text-xl font-bold mb-1">{t('dashboard.banner.title', 'ASUS Products')}</h3>
+                <p className="text-white/90 text-sm">{t('dashboard.banner.subtitle', 'Gaming cards, PUBG cards, and PlayStation cards')}</p>
               </div>
             </div>
             <Link to="/partner" onClick={handleStartProcess}>
@@ -79,7 +81,7 @@ export default function DashboardBanner() {
                 size="lg"
                 className="bg-white text-purple-600 hover:bg-white/90 font-semibold shadow-xl"
               >
-                ابدأ الآن
+                {t('dashboard.banner.startNow', 'Start Now')}
                 <Package className="mr-2 h-5 w-5" />
               </Button>
             </Link>

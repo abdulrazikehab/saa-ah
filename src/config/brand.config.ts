@@ -4,7 +4,7 @@
 export const brandConfig = {
   // Brand Name
   name: {
-    en: "Saa'ah",
+    en: "Saeaa",
     ar: "سِعَة"
   },
 
@@ -59,10 +59,10 @@ export const brandConfig = {
 
   // Logo Paths
   logo: {
-    full: '/branding/saaah-logo-full.png',
-    icon: '/branding/saaah-icon.png',
-    horizontal: '/branding/saaah-horizontal.png',
-    white: '/branding/saaah-logo-white.png'
+    full: '/branding/saeaa-logo.png',
+    icon: '/branding/saeaa-logo.png',
+    horizontal: '/branding/saeaa-logo.png',
+    white: '/branding/saeaa-logo.png'
   },
 
   // Tagline
@@ -73,17 +73,17 @@ export const brandConfig = {
 
   // Social Media
   social: {
-    twitter: '@saaah',
-    instagram: '@saaah',
-    linkedin: 'saaah',
-    facebook: 'saaah'
+    twitter: '@saeaa',
+    instagram: '@saeaa',
+    linkedin: 'saeaa',
+    facebook: 'saeaa'
   },
 
   // Contact
   contact: {
-    email: 'info@saa-ah.com',
+    email: 'info@saeaa.com',
     phone: '+966 XX XXX XXXX',
-    website: 'https://saa-ah.com'
+    website: 'https://saeaa.com'
   }
 };
 

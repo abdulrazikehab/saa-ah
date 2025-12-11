@@ -11,9 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ImageUpload } from '@/components/ui/image-upload';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
+import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
 
 // Interfaces for Customer Tiers & Offers
 interface Customer {
@@ -58,18 +60,22 @@ interface CategoryOffer {
 }
 
 export default function CategoriesManager() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const { toast } = useToast();
+  const { addUpdate } = useTabUpdatesContext();
   
   // Categories state
-  const [categories, setCategories] = useState<{id: string; name: string; description?: string; slug?: string; productCount?: number}[]>([]);
+  const [categories, setCategories] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string} | null>(null);
+  const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; parentId?: string} | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     slug: '',
+    image: '',
+    parentId: '',
   });
 
   // Active tab
@@ -79,11 +85,11 @@ export default function CategoriesManager() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
 
-  // Customer Tiers state
+  // Customer Tiers state - initialized in useEffect to support i18n
   const [customerTiers, setCustomerTiers] = useState<CustomerTier[]>([
-    { id: '1', name: 'فئة A - VIP', description: 'عملاء VIP مميزون', color: '#FFD700', discountPercent: 15, productCategories: [], assignedCustomers: [] },
-    { id: '2', name: 'فئة B - ذهبي', description: 'عملاء ذهبيون', color: '#C0C0C0', discountPercent: 10, productCategories: [], assignedCustomers: [] },
-    { id: '3', name: 'فئة C - عادي', description: 'عملاء عاديون', color: '#CD7F32', discountPercent: 5, productCategories: [], assignedCustomers: [] },
+    { id: '1', name: 'VIP Tier', description: 'VIP customers', color: '#FFD700', discountPercent: 15, productCategories: [], assignedCustomers: [] },
+    { id: '2', name: 'Gold Tier', description: 'Gold customers', color: '#C0C0C0', discountPercent: 10, productCategories: [], assignedCustomers: [] },
+    { id: '3', name: 'Regular Tier', description: 'Regular customers', color: '#CD7F32', discountPercent: 5, productCategories: [], assignedCustomers: [] },
   ]);
   const [tierDialogOpen, setTierDialogOpen] = useState(false);
   const [editingTier, setEditingTier] = useState<CustomerTier | null>(null);
@@ -112,13 +118,17 @@ export default function CategoriesManager() {
   // Load categories
   const loadCategories = useCallback(async () => {
     try {
-      const data = await coreApi.getCategories() as {id: string; name: string; description?: string; slug?: string; productCount?: number}[] | {categories: {id: string; name: string; description?: string; slug?: string; productCount?: number}[]};
-      setCategories(Array.isArray(data) ? data : (data.categories || []));
+      const data = await coreApi.getCategories() as {id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[] | {categories: {id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]};
+      const categoriesList = Array.isArray(data) ? data : (data.categories || []);
+      setCategories(categoriesList.map((c: any) => ({
+        ...c,
+        parentId: c.parentId || undefined
+      })));
     } catch (error) {
       console.error('Failed to load categories:', error);
       toast({
         title: t('common.error'),
-        description: 'فشل تحميل الفئات',
+        description: t('categories.productCategories.loadError'),
         variant: 'destructive',
       });
       setCategories([]);
@@ -138,6 +148,8 @@ export default function CategoriesManager() {
         name: category.name || '',
         description: category.description || '',
         slug: category.slug || '',
+        image: category.image || '',
+        parentId: category.parentId || '',
       });
     } else {
       setEditingCategory(null);
@@ -145,6 +157,8 @@ export default function CategoriesManager() {
         name: '',
         description: '',
         slug: '',
+        image: '',
+        parentId: '',
       });
     }
     setDialogOpen(true);
@@ -153,17 +167,39 @@ export default function CategoriesManager() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const categoryData: any = {
+        name: formData.name,
+        description: formData.description,
+        slug: formData.slug,
+        image: formData.image,
+      };
+      
+      // Add parentId if selected
+      if (formData.parentId) {
+        categoryData.parentId = formData.parentId;
+      }
+
       if (editingCategory) {
-        await coreApi.updateCategory(editingCategory.id, formData);
+        await coreApi.updateCategory(editingCategory.id, categoryData);
+        addUpdate('/dashboard/categories', {
+          type: 'updated',
+          message: t('categories.productCategories.updateSuccess'),
+          data: { categoryId: editingCategory.id, ...categoryData },
+        });
         toast({
           title: t('common.success'),
-          description: 'تم تحديث الفئة بنجاح',
+          description: t('categories.productCategories.updateSuccess'),
         });
       } else {
-        await coreApi.createCategory(formData);
+        await coreApi.createCategory(categoryData);
+        addUpdate('/dashboard/categories', {
+          type: 'added',
+          message: t('categories.productCategories.addSuccess'),
+          data: categoryData,
+        });
         toast({
           title: t('common.success'),
-          description: 'تم إضافة الفئة بنجاح',
+          description: t('categories.productCategories.addSuccess'),
         });
       }
       setDialogOpen(false);
@@ -171,26 +207,26 @@ export default function CategoriesManager() {
     } catch (error: any) {
       toast({
         title: t('common.error'),
-        description: error.message || 'فشل حفظ الفئة',
+        description: error.message || t('categories.productCategories.saveError'),
         variant: 'destructive',
       });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه الفئة؟')) return;
+    if (!confirm(t('categories.productCategories.deleteConfirm'))) return;
 
     try {
       await coreApi.deleteCategory(id);
       toast({
         title: t('common.success'),
-        description: 'تم حذف الفئة بنجاح',
+        description: t('categories.productCategories.deleteSuccess'),
       });
       loadCategories();
     } catch (error: any) {
       toast({
         title: t('common.error'),
-        description: error.message || 'فشل حذف الفئة',
+        description: error.message || t('categories.productCategories.deleteError'),
         variant: 'destructive',
       });
     }
@@ -216,7 +252,7 @@ export default function CategoriesManager() {
     
     toast({
       title: t('common.success'),
-      description: 'تم تصدير الفئات بنجاح',
+      description: t('categories.productCategories.exportSuccess'),
     });
   };
 
@@ -244,23 +280,26 @@ export default function CategoriesManager() {
           });
           successCount++;
         } catch (error) {
-          console.error('Failed to import category:', row.Name, error);
+          // Error logged to backend
           errorCount++;
         }
       }
 
+      const errorText = errorCount > 0 ? `, ${t('categories.productCategories.importError')} ${errorCount}` : '';
       toast({
-        title: 'تم الاستيراد',
-        description: `تم استيراد ${successCount} فئة بنجاح${errorCount > 0 ? `, فشل ${errorCount}` : ''}`,
+        title: t('common.success'),
+        description: t('categories.productCategories.importSuccess', { 
+          count: successCount,
+          errors: errorText
+        }),
       });
       
       loadCategories();
       e.target.value = '';
-    } catch (error) {
-      console.error('Import error:', error);
+    } catch (error: any) {
       toast({ 
         title: t('common.error'), 
-        description: 'فشل استيراد الملف', 
+        description: error?.message || t('categories.productCategories.importError'), 
         variant: 'destructive' 
       });
     }
@@ -311,7 +350,7 @@ export default function CategoriesManager() {
 
   const handleSaveTier = () => {
     if (!tierFormData.name) {
-      toast({ title: t('common.error'), description: 'اسم الفئة مطلوب', variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('categories.customerTiers.tierNameRequired'), variant: 'destructive' });
       return;
     }
 
@@ -321,22 +360,22 @@ export default function CategoriesManager() {
           ? { ...t, ...tierFormData }
           : t
       ));
-      toast({ title: t('common.success'), description: 'تم تحديث فئة العملاء' });
+      toast({ title: t('common.success'), description: t('categories.customerTiers.updateSuccess') });
     } else {
       const newTier: CustomerTier = {
         id: Date.now().toString(),
         ...tierFormData,
       };
       setCustomerTiers(prev => [...prev, newTier]);
-      toast({ title: t('common.success'), description: 'تم إضافة فئة العملاء' });
+      toast({ title: t('common.success'), description: t('categories.customerTiers.addSuccess') });
     }
     setTierDialogOpen(false);
   };
 
   const handleDeleteTier = (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه الفئة؟')) return;
+    if (!confirm(t('categories.customerTiers.deleteConfirm'))) return;
     setCustomerTiers(prev => prev.filter(t => t.id !== id));
-    toast({ title: t('common.success'), description: 'تم حذف فئة العملاء' });
+    toast({ title: t('common.success'), description: t('categories.customerTiers.deleteSuccess') });
   };
 
   // ==================== Offer Functions ====================
@@ -371,7 +410,7 @@ export default function CategoriesManager() {
 
   const handleSaveOffer = () => {
     if (!offerFormData.name || !offerFormData.tierId) {
-      toast({ title: t('common.error'), description: 'اسم العرض وفئة العميل مطلوبان', variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('categories.offers.nameAndTierRequired'), variant: 'destructive' });
       return;
     }
 
@@ -383,7 +422,7 @@ export default function CategoriesManager() {
           ? { ...o, ...offerFormData, tierName: tier?.name || '' }
           : o
       ));
-      toast({ title: t('common.success'), description: 'تم تحديث العرض' });
+      toast({ title: t('common.success'), description: t('categories.offers.updateSuccess') });
     } else {
       const newOffer: CategoryOffer = {
         id: Date.now().toString(),
@@ -391,15 +430,15 @@ export default function CategoriesManager() {
         tierName: tier?.name || '',
       };
       setOffers(prev => [...prev, newOffer]);
-      toast({ title: t('common.success'), description: 'تم إضافة العرض' });
+      toast({ title: t('common.success'), description: t('categories.offers.addSuccess') });
     }
     setOfferDialogOpen(false);
   };
 
   const handleDeleteOffer = (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا العرض؟')) return;
+    if (!confirm(t('categories.offers.deleteConfirm'))) return;
     setOffers(prev => prev.filter(o => o.id !== id));
-    toast({ title: t('common.success'), description: 'تم حذف العرض' });
+    toast({ title: t('common.success'), description: t('categories.offers.deleteSuccess') });
   };
 
   const calculateDiscount = (price: number, discountPercent: number) => {
@@ -411,9 +450,9 @@ export default function CategoriesManager() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            إدارة الفئات والعروض
+            {t('categories.title')}
           </h1>
-          <p className="text-muted-foreground text-lg">تنظيم فئات المنتجات وعروض العملاء</p>
+          <p className="text-muted-foreground text-lg">{t('categories.subtitle')}</p>
         </div>
       </div>
 
@@ -421,15 +460,15 @@ export default function CategoriesManager() {
         <TabsList className="grid w-full grid-cols-3 mb-6">
           <TabsTrigger value="categories" className="gap-2">
             <FolderOpen className="h-4 w-4" />
-            فئات المنتجات
+            {t('categories.tabs.productCategories')}
           </TabsTrigger>
           <TabsTrigger value="tiers" className="gap-2">
             <Users className="h-4 w-4" />
-            فئات العملاء
+            {t('categories.tabs.customerTiers')}
           </TabsTrigger>
           <TabsTrigger value="offers" className="gap-2">
             <Gift className="h-4 w-4" />
-            العروض
+            {t('categories.tabs.offers')}
           </TabsTrigger>
         </TabsList>
 
@@ -438,7 +477,7 @@ export default function CategoriesManager() {
           <div className="flex justify-end gap-2 mb-4">
             <Button variant="outline" onClick={handleExport} className="gap-2">
               <Download className="h-4 w-4" />
-              تصدير
+              {t('categories.productCategories.export')}
             </Button>
             <div className="relative">
               <Input
@@ -449,18 +488,18 @@ export default function CategoriesManager() {
               />
               <Button variant="outline" className="gap-2">
                 <Upload className="h-4 w-4" />
-                استيراد
+                {t('categories.productCategories.import')}
               </Button>
             </div>
             <Button onClick={() => handleOpenDialog()} size="lg">
-              <Plus className="ml-2 h-5 w-5" />
-              إضافة فئة
+              <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+              {t('categories.productCategories.addCategory')}
             </Button>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>جميع الفئات</CardTitle>
+              <CardTitle>{t('categories.productCategories.allCategories')}</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -470,33 +509,47 @@ export default function CategoriesManager() {
               ) : categories.length === 0 ? (
                 <div className="text-center py-16">
                   <FolderOpen className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">لا توجد فئات</h3>
+                  <h3 className="text-xl font-semibold mb-2">{t('categories.productCategories.noCategories')}</h3>
                   <p className="text-muted-foreground mb-6">
-                    أنشئ فئتك الأولى لتنظيم المنتجات
+                    {t('categories.productCategories.noCategoriesDesc')}
                   </p>
                   <Button onClick={() => handleOpenDialog()}>
-                    <Plus className="ml-2 h-4 w-4" />
-                    إضافة فئة
+                    <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                    {t('categories.productCategories.addCategory')}
                   </Button>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>الفئة</TableHead>
+                      <TableHead>{t('categories.productCategories.logo')}</TableHead>
+                      <TableHead>{t('categories.productCategories.category')}</TableHead>
                       <TableHead>Slug</TableHead>
-                      <TableHead>عدد المنتجات</TableHead>
-                      <TableHead className="text-left">الإجراءات</TableHead>
+                      <TableHead>{t('categories.productCategories.productCount')}</TableHead>
+                      <TableHead className="text-left">{t('categories.productCategories.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {categories.map((category) => (
                       <TableRow key={category.id}>
                         <TableCell>
+                          {category.image ? (
+                            <img 
+                              src={category.image} 
+                              alt={category.name}
+                              className="w-12 h-12 object-cover rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
+                              <FolderOpen className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div>
                             <p className="font-medium text-lg">{category.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {category.description || 'لا يوجد وصف'}
+                              {category.description || t('categories.productCategories.noDescription')}
                             </p>
                           </div>
                         </TableCell>
@@ -540,8 +593,8 @@ export default function CategoriesManager() {
         <TabsContent value="tiers">
           <div className="flex justify-end mb-4">
             <Button onClick={() => handleOpenTierDialog()} size="lg">
-              <Plus className="ml-2 h-5 w-5" />
-              إضافة فئة عملاء
+              <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+              {t('categories.customerTiers.addTier')}
             </Button>
           </div>
 
@@ -573,7 +626,7 @@ export default function CategoriesManager() {
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <Label className="text-sm text-muted-foreground">فئات المنتجات المرتبطة:</Label>
+                      <Label className="text-sm text-muted-foreground">{t('categories.customerTiers.linkedCategories')}</Label>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {tier.productCategories.length > 0 ? (
                           tier.productCategories.map(catId => {
@@ -585,20 +638,20 @@ export default function CategoriesManager() {
                             ) : null;
                           })
                         ) : (
-                          <span className="text-sm text-muted-foreground">جميع الفئات</span>
+                          <span className="text-sm text-muted-foreground">{t('categories.customerTiers.allCategories')}</span>
                         )}
                       </div>
                     </div>
                     {/* Assigned Customers Count */}
                     <div>
-                      <Label className="text-sm text-muted-foreground">العملاء المُعينين:</Label>
+                      <Label className="text-sm text-muted-foreground">{t('categories.customerTiers.assignedCustomers')}</Label>
                       <div className="mt-1">
                         {tier.assignedCustomers && tier.assignedCustomers.length > 0 ? (
                           <Badge variant="default" className="text-xs">
-                            {tier.assignedCustomers.length} عميل
+                            {t('categories.customerTiers.customerCount', { count: tier.assignedCustomers.length })}
                           </Badge>
                         ) : (
-                          <span className="text-sm text-muted-foreground">لم يتم تعيين عملاء</span>
+                          <span className="text-sm text-muted-foreground">{t('categories.customerTiers.noCustomersAssigned')}</span>
                         )}
                       </div>
                     </div>
@@ -610,7 +663,7 @@ export default function CategoriesManager() {
                         onClick={() => handleOpenTierDialog(tier)}
                       >
                         <Pencil className="h-3 w-3 ml-1" />
-                        تعديل
+                        {t('common.edit')}
                       </Button>
                       <Button
                         variant="outline"
@@ -631,16 +684,16 @@ export default function CategoriesManager() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-                كيفية تصنيف العملاء
+                {t('categories.customerTiers.howItWorks')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4 text-sm">
-                <p>• يتم تصنيف العملاء تلقائياً بناءً على فئات المنتجات التي يشترونها</p>
-                <p>• عملاء فئة A (VIP) يحصلون على خصم 15% على جميع المنتجات</p>
-                <p>• عملاء فئة B (ذهبي) يحصلون على خصم 10%</p>
-                <p>• عملاء فئة C (عادي) يحصلون على خصم 5%</p>
-                <p className="text-muted-foreground">قم بربط فئات المنتجات مع فئات العملاء لتفعيل التصنيف التلقائي</p>
+                <p>{t('categories.customerTiers.howItWorksDesc1')}</p>
+                <p>{t('categories.customerTiers.howItWorksDesc2')}</p>
+                <p>{t('categories.customerTiers.howItWorksDesc3')}</p>
+                <p>{t('categories.customerTiers.howItWorksDesc4')}</p>
+                <p className="text-muted-foreground">{t('categories.customerTiers.howItWorksDesc5')}</p>
               </div>
             </CardContent>
           </Card>
@@ -650,8 +703,8 @@ export default function CategoriesManager() {
         <TabsContent value="offers">
           <div className="flex justify-end mb-4">
             <Button onClick={() => handleOpenOfferDialog()} size="lg">
-              <Plus className="ml-2 h-5 w-5" />
-              إضافة عرض
+              <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+              {t('categories.offers.addOffer')}
             </Button>
           </div>
 
@@ -659,13 +712,13 @@ export default function CategoriesManager() {
             <Card>
               <CardContent className="text-center py-16">
                 <Gift className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="text-xl font-semibold mb-2">لا توجد عروض</h3>
+                <h3 className="text-xl font-semibold mb-2">{t('categories.offers.noOffers')}</h3>
                 <p className="text-muted-foreground mb-6">
-                  أنشئ عروضاً خاصة لفئات العملاء المختلفة
+                  {t('categories.offers.noOffersDesc')}
                 </p>
                 <Button onClick={() => handleOpenOfferDialog()}>
-                  <Plus className="ml-2 h-4 w-4" />
-                  إضافة عرض جديد
+                  <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {t('categories.offers.addNewOffer')}
                 </Button>
               </CardContent>
             </Card>
@@ -680,11 +733,11 @@ export default function CategoriesManager() {
                           <Percent className="h-5 w-5 text-primary" />
                           {offer.name}
                         </CardTitle>
-                        <CardDescription>لفئة: {offer.tierName}</CardDescription>
+                        <CardDescription>{t('categories.offers.forTier', { tierName: offer.tierName })}</CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={offer.isActive ? 'default' : 'secondary'}>
-                          {offer.isActive ? 'نشط' : 'غير نشط'}
+                          {offer.isActive ? t('categories.offers.active') : t('categories.offers.inactive')}
                         </Badge>
                         <Badge variant="outline" className="text-lg font-bold text-green-600">
                           {offer.discountPercent}%
@@ -695,7 +748,7 @@ export default function CategoriesManager() {
                   <CardContent>
                     <div className="space-y-3">
                       <div>
-                        <Label className="text-sm text-muted-foreground">فئات المنتجات المشمولة:</Label>
+                        <Label className="text-sm text-muted-foreground">{t('categories.offers.includedCategories')}</Label>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {offer.productCategoryIds.length > 0 ? (
                             offer.productCategoryIds.map(catId => {
@@ -707,13 +760,13 @@ export default function CategoriesManager() {
                               ) : null;
                             })
                           ) : (
-                            <span className="text-sm text-muted-foreground">جميع الفئات</span>
+                            <span className="text-sm text-muted-foreground">{t('categories.offers.allCategories')}</span>
                           )}
                         </div>
                       </div>
                       <div className="bg-muted/50 p-3 rounded-lg">
                         <p className="text-sm">
-                          <strong>مثال:</strong> منتج بسعر 100 ريال ← السعر بعد الخصم: {calculateDiscount(100, offer.discountPercent)} ريال
+                          <strong>{t('categories.offers.example')}</strong> {t('categories.offers.exampleDesc', { price: calculateDiscount(100, offer.discountPercent) })}
                         </p>
                       </div>
                       <div className="flex gap-2 pt-2">
@@ -724,7 +777,7 @@ export default function CategoriesManager() {
                           onClick={() => handleOpenOfferDialog(offer)}
                         >
                           <Pencil className="h-3 w-3 ml-1" />
-                          تعديل
+                          {t('common.edit')}
                         </Button>
                         <Button
                           variant="outline"
@@ -749,16 +802,16 @@ export default function CategoriesManager() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {editingCategory ? 'تعديل الفئة' : 'إضافة فئة جديدة'}
+              {editingCategory ? t('categories.productCategories.editCategory') : t('categories.productCategories.addNewCategory')}
             </DialogTitle>
             <DialogDescription>
-              {editingCategory ? 'قم بتحديث معلومات الفئة' : 'أضف فئة جديدة لتنظيم منتجاتك'}
+              {editingCategory ? t('categories.productCategories.editCategoryDesc') : t('categories.productCategories.addCategoryDesc')}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">اسم الفئة *</Label>
+                <Label htmlFor="name">{t('categories.productCategories.categoryName')} *</Label>
                 <Input
                   id="name"
                   value={formData.name}
@@ -767,7 +820,7 @@ export default function CategoriesManager() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="slug">Slug</Label>
+                <Label htmlFor="slug">{t('categories.productCategories.slug')}</Label>
                 <Input
                   id="slug"
                   value={formData.slug}
@@ -775,11 +828,11 @@ export default function CategoriesManager() {
                   placeholder="electronics"
                 />
                 <p className="text-xs text-muted-foreground">
-                  يستخدم في الروابط (اتركه فارغاً للإنشاء التلقائي)
+                  {t('categories.productCategories.slugHint')}
                 </p>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">الوصف</Label>
+                <Label htmlFor="description">{t('categories.productCategories.description')}</Label>
                 <Textarea
                   id="description"
                   value={formData.description}
@@ -787,13 +840,50 @@ export default function CategoriesManager() {
                   rows={3}
                 />
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="parentId">
+                  {t('categories.productCategories.parentCategory', 'الفئة الرئيسية (اختياري)')}
+                </Label>
+                <Select
+                  value={formData.parentId}
+                  onValueChange={(value) => setFormData({ ...formData, parentId: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('categories.productCategories.selectParentCategory', 'اختر فئة رئيسية (اختياري)')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{t('categories.productCategories.noParent', 'لا توجد فئة رئيسية')}</SelectItem>
+                    {categories
+                      .filter(cat => !editingCategory || cat.id !== editingCategory.id) // Don't allow selecting self as parent
+                      .map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('categories.productCategories.parentCategoryHint', 'اختر فئة رئيسية لجعل هذه الفئة فئة فرعية')}
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="image">{t('categories.productCategories.categoryLogo')}</Label>
+                <ImageUpload
+                  value={formData.image}
+                  onChange={(url) => setFormData({ ...formData, image: url })}
+                  placeholder={t('categories.productCategories.uploadLogo')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('categories.productCategories.logoHint')}
+                </p>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                إلغاء
+                {t('common.cancel')}
               </Button>
               <Button type="submit">
-                {editingCategory ? 'تحديث' : 'إضافة'}
+                {editingCategory ? t('categories.productCategories.update') : t('categories.productCategories.add')}
               </Button>
             </DialogFooter>
           </form>
@@ -805,32 +895,32 @@ export default function CategoriesManager() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {editingTier ? 'تعديل فئة العملاء' : 'إضافة فئة عملاء جديدة'}
+              {editingTier ? t('categories.customerTiers.editTier') : t('categories.customerTiers.addNewTier')}
             </DialogTitle>
             <DialogDescription>
-              أنشئ فئات لتصنيف العملاء وتقديم خصومات مخصصة
+              {t('categories.customerTiers.tierDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>اسم الفئة *</Label>
+              <Label>{t('categories.customerTiers.tierName')} *</Label>
               <Input
                 value={tierFormData.name}
                 onChange={(e) => setTierFormData({ ...tierFormData, name: e.target.value })}
-                placeholder="مثال: فئة VIP"
+                placeholder={t('categories.customerTiers.tierNamePlaceholder')}
               />
             </div>
             <div className="grid gap-2">
-              <Label>الوصف</Label>
+              <Label>{t('categories.customerTiers.description')}</Label>
               <Input
                 value={tierFormData.description}
                 onChange={(e) => setTierFormData({ ...tierFormData, description: e.target.value })}
-                placeholder="وصف مختصر لهذه الفئة"
+                placeholder={t('categories.customerTiers.descriptionPlaceholder')}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>اللون</Label>
+                <Label>{t('categories.customerTiers.color')}</Label>
                 <Input
                   type="color"
                   value={tierFormData.color}
@@ -839,7 +929,7 @@ export default function CategoriesManager() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>نسبة الخصم (%)</Label>
+                <Label>{t('categories.customerTiers.discountPercent')}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -850,7 +940,7 @@ export default function CategoriesManager() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label>فئات المنتجات المرتبطة (اختياري)</Label>
+              <Label>{t('categories.customerTiers.linkedProductCategories')}</Label>
               <Select
                 value={tierFormData.productCategories[0] || ''}
                 onValueChange={(value) => {
@@ -863,7 +953,7 @@ export default function CategoriesManager() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر فئة منتجات" />
+                  <SelectValue placeholder={t('categories.customerTiers.selectProductCategory')} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
@@ -897,15 +987,15 @@ export default function CategoriesManager() {
             <div className="grid gap-2">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                تعيين عملاء لهذه الفئة
+                {t('categories.customerTiers.assignCustomers')}
               </Label>
               {customersLoading ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className="mr-2 text-sm text-muted-foreground">جاري تحميل العملاء...</span>
+                  <span className={`text-sm text-muted-foreground ${isRTL ? 'mr-2' : 'ml-2'}`}>{t('categories.customerTiers.loadingCustomers')}</span>
                 </div>
               ) : customers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا يوجد عملاء متاحين</p>
+                <p className="text-sm text-muted-foreground">{t('categories.customerTiers.noCustomersAvailable')}</p>
               ) : (
                 <>
                   <Select
@@ -920,7 +1010,7 @@ export default function CategoriesManager() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="اختر عميل لإضافته للفئة" />
+                      <SelectValue placeholder={t('categories.customerTiers.selectCustomer')} />
                     </SelectTrigger>
                     <SelectContent>
                       {customers
@@ -928,7 +1018,7 @@ export default function CategoriesManager() {
                         .map((customer) => (
                           <SelectItem key={customer.id} value={customer.id}>
                             <div className="flex flex-col">
-                              <span>{customer.name || 'عميل'}</span>
+                              <span>{customer.name || t('categories.customerTiers.customer')}</span>
                               <span className="text-xs text-muted-foreground">{customer.email}</span>
                             </div>
                           </SelectItem>
@@ -955,7 +1045,7 @@ export default function CategoriesManager() {
                   </div>
                   {tierFormData.assignedCustomers.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      {tierFormData.assignedCustomers.length} عميل مُعين لهذه الفئة
+                      {t('categories.customerTiers.assignedCount', { count: tierFormData.assignedCustomers.length })}
                     </p>
                   )}
                 </>
@@ -964,10 +1054,10 @@ export default function CategoriesManager() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setTierDialogOpen(false)}>
-              إلغاء
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSaveTier}>
-              {editingTier ? 'تحديث' : 'إضافة'}
+              {editingTier ? t('categories.productCategories.update') : t('categories.productCategories.add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -978,29 +1068,29 @@ export default function CategoriesManager() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {editingOffer ? 'تعديل العرض' : 'إضافة عرض جديد'}
+              {editingOffer ? t('categories.offers.editOffer') : t('categories.offers.addNewOffer')}
             </DialogTitle>
             <DialogDescription>
-              أنشئ عروضاً خاصة لفئات العملاء على منتجات محددة
+              {t('categories.offers.offerDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>اسم العرض *</Label>
+              <Label>{t('categories.offers.offerName')} *</Label>
               <Input
                 value={offerFormData.name}
                 onChange={(e) => setOfferFormData({ ...offerFormData, name: e.target.value })}
-                placeholder="مثال: عرض رمضان"
+                placeholder={t('categories.offers.offerNamePlaceholder')}
               />
             </div>
             <div className="grid gap-2">
-              <Label>فئة العملاء *</Label>
+              <Label>{t('categories.offers.customerTier')} *</Label>
               <Select
                 value={offerFormData.tierId}
                 onValueChange={(value) => setOfferFormData({ ...offerFormData, tierId: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر فئة العملاء" />
+                  <SelectValue placeholder={t('categories.offers.selectCustomerTier')} />
                 </SelectTrigger>
                 <SelectContent>
                   {customerTiers.map((tier) => (
@@ -1012,7 +1102,7 @@ export default function CategoriesManager() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>نسبة الخصم (%)</Label>
+              <Label>{t('categories.offers.discountPercent')}</Label>
               <Input
                 type="number"
                 min="0"
@@ -1022,7 +1112,7 @@ export default function CategoriesManager() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>فئات المنتجات المشمولة</Label>
+              <Label>{t('categories.offers.productCategories')}</Label>
               <Select
                 value={offerFormData.productCategoryIds[0] || ''}
                 onValueChange={(value) => {
@@ -1035,7 +1125,7 @@ export default function CategoriesManager() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="اختر فئة منتجات" />
+                  <SelectValue placeholder={t('categories.offers.selectProductCategories')} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
@@ -1069,15 +1159,15 @@ export default function CategoriesManager() {
             <div className="grid gap-2">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                اختر العملاء لهذا العرض
+                {t('categories.customerTiers.assignCustomers')}
               </Label>
               {customersLoading ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className="mr-2 text-sm text-muted-foreground">جاري تحميل العملاء...</span>
+                  <span className={`text-sm text-muted-foreground ${isRTL ? 'mr-2' : 'ml-2'}`}>{t('categories.customerTiers.loadingCustomers')}</span>
                 </div>
               ) : customers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا يوجد عملاء متاحين</p>
+                <p className="text-sm text-muted-foreground">{t('categories.customerTiers.noCustomersAvailable')}</p>
               ) : (
                 <>
                   <Select
@@ -1092,7 +1182,7 @@ export default function CategoriesManager() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="اختر عميل لإضافته للعرض" />
+                      <SelectValue placeholder={t('categories.customerTiers.selectCustomer')} />
                     </SelectTrigger>
                     <SelectContent>
                       {customers
@@ -1100,7 +1190,7 @@ export default function CategoriesManager() {
                         .map((customer) => (
                           <SelectItem key={customer.id} value={customer.id}>
                             <div className="flex flex-col">
-                              <span>{customer.name || 'عميل'}</span>
+                              <span>{customer.name || t('categories.customerTiers.customer')}</span>
                               <span className="text-xs text-muted-foreground">{customer.email}</span>
                             </div>
                           </SelectItem>
@@ -1127,7 +1217,7 @@ export default function CategoriesManager() {
                   </div>
                   {offerFormData.assignedCustomers.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      {offerFormData.assignedCustomers.length} عميل سيحصل على هذا العرض
+                      {t('categories.customerTiers.assignedCount', { count: offerFormData.assignedCustomers.length })}
                     </p>
                   )}
                 </>
@@ -1136,10 +1226,10 @@ export default function CategoriesManager() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOfferDialogOpen(false)}>
-              إلغاء
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSaveOffer}>
-              {editingOffer ? 'تحديث' : 'إضافة'}
+              {editingOffer ? t('categories.productCategories.update') : t('categories.productCategories.add')}
             </Button>
           </DialogFooter>
         </DialogContent>

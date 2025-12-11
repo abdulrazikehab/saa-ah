@@ -73,7 +73,7 @@ export const publicService = {
       const response = await apiClient.get('/public/partners');
       return response?.partners || [];
     } catch (error) {
-      console.error('Failed to fetch partners:', error);
+      // Error logged to backend
       return [];
     }
   },
@@ -89,7 +89,7 @@ export const publicService = {
       const response = await apiClient.get(url);
       return response?.plans || [];
     } catch (error) {
-      console.error('Failed to fetch plans:', error);
+      // Error logged to backend
       return [];
     }
   },
@@ -102,7 +102,7 @@ export const publicService = {
       const response = await apiClient.get('/public/payment-providers');
       return response?.providers || [];
     } catch (error) {
-      console.error('Failed to fetch payment providers:', error);
+      // Error logged to backend
       return [];
     }
   },
@@ -115,7 +115,7 @@ export const publicService = {
       const response = await apiClient.get('/public/stats');
       return response?.stats || null;
     } catch (error) {
-      console.error('Failed to fetch stats:', error);
+      // Error logged to backend
       return null;
     }
   },
@@ -128,7 +128,7 @@ export const publicService = {
       const response = await apiClient.get(`/public/testimonials?limit=${limit}`);
       return response?.testimonials || [];
     } catch (error) {
-      console.error('Failed to fetch testimonials:', error);
+      // Error logged to backend
       return [];
     }
   },

@@ -21,6 +21,8 @@ import {
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
+import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
+import { useTranslation } from 'react-i18next';
 
 interface Order {
   id: string;
@@ -47,13 +49,16 @@ interface Order {
 }
 
 export default function OrdersManager() {
+  const { t } = useTranslation();
   const { toast } = useToast();
+  const { addUpdate } = useTabUpdatesContext();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [previousOrdersCount, setPreviousOrdersCount] = useState(0);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -63,7 +68,27 @@ export default function OrdersManager() {
     try {
       setLoading(true);
       const data = await coreApi.getOrders();
-      setOrders(Array.isArray(data) ? data : ((data as any).orders || []));
+      const ordersList = Array.isArray(data) ? data : ((data as any).orders || []);
+      
+      // Check for new orders by comparing with previous count
+      setOrders((prevOrders) => {
+        if (prevOrders.length > 0 && ordersList.length > prevOrders.length) {
+          // Find new orders (orders that don't exist in previous list)
+          const prevOrderIds = new Set(prevOrders.map(o => o.id));
+          const newOrders = ordersList.filter((order: Order) => !prevOrderIds.has(order.id));
+          
+          newOrders.forEach((order: Order) => {
+            addUpdate('/dashboard/orders', {
+              type: 'added',
+              message: `طلب جديد #${order.orderNumber} بقيمة ${order.total.toFixed(2)} ر.س`,
+              data: order,
+            });
+          });
+        }
+        return ordersList;
+      });
+      
+      setPreviousOrdersCount(ordersList.length);
     } catch (error) {
       console.error('Failed to load orders:', error);
       toast({
@@ -74,7 +99,7 @@ export default function OrdersManager() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, addUpdate]);
 
   useEffect(() => {
     loadOrders();
@@ -83,6 +108,14 @@ export default function OrdersManager() {
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     try {
       await coreApi.put(`/orders/${orderId}/status`, { status: newStatus }, { requireAuth: true });
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        addUpdate('/dashboard/orders', {
+          type: 'updated',
+          message: `تم تحديث حالة الطلب #${order.orderNumber} إلى ${newStatus}`,
+          data: { orderId, newStatus },
+        });
+      }
       toast({ title: 'نجح', description: 'تم تحديث حالة الطلب' });
       loadOrders();
     } catch (error) {
@@ -97,11 +130,11 @@ export default function OrdersManager() {
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, { label: string; className: string; icon: any }> = {
-      PENDING: { label: 'قيد الانتظار', className: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20', icon: Clock },
-      PROCESSING: { label: 'قيد المعالجة', className: 'bg-blue-500/10 text-blue-700 border-blue-500/20', icon: Package },
-      SHIPPED: { label: 'تم الشحن', className: 'bg-purple-500/10 text-purple-700 border-purple-500/20', icon: Truck },
-      DELIVERED: { label: 'تم التوصيل', className: 'bg-green-500/10 text-green-700 border-green-500/20', icon: CheckCircle },
-      CANCELLED: { label: 'ملغي', className: 'bg-red-500/10 text-red-700 border-red-500/20', icon: XCircle },
+      PENDING: { label: t('dashboard.orders.pending'), className: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20', icon: Clock },
+      PROCESSING: { label: t('dashboard.orders.processing'), className: 'bg-blue-500/10 text-blue-700 border-blue-500/20', icon: Package },
+      SHIPPED: { label: t('dashboard.orders.shipped'), className: 'bg-purple-500/10 text-purple-700 border-purple-500/20', icon: Truck },
+      DELIVERED: { label: t('dashboard.orders.delivered'), className: 'bg-green-500/10 text-green-700 border-green-500/20', icon: CheckCircle },
+      CANCELLED: { label: t('dashboard.orders.cancelled', 'Cancelled'), className: 'bg-red-500/10 text-red-700 border-red-500/20', icon: XCircle },
     };
     const { label, className, icon: Icon } = config[status] || config.PENDING;
     return (
@@ -165,8 +198,6 @@ export default function OrdersManager() {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = utils.sheet_to_json(worksheet);
 
-      console.log('Importing orders (log only):', jsonData);
-      
       toast({ 
         title: 'Import Processed', 
         description: `Read ${jsonData.length} records. Order import is restricted to logging.` 
@@ -174,9 +205,8 @@ export default function OrdersManager() {
       
       // Reset file input
       e.target.value = '';
-    } catch (error) {
-      console.error('Import error:', error);
-      toast({ title: 'Error', description: 'Failed to import file', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.message || 'Failed to import file', variant: 'destructive' });
     }
   };
 
@@ -217,7 +247,7 @@ export default function OrdersManager() {
         <Card className="border-r-4 border-r-yellow-500">
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">قيد الانتظار</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.orders.pending')}</p>
               <p className="text-3xl font-bold mt-2">{stats.pending}</p>
             </div>
           </CardContent>
@@ -226,7 +256,7 @@ export default function OrdersManager() {
         <Card className="border-r-4 border-r-blue-600">
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">قيد المعالجة</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.orders.processing')}</p>
               <p className="text-3xl font-bold mt-2">{stats.processing}</p>
             </div>
           </CardContent>
@@ -235,7 +265,7 @@ export default function OrdersManager() {
         <Card className="border-r-4 border-r-purple-500">
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">تم الشحن</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.orders.shipped')}</p>
               <p className="text-3xl font-bold mt-2">{stats.shipped}</p>
             </div>
           </CardContent>
@@ -244,7 +274,7 @@ export default function OrdersManager() {
         <Card className="border-r-4 border-r-green-500">
           <CardContent className="pt-6">
             <div className="text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">تم التوصيل</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.orders.delivered')}</p>
               <p className="text-3xl font-bold mt-2">{stats.delivered}</p>
             </div>
           </CardContent>
@@ -277,10 +307,10 @@ export default function OrdersManager() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الحالات</SelectItem>
-                <SelectItem value="PENDING">قيد الانتظار</SelectItem>
-                <SelectItem value="PROCESSING">قيد المعالجة</SelectItem>
-                <SelectItem value="SHIPPED">تم الشحن</SelectItem>
-                <SelectItem value="DELIVERED">تم التوصيل</SelectItem>
+                <SelectItem value="PENDING">{t('dashboard.orders.pending')}</SelectItem>
+                <SelectItem value="PROCESSING">{t('dashboard.orders.processing')}</SelectItem>
+                <SelectItem value="SHIPPED">{t('dashboard.orders.shipped')}</SelectItem>
+                <SelectItem value="DELIVERED">{t('dashboard.orders.delivered')}</SelectItem>
                 <SelectItem value="CANCELLED">ملغي</SelectItem>
               </SelectContent>
             </Select>
@@ -312,8 +342,8 @@ export default function OrdersManager() {
           ) : filteredOrders.length === 0 ? (
             <div className="text-center py-12">
               <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold mb-2">لا توجد طلبات</h3>
-              <p className="text-gray-500">لم يتم العثور على طلبات مطابقة</p>
+              <h3 className="text-xl font-semibold mb-2">{t('dashboard.orders.noOrders')}</h3>
+              <p className="text-gray-500">{t('dashboard.orders.noMatchingOrders')}</p>
             </div>
           ) : (
             <>

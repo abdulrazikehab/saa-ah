@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { coreApi } from '@/lib/api';
-import { Loader2, Save, Store, Globe, Mail, Phone, MapPin, Clock, CreditCard, DollarSign, Truck, Shield } from 'lucide-react';
+import { Loader2, Save, Store, Globe, Mail, Phone, MapPin, Clock, CreditCard, DollarSign, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,7 +42,6 @@ interface StoreSettings {
     accessToken: string;
     testMode: boolean;
   };
-  blockVpnUsers: boolean;
 }
 
 const DEFAULT_SETTINGS: StoreSettings = {
@@ -76,7 +75,6 @@ const DEFAULT_SETTINGS: StoreSettings = {
     accessToken: '',
     testMode: true,
   },
-  blockVpnUsers: false,
 };
 
 export default function Settings() {
@@ -168,12 +166,11 @@ export default function Settings() {
 
       {/* Settings Tabs */}
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full max-w-5xl grid-cols-6">
+        <TabsList className="grid w-full max-w-5xl grid-cols-5">
           <TabsTrigger value="general">عام</TabsTrigger>
           <TabsTrigger value="contact">معلومات الاتصال</TabsTrigger>
           <TabsTrigger value="business">إعدادات الأعمال</TabsTrigger>
           <TabsTrigger value="payment">الدفع والشحن</TabsTrigger>
-          <TabsTrigger value="security">الأمان</TabsTrigger>
           <TabsTrigger value="advanced">متقدم</TabsTrigger>
         </TabsList>
 
@@ -676,31 +673,6 @@ export default function Settings() {
                   </Button>
                 </>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Security Settings */}
-        <TabsContent value="security" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                <CardTitle>إعدادات الأمان</CardTitle>
-              </div>
-              <CardDescription>إدارة إعدادات الأمان والحماية للمتجر</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg border-orange-200 bg-orange-50 dark:bg-orange-900/10">
-                <div>
-                  <Label className="text-orange-900 dark:text-orange-100">حظر مستخدمي VPN</Label>
-                  <p className="text-sm text-orange-700 dark:text-orange-300">منع المستخدمين الذين يستخدمون VPN من تسجيل الدخول أو التسجيل</p>
-                </div>
-                <Switch
-                  checked={settings.blockVpnUsers}
-                  onCheckedChange={(checked) => updateSetting('blockVpnUsers', checked)}
-                />
-              </div>
             </CardContent>
           </Card>
         </TabsContent>

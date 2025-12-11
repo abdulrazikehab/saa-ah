@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { coreApi } from '@/lib/api';
 import { Save, Loader2, Bot } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 export default function AiSettingsManager() {
   const [script, setScript] = useState('');
@@ -12,7 +13,7 @@ export default function AiSettingsManager() {
   const loadScript = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/ai-script', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/ai-script', { requireAuth: false, adminApiKey: getAdminApiKey() });
       setScript(response.script || '');
     } catch (error) {
       console.error('Failed to load AI script:', error);
@@ -33,7 +34,7 @@ export default function AiSettingsManager() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await coreApi.post('/admin/master/ai-script', { script }, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post('/admin/master/ai-script', { script }, { requireAuth: false, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'AI script updated successfully'
@@ -84,7 +85,7 @@ export default function AiSettingsManager() {
             <h3 className="text-lg font-semibold text-white">Global Training Script</h3>
             <p className="text-sm text-gray-400">
               This script will be injected into the system prompt for all AI interactions across the platform.
-              Use this to define the AI's persona, general knowledge about Saa'ah, and core policies.
+              Use this to define the AI's persona, general knowledge about Saeaa, and core policies.
             </p>
           </div>
         </div>

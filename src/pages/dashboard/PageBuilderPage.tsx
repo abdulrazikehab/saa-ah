@@ -47,7 +47,9 @@ export default function PageBuilderPage() {
       try {
         const domainData = await coreApi.getDomain();
         if (domainData) {
-          setDomain(domainData.customDomain || `${domainData.subdomain}.saa'ah.com`);
+          // Detect production domain from current hostname
+          const prodDomain = window.location.hostname.includes('saeaa.net') ? 'saeaa.net' : 'saeaa.com';
+          setDomain(domainData.customDomain || `${domainData.subdomain}.${prodDomain}`);
         }
       } catch (error) {
         console.error('Failed to fetch domain:', error);

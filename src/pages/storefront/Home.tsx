@@ -11,9 +11,11 @@ import { ProductCard } from '@/components/storefront/ProductCard';
 import { coreApi } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
 import { SectionRenderer } from '@/components/builder/SectionRenderer';
+import { Section } from '@/components/builder/PageBuilder';
 import { Page, Product } from '@/services/types';
 
 export default function Home() {
+  console.log('Rendering Storefront Home Page');
   const { t } = useTranslation();
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
@@ -72,7 +74,7 @@ export default function Home() {
   if (homePage && homePage.content && Array.isArray(homePage.content.sections)) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        {(homePage.content.sections as { id: string }[]).map((section) => (
+        {(homePage.content.sections as Section[]).map((section) => (
           <SectionRenderer key={section.id} section={section} />
         ))}
       </div>
@@ -128,14 +130,14 @@ export default function Home() {
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                    صفحاتك
+                    الصفحات
                   </h2>
                   <Badge className="bg-primary/10 text-primary dark:bg-primary/30 dark:text-primary text-lg px-3 py-1">
                     {pages.length} {pages.length === 1 ? 'صفحة' : pages.length === 2 ? 'صفحتان' : 'صفحات'}
                   </Badge>
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 text-lg">
-                  الصفحات التي قمت بإنشائها فقط
+                  تصفح محتوى المتجر
                 </p>
               </div>
             </div>
@@ -149,9 +151,6 @@ export default function Home() {
                         <div className="p-3 rounded-xl bg-primary/10 dark:bg-primary/30 group-hover:bg-primary/20 dark:group-hover:bg-primary/50 transition-colors">
                           <FileText className="h-6 w-6 text-primary" />
                         </div>
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                          منشورة
-                        </Badge>
                       </div>
                       <CardTitle className="text-xl group-hover:text-primary transition-colors">
                         {page.title}
@@ -212,7 +211,7 @@ export default function Home() {
                 <Package className="h-20 w-20 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-2xl font-bold mb-2">لا يوجد محتوى بعد</h3>
                 <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                  ابدأ بإضافة منتجات أو إنشاء صفحات لعرضها هنا
+                  عذراً، لا يوجد محتوى لعرضه حالياً.
                 </p>
               </CardContent>
             </Card>

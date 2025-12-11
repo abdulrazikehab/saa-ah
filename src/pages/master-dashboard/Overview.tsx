@@ -14,6 +14,7 @@ import {
   Clock
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 interface PlatformOverview {
   tenants: {
@@ -48,7 +49,7 @@ export default function MasterOverview() {
 
   const loadOverview = async () => {
     try {
-      const response = await coreApi.get('/admin/master/overview', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/overview', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       setOverview(response);
     } catch (error) {
       console.error('Failed to load overview:', error);

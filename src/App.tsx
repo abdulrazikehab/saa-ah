@@ -6,6 +6,10 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { DarkModeProvider } from "@/contexts/DarkModeContext";
+import { TabUpdatesProvider } from "@/contexts/TabUpdatesContext";
+import { useTranslation } from "react-i18next";
+import { useEffect } from "react";
+import "./i18n";
 import NotFound from "./pages/NotFound";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/auth/Login";
@@ -18,10 +22,28 @@ import CustomerProtectedRoute from "./components/auth/CustomerProtectedRoute";
 import Dashboard from "./pages/dashboard/Dashboard";
 import ProductsManager from "./pages/dashboard/ProductsManager";
 import CategoriesManager from "./pages/dashboard/CategoriesManager";
+import HierarchicalManager from "./pages/dashboard/HierarchicalManager";
+import PriceManager from "./pages/dashboard/PriceManager";
 import OrdersManager from "./pages/dashboard/OrdersManager";
 import CustomersManager from "./pages/dashboard/CustomersManager";
 import ReportsPage from "./pages/dashboard/ReportsPage";
 import Settings from "./pages/dashboard/Settings";
+import SettingsLayout from "./pages/dashboard/settings/SettingsLayout";
+import SupplierSettings from "./pages/dashboard/settings/SupplierSettings";
+import UnitSettings from "./pages/dashboard/settings/UnitSettings";
+import BrandSettings from "./pages/dashboard/settings/BrandSettings";
+import CurrencySettings from "./pages/dashboard/settings/CurrencySettings";
+import SuppliersPage from "./pages/dashboard/SuppliersPage";
+import BrandsPage from "./pages/dashboard/BrandsPage";
+import UnitsPage from "./pages/dashboard/UnitsPage";
+import CurrenciesPage from "./pages/dashboard/CurrenciesPage";
+import PaymentSettings from "./pages/dashboard/settings/PaymentSettings";
+import CheckoutSettings from "./pages/dashboard/settings/CheckoutSettings";
+import NotificationsSettings from "./pages/dashboard/settings/NotificationsSettings";
+import DomainsSettings from "./pages/dashboard/settings/DomainsSettings";
+import UsersSettings from "./pages/dashboard/settings/UsersSettings";
+import IntegrationsSettings from "./pages/dashboard/settings/IntegrationsSettings";
+import KycSettings from "./pages/dashboard/settings/KycSettings";
 import DomainManagement from "./pages/dashboard/DomainManagement";
 import TemplatesPage from "./pages/dashboard/TemplatesPage";
 import MarketSetup from "./pages/dashboard/MarketSetup";
@@ -66,15 +88,109 @@ import './styles/theme.css'; // Import theme CSS
 // import './styles/theme-force.css'; // Force theme application - DISABLED to preserve dashboard design
 import './styles/dark-mode-visibility-fix.css'; // Fix invisible text in dark mode
 import PartnerWithUs from './pages/PartnerWithUs';
+import CookieConsent from './components/ui/CookieConsent';
+import CookieRequired from './components/ui/CookieRequired';
+import i18n from './i18n';
 
 const queryClient = new QueryClient();
+
+// Component to handle direction updates
+const DirectionHandler = () => {
+  const { i18n: i18nInstance } = useTranslation();
+  
+  useEffect(() => {
+    // Create or get style element for direction
+    let styleEl = document.getElementById('direction-style') as HTMLStyleElement;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'direction-style';
+      document.head.appendChild(styleEl);
+    }
+    
+    const updateDirection = (lng: string) => {
+      const dir = lng === 'ar' ? 'rtl' : 'ltr';
+      
+      // Inject CSS directly into style tag for maximum priority
+      styleEl.textContent = `
+        html { direction: ${dir} !important; }
+        body { direction: ${dir} !important; }
+        html[dir="${dir}"] { direction: ${dir} !important; }
+        body[dir="${dir}"] { direction: ${dir} !important; }
+        html.${dir} { direction: ${dir} !important; }
+        body.${dir} { direction: ${dir} !important; }
+      `;
+      
+      // Force update html element with multiple methods
+      document.documentElement.dir = dir;
+      document.documentElement.lang = lng;
+      document.documentElement.setAttribute('dir', dir);
+      document.documentElement.setAttribute('lang', lng);
+      
+      // Force update body element with multiple methods
+      if (document.body) {
+        document.body.dir = dir;
+        document.body.setAttribute('dir', dir);
+        document.body.style.setProperty('direction', dir, 'important');
+        document.body.style.direction = dir;
+      }
+      
+      // Add/remove RTL class for CSS targeting
+      if (dir === 'rtl') {
+        document.documentElement.classList.add('rtl');
+        document.documentElement.classList.remove('ltr');
+        if (document.body) {
+          document.body.classList.add('rtl');
+          document.body.classList.remove('ltr');
+        }
+      } else {
+        document.documentElement.classList.add('ltr');
+        document.documentElement.classList.remove('rtl');
+        if (document.body) {
+          document.body.classList.add('ltr');
+          document.body.classList.remove('rtl');
+        }
+      }
+      
+      // Force a reflow to ensure changes are applied
+      if (document.body) {
+        void document.body.offsetHeight;
+      }
+    };
+    
+    // Set initial direction immediately
+    const currentLang = i18nInstance.language || localStorage.getItem('language') || 'ar';
+    updateDirection(currentLang);
+    
+    // Listen for language changes
+    const handleLanguageChange = (lng: string) => {
+      updateDirection(lng);
+    };
+    
+    i18nInstance.on('languageChanged', handleLanguageChange);
+    
+    return () => {
+      i18nInstance.off('languageChanged', handleLanguageChange);
+    };
+  }, [i18nInstance]);
+  
+  return null;
+};
 
 // Helper to check if we are on the main domain
 const isMainDomain = () => {
   const hostname = window.location.hostname;
   
   // Main domains (app/admin access)
-  const mainDomains = ['localhost', '127.0.0.1', "www.saa'ah.com", "saa'ah.com", "app.saa'ah.com"];
+  const mainDomains = [
+    'localhost', 
+    '127.0.0.1', 
+    'www.saeaa.com', 
+    'saeaa.com', 
+    'app.saeaa.com',
+    'www.saeaa.net',
+    'saeaa.net',
+    'app.saeaa.net'
+  ];
   
   // Check if it's exactly a main domain (no subdomain)
   if (mainDomains.includes(hostname)) {
@@ -87,8 +203,8 @@ const isMainDomain = () => {
     return false;
   }
   
-  // Check for subdomain of saa'ah.com (e.g., store.saa'ah.com)
-  if (hostname.endsWith(".saa'ah.com") && !mainDomains.includes(hostname)) {
+  // Check for subdomain of saeaa.com or saeaa.net (e.g., store.saeaa.com, store.saeaa.net)
+  if ((hostname.endsWith('.saeaa.com') || hostname.endsWith('.saeaa.net')) && !mainDomains.includes(hostname)) {
     return false;
   }
   
@@ -103,16 +219,22 @@ const isMainDomain = () => {
 
 const App = () => {
   const isMain = isMainDomain();
+  console.log('App rendering. Hostname:', window.location.hostname, 'isMainDomain:', isMain);
 
   return (
+    <>
+      <DirectionHandler />
     <DarkModeProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <CartProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
+            <TabUpdatesProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <CookieConsent onAccept={() => {}} />
+                <CookieRequired />
+                <BrowserRouter>
             {isMain ? (
               <Routes>
                 {/* Landing Page */}
@@ -156,9 +278,12 @@ const App = () => {
                 {/* Dashboard Routes (Protected, With Dashboard Layout) */}
                 <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/dashboard/market-setup" element={<MarketSetup />} />
                   <Route path="/dashboard/profile" element={<DashboardProfile />} />
                   <Route path="/dashboard/products" element={<ProductsManager />} />
                   <Route path="/dashboard/categories" element={<CategoriesManager />} />
+                  <Route path="/dashboard/hierarchical" element={<HierarchicalManager />} />
+                  <Route path="/dashboard/prices" element={<PriceManager />} />
                   <Route path="/dashboard/orders" element={<OrdersManager />} />
                   <Route path="/dashboard/customers" element={<CustomersManager />} />
                   <Route path="/dashboard/reports" element={<ReportsPage />} />
@@ -168,7 +293,6 @@ const App = () => {
                   <Route path="/dashboard/chat" element={<ChatInterface />} />
                   <Route path="/dashboard/storefront" element={<StorefrontEditor />} />
                   <Route path="/dashboard/navigation" element={<NavigationEditor />} />
-                  <Route path="/dashboard/store-settings" element={<Settings />} />
                   <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
                   <Route path="/dashboard/smart-line" element={<SmartLinePage />} />
                   <Route path="/dashboard/design" element={<ThemesStore />} />
@@ -176,7 +300,6 @@ const App = () => {
                   <Route path="/dashboard/management" element={<Management />} />
                   <Route path="/dashboard/app-builder" element={<AppBuilder />} />
                   <Route path="/dashboard/installed-apps" element={<InstalledApps />} />
-                  <Route path="/dashboard/domain" element={<DomainManagement />} />
                   <Route path="/dashboard/templates" element={<TemplatesPage />} />
                   <Route path="/dashboard/wallet" element={<WalletTransactions />} />
                   <Route path="/dashboard/activity-logs" element={<ActivityLogs />} />
@@ -184,8 +307,28 @@ const App = () => {
                   <Route path="/dashboard/reports" element={<Reports />} />
                   <Route path="/dashboard/support" element={<SupportPage />} />
                   <Route path="/dashboard/help" element={<Help />} />
+                  {/* Direct access settings pages (from sidebar) */}
+                  <Route path="/dashboard/settings/suppliers" element={<SuppliersPage />} />
+                  <Route path="/dashboard/settings/brands" element={<BrandsPage />} />
+                  <Route path="/dashboard/settings/units" element={<UnitsPage />} />
+                  <Route path="/dashboard/settings/currencies" element={<CurrenciesPage />} />
+                  {/* Settings Routes - Nested layout */}
+                  <Route path="/dashboard/settings" element={<SettingsLayout />}>
+                    <Route index element={<Settings />} />
+                    <Route path="notifications" element={<NotificationsSettings />} />
+                    <Route path="payment" element={<PaymentSettings />} />
+                    <Route path="checkout" element={<CheckoutSettings />} />
+                    <Route path="domains" element={<DomainsSettings />} />
+                    <Route path="suppliers" element={<SupplierSettings />} />
+                    <Route path="brands" element={<BrandSettings />} />
+                    <Route path="units" element={<UnitSettings />} />
+                    <Route path="currencies" element={<CurrencySettings />} />
+                    <Route path="users" element={<UsersSettings />} />
+                    <Route path="integrations" element={<IntegrationsSettings />} />
+                    <Route path="kyc" element={<KycSettings />} />
+                  </Route>
                   {/* Redirect legacy settings route */}
-                  <Route path="/dashboard/settings" element={<Settings />} />
+                  <Route path="/dashboard/store-settings" element={<Settings />} />
                 </Route>
                 
                 {/* Fallback */}
@@ -196,10 +339,12 @@ const App = () => {
             )}
           </BrowserRouter>
         </TooltipProvider>
+            </TabUpdatesProvider>
       </CartProvider>
       </AuthProvider>
     </QueryClientProvider>
     </DarkModeProvider>
+    </>
   );
 };
 

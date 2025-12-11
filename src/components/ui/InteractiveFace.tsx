@@ -148,7 +148,7 @@ export function InteractiveFace({ state, className }: InteractiveFaceProps) {
           </filter>
         </defs>
 
-        {/* Main Body - The "BlackBox" */}
+        {/* Main Body */}
         <rect 
           x="20" y="20" width="100" height="100" 
           rx="25" 

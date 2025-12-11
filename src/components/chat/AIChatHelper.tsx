@@ -35,7 +35,7 @@ export function AIChatHelper({ context }: AIChatHelperProps) {
       role: 'assistant',
       content: isArabic 
         ? 'مرحباً! أنا مساعد سِعَة الذكي. يمكنني مساعدتك في بناء صفحات رائعة، اقتراح المحتوى، والإجابة على أسئلتك حول منشئ الصفحات. كيف يمكنني مساعدتك اليوم؟'
-        : 'Hi! I\'m Saa\'ah AI Assistant. I can help you build amazing pages, suggest content, and answer questions about the page builder. How can I help you today?'
+        : 'Hi! I\'m Saeaa AI Assistant. I can help you build amazing pages, suggest content, and answer questions about the page builder. How can I help you today?'
     }
   ]);
   const [input, setInput] = useState('');
@@ -128,7 +128,7 @@ export function AIChatHelper({ context }: AIChatHelperProps) {
             <div className={`flex items-center gap-2 ${isArabic ? 'flex-row-reverse' : ''}`}>
               <div className="flex items-center gap-1">
                 <span className="text-xl font-bold" style={{ fontFamily: 'Arial' }}>سِعَة</span>
-                <span className="text-xs opacity-80">Saa'ah</span>
+                <span className="text-xs opacity-80">Saeaa</span>
               </div>
               <Sparkles className="h-5 w-5" />
             </div>

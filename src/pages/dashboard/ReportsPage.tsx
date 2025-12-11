@@ -32,54 +32,148 @@ import {
 } from 'recharts';
 import { coreApi, reportService } from '@/lib/api';
 import { ProductReportItem, CustomerReportItem, PaymentReportItem } from '@/services/report.service';
+import { useTranslation } from 'react-i18next';
 
 const COLORS = ['#06b6d4', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function ReportsPage() {
+  const { t, i18n } = useTranslation();
   const [dateRange, setDateRange] = useState('30days');
   const [reportType, setReportType] = useState('sales');
   const [loading, setLoading] = useState(true);
   const [salesData, setSalesData] = useState<{ name: string; revenue: number; orders: number }[]>([]);
   const [stats, setStats] = useState<{ orderCount: number; revenue: number; productCount: number; customerCount: number } | null>(null);
+  const [previousStats, setPreviousStats] = useState<{ orderCount: number; revenue: number; productCount: number; customerCount: number } | null>(null);
   
   // New state for other reports
   const [productReport, setProductReport] = useState<ProductReportItem[]>([]);
   const [customerReport, setCustomerReport] = useState<CustomerReportItem[]>([]);
   const [paymentReport, setPaymentReport] = useState<PaymentReportItem[]>([]);
 
+  // Calculate date ranges based on selected period
+  const getDateRanges = (range: string) => {
+    const now = new Date();
+    let currentStart: Date;
+    let currentEnd: Date = new Date(now);
+    let previousStart: Date;
+    let previousEnd: Date;
+
+    switch (range) {
+      case '7days':
+        currentStart = new Date(now);
+        currentStart.setDate(currentStart.getDate() - 7);
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 7);
+        break;
+      case '30days':
+        currentStart = new Date(now);
+        currentStart.setDate(currentStart.getDate() - 30);
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 30);
+        break;
+      case '90days':
+        currentStart = new Date(now);
+        currentStart.setDate(currentStart.getDate() - 90);
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 90);
+        break;
+      case 'year':
+        currentStart = new Date(now.getFullYear(), 0, 1);
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(now.getFullYear() - 1, 0, 1);
+        previousEnd = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59);
+        break;
+      default:
+        currentStart = new Date(now);
+        currentStart.setDate(currentStart.getDate() - 30);
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 30);
+    }
+
+    return { currentStart, currentEnd, previousStart, previousEnd };
+  };
+
   const loadReportData = useCallback(async () => {
     try {
       setLoading(true);
-      const [statsData, ordersData, productsData, customersData, paymentsData] = await Promise.all([
-        coreApi.get('/dashboard/stats'),
+      const { currentStart, currentEnd, previousStart, previousEnd } = getDateRanges(dateRange);
+      
+      // Get orders for both periods
+      const [allOrdersData, statsData, productsData, customersData, paymentsData] = await Promise.all([
         coreApi.getOrders(),
+        coreApi.get('/dashboard/stats'),
         reportService.getProductReport(),
         reportService.getCustomerReport(),
         reportService.getPaymentReport()
       ]);
 
-      setStats(statsData);
+      const allOrders = Array.isArray(allOrdersData) ? allOrdersData : ((allOrdersData as any)?.orders || []);
+      
+      // Calculate current period stats
+      const currentOrders = allOrders.filter((order: any) => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= currentStart && orderDate <= currentEnd;
+      });
+      
+      const currentRevenue = currentOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
+      const currentOrderCount = currentOrders.length;
+      
+      // Calculate previous period stats
+      const previousOrders = allOrders.filter((order: any) => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= previousStart && orderDate <= previousEnd;
+      });
+      
+      const previousRevenue = previousOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
+      const previousOrderCount = previousOrders.length;
+
+      // Use product count and customer count from stats (these don't change by date range)
+      setStats({
+        ...statsData,
+        revenue: currentRevenue,
+        orderCount: currentOrderCount,
+      });
+
+      setPreviousStats({
+        revenue: previousRevenue,
+        orderCount: previousOrderCount,
+        productCount: statsData.productCount, // Products don't have date-based comparison
+        customerCount: statsData.customerCount, // Customers don't have date-based comparison
+      });
+
       setProductReport(productsData);
       setCustomerReport(customersData);
       setPaymentReport(paymentsData);
 
-      // Process orders data for charts
-      const orders = Array.isArray(ordersData) ? ordersData : ((ordersData as any)?.orders || []);
-      const chartData = processOrdersForChart(orders);
+      // Process orders data for charts (current period only)
+      const chartData = processOrdersForChart(currentOrders);
       setSalesData(chartData);
 
     } catch (error) {
       console.error('Failed to load report data:', error);
       setStats({ orderCount: 0, revenue: 0, productCount: 0, customerCount: 0 });
+      setPreviousStats({ orderCount: 0, revenue: 0, productCount: 0, customerCount: 0 });
       setSalesData([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => {
     loadReportData();
   }, [loadReportData, dateRange]);
+
+  // Format date range display
+  const formatDateRange = () => {
+    const { currentStart, currentEnd } = getDateRanges(dateRange);
+    const locale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+    return `${currentStart.toLocaleDateString(locale, options)} - ${currentEnd.toLocaleDateString(locale, options)}`;
+  };
 
   const processOrdersForChart = (orders: { createdAt: string; total: number }[]) => {
     const dataMap = new Map();
@@ -105,6 +199,18 @@ export default function ReportsPage() {
     });
 
     return Array.from(dataMap.values());
+  };
+
+  // Calculate percentage change
+  const calculateChange = (current: number, previous: number): { change: number; trend: 'up' | 'down' } => {
+    if (previous === 0) {
+      return current > 0 ? { change: 100, trend: 'up' } : { change: 0, trend: 'up' };
+    }
+    const percentChange = ((current - previous) / previous) * 100;
+    return {
+      change: Math.abs(percentChange),
+      trend: percentChange >= 0 ? 'up' : 'down',
+    };
   };
 
   const MetricCard = ({ 
@@ -150,7 +256,7 @@ export default function ReportsPage() {
       <div className="flex items-center justify-center min-h-[600px]">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto" />
-          <p className="text-muted-foreground">جاري تحميل التقارير...</p>
+          <p className="text-muted-foreground">{t('dashboard.reports.loading')}</p>
         </div>
       </div>
     );
@@ -161,9 +267,9 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">التقارير</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('dashboard.reports.title')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            نوفمبر 1, 2025 - نوفمبر 30, 2025
+            {formatDateRange()}
           </p>
         </div>
         <div className="flex gap-2">
@@ -173,15 +279,15 @@ export default function ReportsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="7days">آخر 7 أيام</SelectItem>
-              <SelectItem value="30days">آخر 30 يوم</SelectItem>
-              <SelectItem value="90days">آخر 90 يوم</SelectItem>
-              <SelectItem value="year">هذا العام</SelectItem>
+              <SelectItem value="7days">{t('dashboard.reports.last7Days')}</SelectItem>
+              <SelectItem value="30days">{t('dashboard.reports.last30Days')}</SelectItem>
+              <SelectItem value="90days">{t('dashboard.reports.last90Days')}</SelectItem>
+              <SelectItem value="year">{t('dashboard.reports.thisYear')}</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" className="gap-2">
             <Download className="h-4 w-4" />
-            تصدير
+            {t('dashboard.reports.export')}
           </Button>
         </div>
       </div>
@@ -189,10 +295,10 @@ export default function ReportsPage() {
       {/* Report Type Tabs */}
       <Tabs value={reportType} onValueChange={setReportType} className="w-full">
         <TabsList className="grid w-full max-w-2xl grid-cols-4">
-          <TabsTrigger value="sales">المبيعات</TabsTrigger>
-          <TabsTrigger value="products">المنتجات</TabsTrigger>
-          <TabsTrigger value="customers">العملاء</TabsTrigger>
-          <TabsTrigger value="payments">المدفوعات</TabsTrigger>
+          <TabsTrigger value="sales">{t('dashboard.reports.sales')}</TabsTrigger>
+          <TabsTrigger value="products">{t('dashboard.reports.products')}</TabsTrigger>
+          <TabsTrigger value="customers">{t('dashboard.reports.customers')}</TabsTrigger>
+          <TabsTrigger value="payments">{t('dashboard.reports.payments')}</TabsTrigger>
         </TabsList>
 
         {/* Sales Report */}
@@ -200,28 +306,24 @@ export default function ReportsPage() {
           {/* Key Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <MetricCard
-              title="إجمالي المبيعات"
-              value={`${stats?.revenue.toFixed(2) || '0.00'} ريال`}
-              change={25.83}
-              trend="up"
+              title={t('dashboard.reports.totalSales')}
+              value={`${stats?.revenue.toFixed(2) || '0.00'} ${t('common.currency', 'SAR')}`}
+              {...(previousStats ? calculateChange(stats?.revenue || 0, previousStats.revenue) : {})}
               icon={DollarSign}
             />
             <MetricCard
-              title="الطلبات"
+              title={t('dashboard.reports.orders')}
               value={stats?.orderCount || 0}
-              change={25.83}
-              trend="up"
+              {...(previousStats ? calculateChange(stats?.orderCount || 0, previousStats.orderCount) : {})}
               icon={ShoppingCart}
             />
             <MetricCard
-              title="المنتجات"
+              title={t('dashboard.reports.products')}
               value={stats?.productCount || 0}
-              change={24.94}
-              trend="up"
               icon={Package}
             />
             <MetricCard
-              title="العملاء"
+              title={t('dashboard.reports.customers')}
               value={stats?.customerCount || 0}
               icon={Users}
             />
@@ -232,16 +334,16 @@ export default function ReportsPage() {
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>تحليل المبيعات</CardTitle>
-                  <CardDescription>اتجاهات المبيعات والإيرادات</CardDescription>
+                  <CardTitle>{t('dashboard.reports.salesAnalysis')}</CardTitle>
+                  <CardDescription>{t('dashboard.reports.salesAndRevenueTrends')}</CardDescription>
                 </div>
                 <Select defaultValue="revenue">
                   <SelectTrigger className="w-[180px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="revenue">الإيرادات</SelectItem>
-                    <SelectItem value="orders">الطلبات</SelectItem>
+                    <SelectItem value="revenue">{t('dashboard.reports.revenue')}</SelectItem>
+                    <SelectItem value="orders">{t('dashboard.reports.orders')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -283,8 +385,8 @@ export default function ReportsPage() {
         <TabsContent value="products" className="space-y-6">
           <Card>
             <CardHeader className="border-b">
-              <CardTitle>أداء المنتجات</CardTitle>
-              <CardDescription>المنتجات الأكثر مبيعاً والأعلى إيراداً</CardDescription>
+              <CardTitle>{t('dashboard.reports.productPerformance')}</CardTitle>
+              <CardDescription>{t('dashboard.reports.topSellingProducts')}</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-8">
@@ -293,16 +395,16 @@ export default function ReportsPage() {
                     <div className="flex-1 space-y-1">
                       <p className="text-sm font-medium leading-none">{product.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {product.salesCount} مبيعات
+                        {product.salesCount} {t('dashboard.reports.sales')}
                       </p>
                     </div>
                     <div className="text-left font-medium">
-                      {product.revenue.toFixed(2)} ريال
+                      {product.revenue.toFixed(2)} {t('common.currency')}
                     </div>
                   </div>
                 ))}
                 {productReport.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">لا توجد بيانات للمنتجات</p>
+                  <p className="text-center text-muted-foreground py-8">{t('dashboard.reports.noProductData')}</p>
                 )}
               </div>
             </CardContent>
@@ -313,8 +415,8 @@ export default function ReportsPage() {
         <TabsContent value="customers" className="space-y-6">
           <Card>
             <CardHeader className="border-b">
-              <CardTitle>أفضل العملاء</CardTitle>
-              <CardDescription>العملاء الأكثر شراءً</CardDescription>
+              <CardTitle>{t('dashboard.reports.topCustomers')}</CardTitle>
+              <CardDescription>{t('dashboard.reports.topBuyers')}</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-8">
@@ -328,13 +430,13 @@ export default function ReportsPage() {
                       <p className="text-sm text-muted-foreground">{customer.email}</p>
                     </div>
                     <div className="text-left">
-                      <div className="font-medium">{customer.totalSpent.toFixed(2)} ريال</div>
-                      <div className="text-xs text-muted-foreground">{customer.orders} طلبات</div>
+                      <div className="font-medium">{customer.totalSpent.toFixed(2)} {t('common.currency')}</div>
+                      <div className="text-xs text-muted-foreground">{customer.orders} {t('dashboard.reports.orders')}</div>
                     </div>
                   </div>
                 ))}
                 {customerReport.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">لا توجد بيانات للعملاء</p>
+                  <p className="text-center text-muted-foreground py-8">{t('dashboard.reports.noCustomerData')}</p>
                 )}
               </div>
             </CardContent>
@@ -346,8 +448,8 @@ export default function ReportsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>توزيع طرق الدفع</CardTitle>
-                <CardDescription>حجم المعاملات حسب طريقة الدفع</CardDescription>
+                <CardTitle>{t('dashboard.reports.paymentDistribution')}</CardTitle>
+                <CardDescription>{t('dashboard.reports.transactionVolumeByMethod')}</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center">
                 <div className="h-[300px] w-full">
@@ -376,8 +478,8 @@ export default function ReportsPage() {
             
             <Card>
               <CardHeader>
-                <CardTitle>ملخص المدفوعات</CardTitle>
-                <CardDescription>تفاصيل الرسوم والصافي</CardDescription>
+                <CardTitle>{t('dashboard.reports.paymentSummary')}</CardTitle>
+                <CardDescription>{t('dashboard.reports.feesAndNet')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-8">
@@ -388,15 +490,15 @@ export default function ReportsPage() {
                         <span className="font-medium">{payment.provider}</span>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold">{payment.volume.toFixed(2)} ريال</div>
+                        <div className="font-bold">{payment.volume.toFixed(2)} {t('common.currency')}</div>
                         <div className="text-xs text-muted-foreground">
-                          صافي: {payment.net.toFixed(2)} | رسوم: {payment.fees.toFixed(2)}
+                          {t('dashboard.reports.net')}: {payment.net.toFixed(2)} | {t('dashboard.reports.fees')}: {payment.fees.toFixed(2)}
                         </div>
                       </div>
                     </div>
                   ))}
                   {paymentReport.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">لا توجد بيانات للمدفوعات</p>
+                    <p className="text-center text-muted-foreground py-8">{t('dashboard.reports.noPaymentData')}</p>
                   )}
                 </div>
               </CardContent>

@@ -44,6 +44,10 @@ const PROVIDERS = [
   { value: 'NEOLEAP', label: 'Neoleap' }
 ];
 
+import { getAdminApiKey } from '@/lib/admin-config';
+
+const ADMIN_API_KEY = getAdminApiKey();
+
 export default function PaymentGatewayManager() {
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +58,8 @@ export default function PaymentGatewayManager() {
 
   const [formData, setFormData] = useState({
     name: '',
-    provider: 'STRIPE',
+    provider: 'HYPERPAY',
+    tenantId: null as string | null, // null for admin-created global gateways
     credentials: {} as GatewayCredentials,
     settings: {} as Record<string, unknown>,
     isActive: true
@@ -63,12 +68,19 @@ export default function PaymentGatewayManager() {
   const loadGateways = useCallback(async () => {
     try {
       setLoading(true);
-      const { data } = await coreApi.get('/admin/master/payment-gateways', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
-      setGateways(data.gateways);
-    } catch (error) {
+      const response = await coreApi.get('/admin/master/payment-gateways', { requireAuth: false, adminApiKey: ADMIN_API_KEY });
+      // Handle different response formats - backend returns { gateways: [...] }
+      const gatewaysData = (response as any)?.gateways || (response as any)?.data?.gateways || (Array.isArray(response) ? response : []);
+      // Backend already filters to show only admin-created gateways (tenantId is null), but double-check
+      const adminGateways = Array.isArray(gatewaysData) 
+        ? gatewaysData.filter((g: any) => !g.tenantId || g.tenantId === null)
+        : [];
+      setGateways(adminGateways);
+    } catch (error: any) {
+      console.error('Failed to load payment gateways:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load payment gateways',
+        description: error?.message || 'Failed to load payment gateways',
         variant: 'destructive',
       });
     } finally {
@@ -82,8 +94,21 @@ export default function PaymentGatewayManager() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name) {
+      toast({ variant: 'destructive', title: 'Missing name', description: 'Please provide a gateway name.' });
+      return;
+    }
+    if (formData.provider === 'HYPERPAY' && !formData.credentials.entityId) {
+      toast({ variant: 'destructive', title: 'Missing Entity ID', description: 'HyperPay requires Entity ID at minimum.' });
+      return;
+    }
+    if (formData.provider === 'NEOLEAP' && !formData.credentials.clientId) {
+      toast({ variant: 'destructive', title: 'Missing Client ID', description: 'Neoleap requires Client ID.' });
+      return;
+    }
+
     try {
-      await coreApi.post('/admin/master/payment-gateways', formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post('/admin/master/payment-gateways', formData, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Payment gateway created successfully'
@@ -95,7 +120,7 @@ export default function PaymentGatewayManager() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to create gateway'
+        description: error?.message || error?.response?.data?.message || 'Failed to create gateway'
       });
     }
   };
@@ -104,7 +129,7 @@ export default function PaymentGatewayManager() {
     if (!confirm('Are you sure you want to delete this gateway?')) return;
     
     try {
-      await coreApi.delete(`/admin/master/payment-gateways/${id}`, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.delete(`/admin/master/payment-gateways/${id}`, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Gateway deleted'
@@ -121,7 +146,7 @@ export default function PaymentGatewayManager() {
 
   const handleToggle = async (id: string) => {
     try {
-      await coreApi.post(`/admin/master/payment-gateways/${id}/toggle`, {}, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post(`/admin/master/payment-gateways/${id}/toggle`, {}, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Gateway status updated'
@@ -139,9 +164,21 @@ export default function PaymentGatewayManager() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGateway) return;
+    if (!formData.name) {
+      toast({ variant: 'destructive', title: 'Missing name', description: 'Please provide a gateway name.' });
+      return;
+    }
+    if (formData.provider === 'HYPERPAY' && !formData.credentials.entityId) {
+      toast({ variant: 'destructive', title: 'Missing Entity ID', description: 'HyperPay requires Entity ID at minimum.' });
+      return;
+    }
+    if (formData.provider === 'NEOLEAP' && !formData.credentials.clientId) {
+      toast({ variant: 'destructive', title: 'Missing Client ID', description: 'Neoleap requires Client ID.' });
+      return;
+    }
     
     try {
-      await coreApi.put(`/admin/master/payment-gateways/${editingGateway.id}`, formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.put(`/admin/master/payment-gateways/${editingGateway.id}`, formData, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Payment gateway updated successfully'
@@ -154,7 +191,7 @@ export default function PaymentGatewayManager() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to update gateway'
+        description: error?.message || error?.response?.data?.message || 'Failed to update gateway'
       });
     }
   };
@@ -162,7 +199,8 @@ export default function PaymentGatewayManager() {
   const resetForm = () => {
     setFormData({
       name: '',
-      provider: 'STRIPE',
+      provider: 'HYPERPAY',
+      tenantId: null, // Admin-created gateways are global (no tenant)
       credentials: {},
       settings: {},
       isActive: true
@@ -247,6 +285,7 @@ export default function PaymentGatewayManager() {
                     setFormData({
                       name: gateway.name,
                       provider: gateway.provider,
+                      tenantId: (gateway as any).tenantId || null,
                       credentials: gateway.credentials || {},
                       settings: gateway.settings || {},
                       isActive: gateway.isActive

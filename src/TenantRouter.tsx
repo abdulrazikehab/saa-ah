@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import StorefrontHome from "@/pages/storefront/StorefrontHome";
+import Home from "@/pages/storefront/Home";
 import Products from "@/pages/storefront/Products";
 import ProductDetail from "@/pages/storefront/ProductDetail";
 import Cart from "@/pages/storefront/Cart";
@@ -21,12 +21,13 @@ import Signup from "@/pages/auth/Signup";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 
 export const TenantRouter = () => {
+  console.log('Rendering TenantRouter');
   // Update favicon and title based on tenant configuration
   useDynamicFavicon();
   return (
     <Routes>
       <Route element={<StorefrontLayout />}>
-        <Route path="/" element={<StorefrontHome />} />
+        <Route path="/" element={<Home />} />
         <Route path="/products" element={<Products />} />
         <Route path="/products/:id" element={<ProductDetail />} />
         <Route path="/collections/:id" element={<Collection />} />

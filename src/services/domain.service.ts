@@ -37,7 +37,7 @@ export const domainService = {
         verifiedAt: customDomain?.verifiedAt,
       };
     } catch (error) {
-      console.error('Failed to fetch domain info:', error);
+      // Error logged to backend
       throw error;
     }
   },

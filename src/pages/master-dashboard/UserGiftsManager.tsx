@@ -21,6 +21,7 @@ import {
   Award
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 interface UserGift {
   id: string;
@@ -124,7 +125,7 @@ export default function UserGiftsManager() {
   const loadGifts = async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/gifts', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/gifts', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       setGifts(response.data || response.gifts || []);
     } catch (error) {
       console.error('Failed to load gifts:', error);
@@ -136,7 +137,7 @@ export default function UserGiftsManager() {
 
   const loadUsers = async () => {
     try {
-      const response = await coreApi.get('/admin/master/users?limit=100', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/users?limit=100', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       setUsers(response.data || response.users || []);
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -146,7 +147,7 @@ export default function UserGiftsManager() {
 
   const loadTenants = async () => {
     try {
-      const response = await coreApi.get('/admin/master/tenants', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/tenants', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       setTenants(response.data?.tenants || response.tenants || []);
     } catch (error) {
       console.error('Failed to load tenants:', error);
@@ -172,7 +173,7 @@ export default function UserGiftsManager() {
     };
 
     try {
-      await coreApi.post('/admin/master/gifts', giftData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post('/admin/master/gifts', giftData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: '🎁 Gift Granted!',
         description: 'The gift has been successfully granted'
@@ -193,7 +194,7 @@ export default function UserGiftsManager() {
     if (!confirm('Are you sure you want to revoke this gift?')) return;
     
     try {
-      await coreApi.post(`/admin/master/gifts/${giftId}/revoke`, {}, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post(`/admin/master/gifts/${giftId}/revoke`, {}, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: '✅ Success',
         description: 'Gift has been revoked'

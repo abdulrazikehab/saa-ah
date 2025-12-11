@@ -5,6 +5,56 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Force direction on html and body */
+html[dir="rtl"],
+html.rtl {
+  direction: rtl !important;
+}
+
+html[dir="ltr"],
+html.ltr {
+  direction: ltr !important;
+}
+
+body[dir="rtl"],
+body.rtl {
+  direction: rtl !important;
+}
+
+body[dir="ltr"],
+body.ltr {
+  direction: ltr !important;
+}
+
+/* Remove white background from PNG logos */
+img[src$=".png"],
+img[src*="logo"],
+img[src*="Logo"],
+.logo-image {
+  mix-blend-mode: multiply;
+  background: transparent;
+}
+
+/* For dark mode, use screen blend mode */
+.dark img[src$=".png"],
+.dark img[src*="logo"],
+.dark img[src*="Logo"],
+.dark .logo-image {
+  mix-blend-mode: screen;
+  filter: brightness(1.1) contrast(1.05);
+}
+
+/* Alternative: Use filter to remove white background */
+.logo-no-bg {
+  filter: brightness(0) saturate(100%) invert(1);
+  mix-blend-mode: multiply;
+}
+
+.dark .logo-no-bg {
+  filter: brightness(0) saturate(100%) invert(1);
+  mix-blend-mode: screen;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */

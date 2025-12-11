@@ -17,6 +17,7 @@ import {
   Building2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 interface Plan {
   id: string;
@@ -100,13 +101,15 @@ export default function PlansManager() {
   const loadPlans = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/plans', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
-      setPlans(response.plans || []);
-    } catch (error) {
+      const response = await coreApi.get('/admin/master/plans', { requireAuth: false, adminApiKey: getAdminApiKey() });
+      // Handle different response formats
+      const plansData = (response as any)?.plans || (response as any)?.data?.plans || (Array.isArray(response) ? response : []);
+      setPlans(plansData);
+    } catch (error: any) {
       console.error('Failed to load plans:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load plans',
+        description: error?.message || 'Failed to load plans',
         variant: 'destructive',
       });
     } finally {
@@ -147,7 +150,7 @@ export default function PlansManager() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await coreApi.post('/admin/master/plans', formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post('/admin/master/plans', formData, { requireAuth: false, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan created successfully',
@@ -168,7 +171,7 @@ export default function PlansManager() {
     e.preventDefault();
     if (!editingPlan) return;
     try {
-      await coreApi.put(`/admin/master/plans/${editingPlan.id}`, formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.put(`/admin/master/plans/${editingPlan.id}`, formData, { requireAuth: false, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan updated successfully',
@@ -188,7 +191,7 @@ export default function PlansManager() {
 
   const handleToggle = async (id: string) => {
     try {
-      await coreApi.patch(`/admin/master/plans/${id}/toggle`, {}, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.patch(`/admin/master/plans/${id}/toggle`, {}, { requireAuth: false, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan status updated',
@@ -206,7 +209,7 @@ export default function PlansManager() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this plan?')) return;
     try {
-      await coreApi.delete(`/admin/master/plans/${id}`, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.delete(`/admin/master/plans/${id}`, { requireAuth: false, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan deleted successfully',

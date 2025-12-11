@@ -37,9 +37,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, []);
 
+  // Helper to get cookie
+  const getCookie = (name: string): string | null => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+    return null;
+  };
+
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('accessToken');
+      // Check cookies first, then localStorage as fallback
+      const cookieToken = getCookie('accessToken');
+      const token = cookieToken || localStorage.getItem('accessToken');
       if (token) {
         const data = await authApi.me();
         
@@ -77,6 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const payload = isEmail ? { email: identifier, password } : { username: identifier, password };
       
       const data = await authApi.login(payload);
+      // Cookies are set by server, but also store in localStorage as fallback
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
       
@@ -152,7 +163,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      // Call backend logout to clear cookies
+      await authApi.logout().catch(() => {
+        // Ignore errors if already logged out
+      });
+    } catch (error) {
+      // Ignore errors
+    }
+    
+    // Clear cookies
+    document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    
+    // Clear localStorage
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
@@ -165,12 +190,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshToken = async (): Promise<boolean> => {
     try {
-      const refreshTokenValue = localStorage.getItem('refreshToken');
+      // Check if we have a refresh token (cookie or localStorage)
+      const cookieRefreshToken = getCookie('refreshToken');
+      const refreshTokenValue = cookieRefreshToken || localStorage.getItem('refreshToken');
       if (!refreshTokenValue) {
         return false;
       }
-
-      const response = await authApi.refreshToken(refreshTokenValue);
+      
+      // Call refresh - token will come from cookie if available
+      const response = await authApi.refreshToken();
       
       localStorage.setItem('accessToken', response.accessToken);
       localStorage.setItem('refreshToken', response.refreshToken);

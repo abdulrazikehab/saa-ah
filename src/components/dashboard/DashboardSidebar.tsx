@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Package, 
@@ -25,7 +25,15 @@ import {
   ChevronLeft,
   Headphones,
   Rocket,
-  Wallet
+  Wallet,
+  X,
+  Building2,
+  DollarSign,
+  Plug,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
+  type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +41,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { coreApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { useTranslation } from 'react-i18next';
 
 interface DashboardSidebarProps {
   className?: string;
@@ -56,19 +71,63 @@ interface PartnerStatus {
   smartLinePartnerCompleted?: boolean;
 }
 
+interface NavigationSection {
+  title: string;
+  items: Array<{
+    name: string;
+    href: string;
+    icon: LucideIcon;
+    badge?: string | null;
+  }>;
+}
+
 export const DashboardSidebar = ({ className, collapsed = false, onToggleCollapse }: DashboardSidebarProps) => {
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const location = useLocation();
+  const navigate = useNavigate();
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [partnerStatus, setPartnerStatus] = useState<PartnerStatus>({});
   const [balance, setBalance] = useState<number>(0);
+  const { hasUnreadUpdates, getUnreadUpdates, markAsWatched } = useTabUpdatesContext();
+  const [openPopover, setOpenPopover] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    [t('dashboard.sidebar.home')]: true,
+    [t('dashboard.sidebar.salesAndOrders')]: true,
+    [t('dashboard.sidebar.contentAndDesign')]: true,
+    [t('dashboard.sidebar.marketing')]: true,
+    [t('dashboard.sidebar.storeSettings')]: false,
+    [t('dashboard.sidebar.advanced')]: false,
+  });
+
+  // Auto-mark as watched when user navigates to a tab with updates
+  useEffect(() => {
+    // Dynamically find all navigation items with badges
+    const tabsWithBadges = navigationSections
+      .flatMap(section => section.items)
+      .filter(item => item.badge === t('dashboard.sidebar.new'))
+      .map(item => item.href);
+
+    tabsWithBadges.forEach(href => {
+      const isActive = href === '/dashboard/settings' 
+        ? (location.pathname === '/dashboard/settings' || location.pathname.startsWith('/dashboard/settings/'))
+        : (location.pathname === href || location.pathname.startsWith(href + '/'));
+      
+      // Always mark as watched when navigating to the tab to hide the badge
+      if (isActive) {
+        markAsWatched(href);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const res = await coreApi.get('/site-config', { requireAuth: true });
         setConfig(res.settings);
-      } catch (error) {
-        console.error('Failed to fetch site config:', error);
+      } catch {
+        // Silently fail
       }
     };
     fetchConfig();
@@ -79,8 +138,8 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
       try {
         const res = await coreApi.get('/partner/status', { requireAuth: true });
         setPartnerStatus(res);
-      } catch (error) {
-        console.error('Failed to fetch partner status:', error);
+      } catch {
+        // Silently fail
       }
     };
     fetchPartnerStatus();
@@ -92,121 +151,94 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
       try {
         const res = await coreApi.get('/transactions/balance', { requireAuth: true }) as { balance?: number };
         setBalance(res.balance || 0);
-      } catch (error) {
-        console.error('Failed to fetch balance:', error);
+      } catch {
         setBalance(0);
       }
     };
     fetchBalance();
   }, []);
 
-  const navigation = [
-    { 
-      name: 'الرئيسية', 
-      href: '/dashboard', 
-      icon: Home,
-      badge: null
+  const navigationSections: NavigationSection[] = [
+    {
+      title: t('dashboard.sidebar.home'),
+      items: [
+        { name: t('dashboard.sidebar.dashboard'), href: '/dashboard', icon: Home, badge: null },
+      ],
     },
-    { 
-      name: 'المنتجات', 
-      href: '/dashboard/products', 
-      icon: Package,
-      badge: null
+    {
+      title: t('dashboard.sidebar.salesAndOrders'),
+      items: [
+        { name: t('dashboard.sidebar.products'), href: '/dashboard/products', icon: Package, badge: null },
+        { name: t('dashboard.sidebar.hierarchical', 'المستكشف الهرمي'), href: '/dashboard/hierarchical', icon: FolderOpen, badge: null },
+        { name: t('dashboard.sidebar.priceManagement'), href: '/dashboard/prices', icon: DollarSign, badge: null },
+        { name: t('dashboard.sidebar.orders'), href: '/dashboard/orders', icon: ShoppingCart, badge: null },
+        { name: t('dashboard.sidebar.customers'), href: '/dashboard/customers', icon: Users, badge: null },
+        { name: t('dashboard.sidebar.reports'), href: '/dashboard/reports', icon: BarChart3, badge: null },
+      ],
     },
-    { 
-      name: 'الطلبات', 
-      href: '/dashboard/orders', 
-      icon: ShoppingCart,
-      badge: 'جديد'
+    {
+      title: t('dashboard.sidebar.contentAndDesign'),
+      items: [
+        { name: t('dashboard.sidebar.categories'), href: '/dashboard/categories', icon: FolderOpen, badge: null },
+        { name: t('dashboard.sidebar.pages'), href: '/dashboard/pages', icon: FileText, badge: null },
+        { name: t('dashboard.sidebar.storefront'), href: '/dashboard/storefront', icon: Store, badge: null },
+        { name: t('dashboard.sidebar.storeDesign'), href: '/dashboard/design', icon: Palette, badge: null },
+        { name: t('dashboard.sidebar.templates'), href: '/dashboard/templates', icon: LayoutDashboard, badge: null },
+      ],
     },
-    { 
-      name: 'العملاء', 
-      href: '/dashboard/customers', 
-      icon: Users,
-      badge: null
+    {
+      title: t('dashboard.sidebar.marketing'),
+      items: [
+        { name: t('dashboard.sidebar.potentialAndMarketing'), href: '/dashboard/marketing', icon: Tag, badge: null },
+        { name: t('dashboard.sidebar.smartLine'), href: '/dashboard/smart-line', icon: Rocket, badge: null },
+      ],
     },
-    { 
-      name: 'التقارير', 
-      href: '/dashboard/reports', 
-      icon: BarChart3,
-      badge: null
+    {
+      title: t('dashboard.sidebar.storeSettings'),
+      items: [
+        { name: t('dashboard.sidebar.generalSettings'), href: '/dashboard/settings', icon: Settings, badge: null },
+        { name: t('dashboard.sidebar.notifications'), href: '/dashboard/settings/notifications', icon: Bell, badge: null },
+        { name: t('dashboard.sidebar.payment'), href: '/dashboard/settings/payment', icon: CreditCard, badge: null },
+        { name: t('dashboard.sidebar.checkoutSettings'), href: '/dashboard/settings/checkout', icon: ShoppingCart, badge: null },
+        { name: t('dashboard.sidebar.domains'), href: '/dashboard/settings/domains', icon: Globe, badge: null },
+        { name: t('dashboard.sidebar.suppliers'), href: '/dashboard/settings/suppliers', icon: Building2, badge: null },
+        { name: t('dashboard.sidebar.brands'), href: '/dashboard/settings/brands', icon: Package, badge: null },
+        { name: t('dashboard.sidebar.units'), href: '/dashboard/settings/units', icon: Package, badge: null },
+        { name: t('dashboard.sidebar.currencies'), href: '/dashboard/settings/currencies', icon: DollarSign, badge: null },
+      ],
     },
-    { 
-      name: 'الصفحات', 
-      href: '/dashboard/pages', 
-      icon: FileText,
-      badge: null
-    },
-    { 
-      name: 'الفئات', 
-      href: '/dashboard/categories', 
-      icon: FolderOpen,
-      badge: 'جديد'  // New customer tiers & offers feature
-    },
-    { 
-      name: 'المحادثات', 
-      href: '/dashboard/chat', 
-      icon: MessageSquare,
-      badge: null
-    },
-    { 
-      name: 'نافذة المتجر', 
-      href: '/dashboard/storefront', 
-      icon: Store,
-      badge: null
-    },
-    { 
-      name: 'إعدادات المتجر', 
-      href: '/dashboard/store-settings', 
-      icon: Settings,
-      badge: null
-    },
-    { 
-      name: 'المحتملة والتسويق', 
-      href: '/dashboard/marketing', 
-      icon: Tag,
-      badge: 'جديد'  // New marketing features
-    },
-    { 
-      name: 'Smart Line', 
-      href: '/dashboard/smart-line', 
-      icon: Rocket,
-      badge: 'جديد'
-    },
-    { 
-      name: 'تصميم المتجر', 
-      href: '/dashboard/design', 
-      icon: Palette,
-      badge: null
-    },
-    { 
-      name: 'متجر التطبيقات', 
-      href: '/dashboard/apps', 
-      icon: Smartphone,
-      badge: null
-    },
-    { 
-      name: 'إدارة المتجر', 
-      href: '/dashboard/management', 
-      icon: Settings,
-      badge: null
-    },
-    { 
-      name: 'النطاق', 
-      href: '/dashboard/domain', 
-      icon: Globe,
-      badge: null
-    },
-    { 
-      name: 'القوالب', 
-      href: '/dashboard/templates', 
-      icon: LayoutDashboard,
-      badge: null
+    {
+      title: t('dashboard.sidebar.advanced'),
+      items: [
+        { name: t('dashboard.sidebar.usersAndPermissions'), href: '/dashboard/settings/users', icon: Users, badge: null },
+        { name: t('dashboard.sidebar.integrations'), href: '/dashboard/settings/integrations', icon: Plug, badge: null },
+        { name: t('dashboard.sidebar.identityVerification'), href: '/dashboard/settings/kyc', icon: ShieldCheck, badge: null },
+        { name: t('dashboard.sidebar.appStore'), href: '/dashboard/apps', icon: Smartphone, badge: null },
+        { name: t('dashboard.sidebar.storeManagement'), href: '/dashboard/management', icon: Settings, badge: null },
+        { name: t('dashboard.sidebar.chat'), href: '/dashboard/chat', icon: MessageSquare, badge: null },
+      ],
     },
   ];
 
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionTitle]: !prev[sectionTitle],
+    }));
+  };
+
+  // Check if any item in a section is active
+  const isSectionActive = (section: NavigationSection) => {
+    return section.items.some(item => {
+      if (item.href === '/dashboard/settings') {
+        return location.pathname === '/dashboard/settings' || location.pathname.startsWith('/dashboard/settings/');
+      }
+      return location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+    });
+  };
+
   return (
-    <div className={cn("flex flex-col h-full bg-card border-l relative", className)}>
+    <div className={cn("flex flex-col h-full bg-card relative", isRTL ? "border-l" : "border-r", className)}>
       {/* Logo Section */}
       <div className={cn("flex items-center h-16 border-b transition-all", collapsed ? "justify-center px-2" : "justify-between px-6")}>
         <Link to="/dashboard" className={cn("flex items-center gap-3", collapsed && "flex-col gap-1")}>
@@ -224,9 +256,9 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-lg font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent truncate max-w-[140px]">
-                {config?.storeNameAr || config?.storeName || config?.tenantName || "Saa'ah"}
+                {config?.storeNameAr || config?.storeName || config?.tenantName || "Saeaa"}
               </span>
-              <span className="text-xs text-muted-foreground">لوحة التحكم</span>
+              <span className="text-xs text-muted-foreground">{t('dashboard.sidebar.controlPanel')}</span>
             </div>
           )}
         </Link>
@@ -248,22 +280,26 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
         )}
       </div>
 
-      {/* Balance Section */}
+      {/* Balance Section - Click to view wallet details */}
       <div className={cn(
         "border-b transition-all",
         collapsed ? "px-2 py-3" : "px-4 py-3"
       )}>
-        <div className={cn(
-          "rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 p-3",
-          collapsed && "p-2"
-        )}>
+        <div 
+          onClick={() => navigate('/dashboard/wallet')}
+          className={cn(
+            "rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 p-3 cursor-pointer hover:from-green-500/20 hover:to-emerald-500/20 transition-all",
+            collapsed && "p-2"
+          )}
+          title={t('dashboard.sidebar.clickToViewWallet')}
+        >
           <div className={cn("flex items-center gap-2", collapsed && "flex-col gap-1 justify-center")}>
             <div className="p-1.5 rounded-lg bg-green-500/20">
               <Wallet className={cn("text-green-600", collapsed ? "h-4 w-4" : "h-5 w-5")} />
             </div>
             {!collapsed && (
               <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">رصيدك</span>
+                <span className="text-xs text-muted-foreground">{t('dashboard.sidebar.yourBalance')}</span>
                 <span className="text-lg font-bold text-green-600">
                   {balance.toLocaleString('ar-SA')} ر.س
                 </span>
@@ -280,38 +316,178 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
 
       {/* Navigation */}
       <ScrollArea className="flex-1 px-4 py-4">
-        <nav className="space-y-1">
-          {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
+        <nav className="space-y-2">
+          {navigationSections.map((section) => {
+            const isExpanded = collapsed ? false : (expandedSections[section.title] ?? true);
+            const sectionActive = isSectionActive(section);
+            
             return (
-              <Link
-                key={item.name}
-                to={item.href}
-                title={collapsed ? item.name : undefined}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg text-sm font-medium transition-all group',
-                  collapsed ? 'justify-center px-3 py-3' : 'justify-between px-4 py-3',
-                  isActive
-                    ? 'bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-700 dark:text-cyan-400 border-r-4 border-cyan-500 shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-                  <item.icon className={cn(
-                    "h-5 w-5 transition-transform group-hover:scale-110 flex-shrink-0",
-                    isActive && "text-cyan-600 dark:text-cyan-400"
-                  )} />
-                  {!collapsed && <span>{item.name}</span>}
-                </div>
-                {!collapsed && item.badge && (
-                  <Badge 
-                    variant="secondary" 
-                    className="bg-red-500 text-white text-xs px-2 py-0.5"
+              <div key={section.title} className="space-y-1">
+                {!collapsed && (
+                  <button
+                    onClick={() => toggleSection(section.title)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-2 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors rounded-md",
+                      sectionActive && "text-cyan-600 dark:text-cyan-400 bg-cyan-500/5"
+                    )}
                   >
-                    {item.badge}
-                  </Badge>
+                    <span>{section.title}</span>
+                    {isExpanded ? (
+                      <ChevronUp className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                  </button>
                 )}
-              </Link>
+                
+                {(isExpanded || collapsed) && (
+                    <div className={cn("space-y-1", !collapsed && (isRTL ? "mr-2" : "ml-2"))}>
+                    {section.items.map((item) => {
+                      const isActive = item.href === '/dashboard/settings' 
+                        ? (location.pathname === '/dashboard/settings' || location.pathname.startsWith('/dashboard/settings/'))
+                        : (location.pathname === item.href || location.pathname.startsWith(item.href + '/'));
+                      const hasUnread = item.badge === t('dashboard.sidebar.new') && hasUnreadUpdates(item.href);
+                      const unreadUpdates = hasUnread ? getUnreadUpdates(item.href) : [];
+                      const unreadCount = unreadUpdates.length;
+                      
+                      return (
+                        <div key={item.name} className="relative">
+                          <Link
+                            to={item.href}
+                            title={collapsed ? item.name : undefined}
+                            className={cn(
+                              'flex items-center gap-3 rounded-lg text-sm font-medium transition-all group',
+                              collapsed ? 'justify-center px-3 py-2.5' : 'justify-between px-3 py-2.5',
+                              isActive
+                                ? `bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-700 dark:text-cyan-400 ${isRTL ? 'border-r-2' : 'border-l-2'} border-cyan-500 shadow-sm`
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            )}
+                            onClick={() => {
+                              // Mark as watched when clicking on the link
+                              if (item.badge === 'جديد' && hasUnreadUpdates(item.href)) {
+                                markAsWatched(item.href);
+                              }
+                            }}
+                          >
+                            <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+                              <item.icon className={cn(
+                                "h-4 w-4 transition-transform group-hover:scale-110 flex-shrink-0",
+                                isActive && "text-cyan-600 dark:text-cyan-400"
+                              )} />
+                              {!collapsed && <span className="text-xs">{item.name}</span>}
+                            </div>
+                            {!collapsed && item.badge && (
+                              <Popover 
+                                open={openPopover === item.href} 
+                                onOpenChange={(open) => setOpenPopover(open ? item.href : null)}
+                              >
+                                <PopoverTrigger asChild>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setOpenPopover(openPopover === item.href ? null : item.href);
+                                    }}
+                                    className="relative"
+                                  >
+                                    <Badge 
+                                      variant="secondary" 
+                                      className={cn(
+                                        "text-white text-[10px] px-1.5 py-0 cursor-pointer",
+                                        hasUnread 
+                                          ? "bg-red-500 hover:bg-red-600 animate-pulse" 
+                                          : "bg-gray-500 hover:bg-gray-600"
+                                      )}
+                                    >
+                                      {item.badge}
+                                      {hasUnread && unreadCount > 0 && (
+                                        <span className={`${isRTL ? 'ml-1' : 'mr-1'} bg-white text-red-500 rounded-full px-1 text-[9px] font-bold`}>
+                                          {unreadCount}
+                                        </span>
+                                      )}
+                                    </Badge>
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent 
+                                  className="w-80 p-0" 
+                                  align="end"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="flex items-center justify-between p-4 border-b">
+                                    <h3 className="font-semibold">التحديثات الجديدة</h3>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0"
+                                      onClick={() => {
+                                        markAsWatched(item.href);
+                                        setOpenPopover(null);
+                                      }}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                  <ScrollArea className="h-[300px]">
+                                    {unreadUpdates.length > 0 ? (
+                                      <div className="p-2 space-y-2">
+                                        {unreadUpdates.map((update) => (
+                                          <div
+                                            key={update.id}
+                                            className="p-3 rounded-lg border bg-card hover:bg-muted transition-colors"
+                                          >
+                                            <div className="flex items-start justify-between gap-2">
+                                              <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <Badge 
+                                                    variant={update.type === 'added' ? 'default' : 'secondary'}
+                                                    className="text-xs"
+                                                  >
+                                                    {update.type === 'added' ? 'إضافة جديدة' : 'تحديث'}
+                                                  </Badge>
+                                                  <span className="text-xs text-muted-foreground">
+                                                    {new Date(update.timestamp).toLocaleTimeString('ar-SA', {
+                                                      hour: '2-digit',
+                                                      minute: '2-digit'
+                                                    })}
+                                                  </span>
+                                                </div>
+                                                <p className="text-sm">{update.message}</p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="p-8 text-center text-muted-foreground">
+                                        <p>لا توجد تحديثات جديدة</p>
+                                      </div>
+                                    )}
+                                  </ScrollArea>
+                                  {unreadUpdates.length > 0 && (
+                                    <div className="p-3 border-t">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => {
+                                          markAsWatched(item.href);
+                                          setOpenPopover(null);
+                                        }}
+                                      >
+                                        تم الاطلاع
+                                      </Button>
+                                    </div>
+                                  )}
+                                </PopoverContent>
+                              </Popover>
+                            )}
+                          </Link>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
 
@@ -328,7 +504,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                       'flex items-center gap-3 rounded-lg text-sm font-medium transition-all group',
                       collapsed ? 'justify-center px-3 py-3' : 'justify-between px-4 py-3',
                       location.pathname === '/dashboard/support'
-                        ? 'bg-gradient-to-r from-purple-500/10 to-blue-500/10 text-purple-700 dark:text-purple-400 border-r-4 border-purple-500 shadow-sm'
+                        ? `bg-gradient-to-r from-purple-500/10 to-blue-500/10 text-purple-700 dark:text-purple-400 ${isRTL ? 'border-r-4' : 'border-l-4'} border-purple-500 shadow-sm`
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
@@ -342,7 +518,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                           <img 
                             src="/partners/asus-logo.png" 
                             alt="ASUS" 
-                            className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-white"
+                            className={`absolute -top-1 w-3 h-3 rounded-full bg-white ${isRTL ? '-right-1' : '-left-1'}`}
                           />
                         )}
                       </div>
@@ -359,7 +535,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                       'flex items-center gap-3 rounded-lg text-sm font-medium transition-all group',
                       collapsed ? 'justify-center px-3 py-3' : 'justify-between px-4 py-3',
                       location.pathname === '/dashboard/support'
-                        ? 'bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-700 dark:text-cyan-400 border-r-4 border-cyan-500 shadow-sm'
+                        ? `bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-700 dark:text-cyan-400 ${isRTL ? 'border-r-4' : 'border-l-4'} border-cyan-500 shadow-sm`
                         : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
                   >
@@ -373,7 +549,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                           <img 
                             src="/partners/smartline-logo.png" 
                             alt="Smart Line" 
-                            className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-white"
+                            className={`absolute -top-1 w-3 h-3 rounded-full bg-white ${isRTL ? '-right-1' : '-left-1'}`}
                           />
                         )}
                       </div>
@@ -389,21 +565,10 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
 
       <Separator />
 
-      {/* Footer Section */}
-      <div className={cn("p-4 space-y-2", collapsed && "p-2")}>
-        <Link to="/">
-          <button className={cn(
-            "w-full flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg",
-            collapsed ? "justify-center px-3 py-3" : "justify-center px-4 py-3"
-          )}>
-            <Home className="h-4 w-4" />
-            {!collapsed && (config?.storeNameAr || config?.storeName || config?.tenantName || "العودة للمتجر")}
-          </button>
-        </Link>
-        
-        {/* App Store Badges - Only show when not collapsed */}
-        {!collapsed && (config?.googlePlayUrl || config?.appStoreUrl) && (
-          <div className="flex gap-2 pt-2">
+      {/* Footer Section - App Store Badges Only */}
+      {!collapsed && (config?.googlePlayUrl || config?.appStoreUrl) && (
+        <div className={cn("p-4", collapsed && "p-2")}>
+          <div className="flex gap-2">
             {config?.googlePlayUrl && (
               <a 
                 href={config.googlePlayUrl} 
@@ -427,8 +592,8 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
               </a>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

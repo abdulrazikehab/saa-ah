@@ -186,8 +186,6 @@ export default function CustomersManager() {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = utils.sheet_to_json(worksheet);
 
-      console.log('Importing customers:', jsonData);
-      
       let successCount = 0;
       let failCount = 0;
 
@@ -203,9 +201,8 @@ export default function CustomersManager() {
       
       // Reset file input
       e.target.value = '';
-    } catch (error) {
-      console.error('Import error:', error);
-      toast({ title: 'Error', description: 'Failed to import file', variant: 'destructive' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.message || 'Failed to import file', variant: 'destructive' });
     }
   };
 

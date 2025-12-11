@@ -15,6 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 interface Tenant {
   id: string;
@@ -50,7 +51,7 @@ export default function TenantManagement() {
   const loadTenants = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/tenants', { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      const response = await coreApi.get('/admin/master/tenants', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       setTenants(response.tenants || []);
     } catch (error) {
       console.error('Failed to load tenants:', error);
@@ -71,7 +72,7 @@ export default function TenantManagement() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await coreApi.post('/admin/master/tenants', formData, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post('/admin/master/tenants', formData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Tenant created successfully'
@@ -104,7 +105,7 @@ export default function TenantManagement() {
         name: formData.name,
         plan: formData.plan,
         description: formData.description
-      }, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      }, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Tenant updated successfully'
@@ -126,7 +127,7 @@ export default function TenantManagement() {
     try {
       await coreApi.post(`/admin/master/tenants/${id}/suspend`, {
         reason: 'Suspended by admin'
-      }, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      }, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Tenant suspended'
@@ -142,7 +143,7 @@ export default function TenantManagement() {
 
   const handleActivate = async (id: string) => {
     try {
-      await coreApi.post(`/admin/master/tenants/${id}/activate`, {}, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.post(`/admin/master/tenants/${id}/activate`, {}, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Tenant activated'
@@ -161,7 +162,7 @@ export default function TenantManagement() {
     if (!confirm('Are you sure you want to delete this tenant? This action cannot be undone.')) return;
     
     try {
-      await coreApi.delete(`/admin/master/tenants/${id}`, { requireAuth: false, adminApiKey: 'BlackBox2025Admin!' });
+      await coreApi.delete(`/admin/master/tenants/${id}`, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
       toast({
         title: 'Success',
         description: 'Tenant deleted'

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Store, TrendingUp, Users, Sparkles, Shield, Zap, 
   Globe, CreditCard, BarChart3, Package, ArrowRight,
-  Check, Star, Smartphone, ChevronRight, Moon, Sun, Crown, Building2, Loader2
+  Check, Star, Smartphone, ChevronRight, Moon, Sun, Crown, Building2, Loader2, Play
 } from 'lucide-react';
 import publicService, { Partner, Plan, PlatformStats, Testimonial } from '@/services/public.service';
 
@@ -126,6 +126,25 @@ export default function LandingPage() {
     },
   ];
 
+  const landingVideos = [
+    {
+      id: 'tutorial',
+      badge: 'تدريب',
+      title: 'فيديو تعليمي: كيفية استخدام المنصة خلال دقائق',
+      description: 'جولة عملية تشرح إنشاء الحساب، إعداد المتجر، وإدارة الطلبات والدفع بخطوات واضحة باللهجة السعودية.',
+      url: import.meta.env.VITE_TUTORIAL_VIDEO_URL || 'https://www.youtube.com/embed/ysz5S6PUM-U',
+      highlights: ['إنشاء الحساب', 'إطلاق المتجر في 5 دقائق', 'إدارة الطلبات والدفع']
+    },
+    {
+      id: 'marketing',
+      badge: 'تسويق',
+      title: 'فيديو تسويقي موجه للسوق السعودي',
+      description: 'رسالة مختصرة تبرز قيمة المنصة للسوق السعودي مع دعوة مباشرة للتجربة المجانية.',
+      url: import.meta.env.VITE_MARKETING_VIDEO_URL || 'https://www.youtube.com/embed/Bey4XXJAqS8',
+      highlights: ['لهجة سعودية ودودة', 'قصص نجاح محلية', 'دعوة للتجربة المجانية']
+    }
+  ];
+
   return (
     <div className={`min-h-screen ${isDark ? 'bg-slate-900' : 'bg-white'} transition-colors duration-300`}>
       {/* Navigation */}
@@ -134,8 +153,8 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-3">
               <img 
-                src="/branding/saaah-logo-full.png" 
-                alt="Saa'ah - سِعَة" 
+                src="/branding/saeaa-logo.png" 
+                alt="Saeaa - سِعَة" 
                 className="h-12 w-auto"
               />
             </div>
@@ -275,6 +294,92 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Video Showcase */}
+      <section className={`py-16 px-4 sm:px-6 lg:px-8 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-10">
+            <div>
+              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${isDark ? 'bg-slate-800 text-purple-300 border border-slate-700' : 'bg-purple-50 text-purple-700 border border-purple-100'}`}>
+                <Sparkles className="w-4 h-4" />
+                فيديوهات تعليمية وتسويقية
+              </div>
+              <h2 className={`mt-4 text-3xl md:text-4xl font-bold leading-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                شاهد كيف تبدأ وتنجح مع سِعَة
+              </h2>
+              <p className={`mt-3 text-lg ${isDark ? 'text-gray-400' : 'text-gray-600'} max-w-3xl`}>
+                فيديو تعليمي قصير لتوضيح الخطوات الأساسية، وفيديو تسويقي باللهجة السعودية يعرض القيمة للمستخدمين في المملكة.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isDark ? 'bg-slate-800 text-purple-300 border border-slate-700' : 'bg-purple-50 text-purple-700 border border-purple-100'}`}>
+                <Play className="w-5 h-5" />
+              </div>
+              <div className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                جاهزة للعرض الفوري ويمكن استبدال الروابط من البيئة<br className="hidden sm:block" /> عبر المتغيرات <code className="px-1 py-0.5 rounded bg-black/10">VITE_TUTORIAL_VIDEO_URL</code> و <code className="px-1 py-0.5 rounded bg-black/10">VITE_MARKETING_VIDEO_URL</code>.
+              </div>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-8">
+            {landingVideos.map((video) => (
+              <div
+                key={video.id}
+                className={`relative overflow-hidden rounded-3xl border ${isDark ? 'bg-gradient-to-br from-slate-900 to-slate-800 border-slate-800' : 'bg-gradient-to-br from-white to-gray-50 border-gray-200'} shadow-2xl`}
+              >
+                <div className="p-6 flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs font-bold uppercase tracking-wide px-3 py-1 rounded-full ${isDark ? 'bg-purple-900/40 text-purple-200 border border-purple-800/60' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}>
+                      {video.badge}
+                    </span>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>مدة مقترحة: 30-90 ثانية</div>
+                  </div>
+                  <h3 className={`text-2xl font-bold leading-snug ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    {video.title}
+                  </h3>
+                  <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} leading-relaxed`}>
+                    {video.description}
+                  </p>
+                </div>
+
+                <div className="px-6 pb-6">
+                  <div
+                    className={`relative overflow-hidden rounded-2xl border ${isDark ? 'border-slate-800 bg-slate-900' : 'border-gray-200 bg-black/5'} shadow-lg`}
+                    style={{ aspectRatio: '16 / 9' }}
+                  >
+                    <iframe
+                      src={video.url}
+                      title={video.title}
+                      className="absolute inset-0 h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                    <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+                    <div className="absolute bottom-3 left-3 flex items-center gap-2 text-sm font-semibold text-white drop-shadow">
+                      <div className="h-9 w-9 rounded-full bg-purple-600/80 flex items-center justify-center">
+                        <Play className="w-4 h-4" />
+                      </div>
+                      <span>تشغيل الآن</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {video.highlights.map((item) => (
+                      <span
+                        key={item}
+                        className={`${isDark ? 'bg-slate-800 text-gray-200 border border-slate-700' : 'bg-gray-100 text-gray-700 border border-gray-200'} text-sm px-3 py-1 rounded-full flex items-center gap-2`}
+                      >
+                        <Check className="w-4 h-4 text-green-500" />
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -507,7 +612,7 @@ export default function LandingPage() {
               ماذا يقول عملاؤنا
             </h2>
             <p className={`text-xl ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              آلاف التجار يثقون في Saa'ah
+              آلاف التجار يثقون في Saeaa
             </p>
           </div>
 
@@ -562,13 +667,13 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <img 
-                src="/branding/saaah-logo-full.png" 
-                alt="Saa'ah - سِعَة" 
+                src="/branding/saeaa-logo.png" 
+                alt="Saeaa - سِعَة" 
                 className="h-10 w-auto"
               />
             </div>
             <div className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
-              © 2025 Saa'ah - سِعَة. جميع الحقوق محفوظة.
+              © 2025 Saeaa - سِعَة. جميع الحقوق محفوظة.
             </div>
           </div>
         </div>
