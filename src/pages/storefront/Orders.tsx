@@ -42,8 +42,8 @@ export default function Orders() {
     } catch (error) {
       console.error('Failed to load orders:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الطلبات. يرجى المحاولة مرة أخرى.',
+        title: 'تعذر تحميل الطلبات',
+        description: 'حدث خطأ أثناء تحميل الطلبات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

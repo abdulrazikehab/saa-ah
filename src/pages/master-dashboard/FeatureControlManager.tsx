@@ -123,7 +123,7 @@ export default function FeatureControlManager() {
   const loadFeatures = async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/features', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      const response = await coreApi.get('/admin/master/features', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setFeatures(response.data || response.features || DEFAULT_FEATURES.map((f, i) => ({ ...f, id: `feature-${i}`, createdAt: new Date().toISOString() })));
     } catch (error) {
       console.error('Failed to load features:', error);
@@ -136,7 +136,7 @@ export default function FeatureControlManager() {
 
   const loadTenantFeatures = async () => {
     try {
-      const response = await coreApi.get('/admin/master/feature-overrides', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      const response = await coreApi.get('/admin/master/feature-overrides', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setTenantFeatures(response.data || response.overrides || []);
     } catch (error) {
       console.error('Failed to load tenant features:', error);
@@ -147,7 +147,7 @@ export default function FeatureControlManager() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await coreApi.post('/admin/master/features', formData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.post('/admin/master/features', formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: 'Feature created successfully'
@@ -169,7 +169,7 @@ export default function FeatureControlManager() {
     if (!editingFeature) return;
     
     try {
-      await coreApi.put(`/admin/master/features/${editingFeature.id}`, formData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.put(`/admin/master/features/${editingFeature.id}`, formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: 'Feature updated successfully'
@@ -187,7 +187,7 @@ export default function FeatureControlManager() {
 
   const handleToggleFeature = async (id: string) => {
     try {
-      await coreApi.post(`/admin/master/features/${id}/toggle`, {}, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.post(`/admin/master/features/${id}/toggle`, {}, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: 'Feature status updated'
@@ -204,7 +204,7 @@ export default function FeatureControlManager() {
 
   const handleChangePlan = async (id: string, plan: string) => {
     try {
-      await coreApi.put(`/admin/master/features/${id}`, { requiredPlan: plan }, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.put(`/admin/master/features/${id}`, { requiredPlan: plan }, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: `Feature now requires ${plan} plan`
@@ -222,7 +222,7 @@ export default function FeatureControlManager() {
   const handleCreateOverride = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await coreApi.post('/admin/master/feature-overrides', overrideFormData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.post('/admin/master/feature-overrides', overrideFormData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: 'Feature override created'
@@ -243,7 +243,7 @@ export default function FeatureControlManager() {
     if (!confirm('Remove this feature override?')) return;
     
     try {
-      await coreApi.delete(`/admin/master/feature-overrides/${id}`, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.delete(`/admin/master/feature-overrides/${id}`, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: 'Override removed'

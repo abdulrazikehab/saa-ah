@@ -73,8 +73,8 @@ export default function ChatInterface() {
       console.error('❌ Socket connection error:', error);
       toast({
         variant: 'destructive',
-        title: 'خطأ في الاتصال',
-        description: 'فشل الاتصال بخادم المحادثة',
+        title: 'تعذر الاتصال',
+        description: 'لم نتمكن من الاتصال بالمحادثات. تحقق من اتصالك بالإنترنت.',
       });
     });
 
@@ -96,8 +96,8 @@ export default function ChatInterface() {
       console.error('Failed to load messages:', error);
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: 'فشل تحميل الرسائل',
+        title: 'تعذر تحميل الرسائل',
+        description: 'حدث خطأ أثناء تحميل الرسائل. يرجى تحديث الصفحة.',
       });
     } finally {
       setLoading(false);
@@ -144,8 +144,8 @@ export default function ChatInterface() {
       console.error('Failed to send message:', error);
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: 'فشل إرسال الرسالة',
+        title: 'تعذر إرسال الرسالة',
+        description: 'لم نتمكن من إرسال رسالتك. يرجى المحاولة مرة أخرى.',
       });
     }
   };

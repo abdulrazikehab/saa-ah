@@ -124,8 +124,8 @@ export default function PaymentMethods() {
     } catch (error) {
       console.error('Failed to load payment methods:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل طرق الدفع',
+        title: 'تعذر تحميل طرق الدفع',
+        description: 'حدث خطأ أثناء تحميل طرق الدفع. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -166,8 +166,8 @@ export default function PaymentMethods() {
     } catch (error) {
       console.error('Failed to save payment methods:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ إعدادات الدفع',
+        title: 'تعذر حفظ إعدادات الدفع',
+        description: 'حدث خطأ أثناء حفظ إعدادات الدفع. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

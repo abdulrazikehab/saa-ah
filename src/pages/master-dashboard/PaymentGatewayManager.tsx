@@ -68,7 +68,7 @@ export default function PaymentGatewayManager() {
   const loadGateways = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/payment-gateways', { requireAuth: false, adminApiKey: ADMIN_API_KEY });
+      const response = await coreApi.get('/admin/master/payment-gateways', { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       // Handle different response formats - backend returns { gateways: [...] }
       const gatewaysData = (response as any)?.gateways || (response as any)?.data?.gateways || (Array.isArray(response) ? response : []);
       // Backend already filters to show only admin-created gateways (tenantId is null), but double-check
@@ -108,7 +108,7 @@ export default function PaymentGatewayManager() {
     }
 
     try {
-      await coreApi.post('/admin/master/payment-gateways', formData, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
+      await coreApi.post('/admin/master/payment-gateways', formData, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Payment gateway created successfully'
@@ -129,7 +129,7 @@ export default function PaymentGatewayManager() {
     if (!confirm('Are you sure you want to delete this gateway?')) return;
     
     try {
-      await coreApi.delete(`/admin/master/payment-gateways/${id}`, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
+      await coreApi.delete(`/admin/master/payment-gateways/${id}`, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Gateway deleted'
@@ -146,7 +146,7 @@ export default function PaymentGatewayManager() {
 
   const handleToggle = async (id: string) => {
     try {
-      await coreApi.post(`/admin/master/payment-gateways/${id}/toggle`, {}, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
+      await coreApi.post(`/admin/master/payment-gateways/${id}/toggle`, {}, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Gateway status updated'
@@ -178,7 +178,7 @@ export default function PaymentGatewayManager() {
     }
     
     try {
-      await coreApi.put(`/admin/master/payment-gateways/${editingGateway.id}`, formData, { requireAuth: false, adminApiKey: ADMIN_API_KEY });
+      await coreApi.put(`/admin/master/payment-gateways/${editingGateway.id}`, formData, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
         title: 'Success',
         description: 'Payment gateway updated successfully'

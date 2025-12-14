@@ -53,20 +53,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (token) {
         const data = await authApi.me();
         
-        // Force re-login if user doesn't have tenantId (old users before multi-tenancy fix)
-        if (!data.user.tenantId) {
-          toast({
-            title: 'Session Update Required',
-            description: 'Please log in again to access your store. We\'ve updated our system for better security.',
-            variant: 'destructive',
-          });
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-          setUser(null);
-          return;
-        }
-        
+        // Allow users without tenantId to access the dashboard
+        // They can create pages and content before setting up a market
         setUser(data.user);
       }
     } catch (error) {
@@ -96,6 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: data.email,
         role: data.role,
         tenantId: data.tenantId,
+        tenantName: data.tenantName,
+        tenantSubdomain: data.tenantSubdomain,
         avatar: data.avatar,
       };
       

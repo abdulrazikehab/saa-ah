@@ -92,8 +92,8 @@ export default function OrdersManager() {
     } catch (error) {
       console.error('Failed to load orders:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الطلبات',
+        title: 'تعذر تحميل الطلبات',
+        description: 'حدث خطأ أثناء تحميل الطلبات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -121,8 +121,8 @@ export default function OrdersManager() {
     } catch (error) {
       console.error('Failed to update order status:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث حالة الطلب',
+        title: 'تعذر تحديث حالة الطلب',
+        description: 'حدث خطأ أثناء تحديث حالة الطلب. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

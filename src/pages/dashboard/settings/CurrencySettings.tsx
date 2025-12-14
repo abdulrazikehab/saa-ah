@@ -58,8 +58,8 @@ export default function CurrencySettings() {
       setCurrencies(Array.isArray(response) ? response : []);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل تحميل العملات',
+        title: 'تعذر تحميل العملات',
+        description: 'حدث خطأ أثناء تحميل العملات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }
@@ -109,8 +109,8 @@ export default function CurrencySettings() {
       loadCurrencies();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ العملة',
+        title: 'تعذر حفظ العملة',
+        description: 'حدث خطأ أثناء حفظ العملة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -131,8 +131,8 @@ export default function CurrencySettings() {
       loadCurrencies(); // Reload to update exchange rates
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -164,8 +164,8 @@ export default function CurrencySettings() {
       loadCurrencies();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حذف العملة',
+        title: 'تعذر حذف العملة',
+        description: 'حدث خطأ أثناء حذف العملة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

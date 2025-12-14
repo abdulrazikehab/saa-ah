@@ -223,7 +223,7 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       throw error;
     }
     // Network errors - logged to backend error logs
-    toast.error('Network error. Please check your connection.');
+    toast.error('تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.');
     throw new ApiError(500, 'Network error');
   }
 }

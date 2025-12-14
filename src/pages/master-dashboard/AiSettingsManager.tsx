@@ -13,7 +13,7 @@ export default function AiSettingsManager() {
   const loadScript = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/ai-script', { requireAuth: false, adminApiKey: getAdminApiKey() });
+      const response = await coreApi.get('/admin/master/ai-script', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setScript(response.script || '');
     } catch (error) {
       console.error('Failed to load AI script:', error);
@@ -34,7 +34,7 @@ export default function AiSettingsManager() {
   const handleSave = async () => {
     try {
       setSaving(true);
-      await coreApi.post('/admin/master/ai-script', { script }, { requireAuth: false, adminApiKey: getAdminApiKey() });
+      await coreApi.post('/admin/master/ai-script', { script }, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'AI script updated successfully'

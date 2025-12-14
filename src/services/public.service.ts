@@ -7,6 +7,7 @@ export interface Partner {
   logo: string;
   description: string;
   descriptionAr: string;
+  website?: string;
 }
 
 export interface Plan {

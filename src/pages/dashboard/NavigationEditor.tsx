@@ -76,8 +76,8 @@ export default function NavigationEditor() {
     } catch (error) {
       console.error('Failed to load navigation config:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل إعدادات التنقل',
+        title: 'تعذر تحميل إعدادات التنقل',
+        description: 'حدث خطأ أثناء تحميل إعدادات التنقل. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -248,8 +248,8 @@ export default function NavigationEditor() {
     } catch (error) {
       console.error('Failed to save navigation config:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ إعدادات التنقل',
+        title: 'تعذر حفظ إعدادات التنقل',
+        description: 'حدث خطأ أثناء حفظ إعدادات التنقل. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

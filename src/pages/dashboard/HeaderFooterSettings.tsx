@@ -53,8 +53,8 @@ export default function HeaderFooterSettings() {
     } catch (error) {
       console.error('Failed to load config:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الإعدادات',
+        title: 'تعذر تحميل الإعدادات',
+        description: 'حدث خطأ أثناء تحميل الإعدادات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -77,8 +77,8 @@ export default function HeaderFooterSettings() {
     } catch (error) {
       console.error('Failed to save config:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -89,8 +89,8 @@ export default function HeaderFooterSettings() {
   const addHeaderButton = () => {
     if (!headerButtonForm.label || !headerButtonForm.url) {
       toast({
-        title: 'خطأ',
-        description: 'يرجى ملء جميع الحقول المطلوبة',
+        title: 'حقول مطلوبة ناقصة',
+        description: 'يرجى ملء اسم الزر والرابط قبل الإضافة',
         variant: 'destructive',
       });
       return;
@@ -111,8 +111,8 @@ export default function HeaderFooterSettings() {
   const addFooterButton = () => {
     if (!footerButtonForm.label || !footerButtonForm.url) {
       toast({
-        title: 'خطأ',
-        description: 'يرجى ملء جميع الحقول المطلوبة',
+        title: 'حقول مطلوبة ناقصة',
+        description: 'يرجى ملء اسم الزر والرابط قبل الإضافة',
         variant: 'destructive',
       });
       return;

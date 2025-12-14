@@ -72,8 +72,8 @@ export default function WalletInvoices() {
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل البيانات',
+        title: 'تعذر تحميل البيانات',
+        description: 'حدث خطأ أثناء تحميل البيانات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -124,8 +124,8 @@ ${invoice.items.map(item => `${item.description.padEnd(40)} ${item.quantity.toSt
     } catch (error) {
       console.error('Failed to download invoice:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الفاتورة',
+        title: 'تعذر تحميل الفاتورة',
+        description: 'حدث خطأ أثناء تحميل الفاتورة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

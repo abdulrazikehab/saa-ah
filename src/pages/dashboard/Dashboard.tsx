@@ -11,7 +11,14 @@ import {
   Eye,
   Filter,
   Bookmark,
-  BarChart3
+  BarChart3,
+  Store,
+  ArrowRight,
+  Sparkles,
+  RefreshCw,
+  Bell,
+  Clock,
+  ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +36,8 @@ import {
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
+import { getLogoUrl, BRAND_NAME_AR } from '@/config/logo.config';
 
 interface Stats {
   orderCount: number;
@@ -63,8 +72,58 @@ interface SalesData {
   orders: number;
 }
 
+const StatCard = ({ 
+  title, 
+  value, 
+  icon: Icon, 
+  trend, 
+  color 
+}: { 
+  title: string; 
+  value: string | number; 
+  icon: any; 
+  trend: string;
+  color: 'primary' | 'success' | 'secondary' | 'accent'
+}) => {
+  const colorClasses = {
+    primary: 'from-primary to-primary/70 bg-primary/10',
+    success: 'from-success to-success/70 bg-success/10',
+    secondary: 'from-secondary to-secondary/70 bg-secondary/10',
+    accent: 'from-accent to-accent/70 bg-accent/10'
+  };
+
+  const textColors = {
+    primary: 'text-primary',
+    success: 'text-success',
+    secondary: 'text-secondary',
+    accent: 'text-accent'
+  };
+
+  return (
+    <Card className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden border-border/50">
+      <div className={`absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b ${colorClasses[color].split(' ')[0]} ${colorClasses[color].split(' ')[1]}`} />
+      <CardContent className="p-5 md:p-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground font-medium">{title}</p>
+            <p className="text-2xl md:text-3xl font-heading font-bold text-foreground">{value}</p>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-success">
+              <TrendingUp className="h-3.5 w-3.5" />
+              <span>{trend}</span>
+            </div>
+          </div>
+          <div className={`p-3 rounded-xl ${colorClasses[color].split(' ')[2]} group-hover:scale-110 transition-transform duration-300`}>
+            <Icon className={`h-6 w-6 ${textColors[color]}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -72,6 +131,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('month');
   const [chartView, setChartView] = useState('visual');
+  const logoUrl = getLogoUrl();
+  
+  const hasMarket = !!user?.tenantId;
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -82,7 +144,6 @@ export default function Dashboard() {
         coreApi.getOrders()
       ]);
 
-      // Add calculated fields
       setStats({
         ...statsData,
         visits: statsData.visits || 0,
@@ -152,7 +213,7 @@ export default function Dashboard() {
       notifs.push({
         id: '1',
         type: 'order',
-        title: 'طلب جديد',
+        title: 'طلبات جديدة',
         message: `لديك ${pendingOrders.length} طلب جديد في انتظار المعالجة`,
         time: 'منذ دقيقة',
         read: false
@@ -163,43 +224,92 @@ export default function Dashboard() {
   };
 
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { label: string; className: string }> = {
-      pending: { label: 'قيد الانتظار', className: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20' },
-      processing: { label: 'قيد المعالجة', className: 'bg-blue-500/10 text-blue-700 border-blue-500/20' },
-      shipped: { label: 'تم الشحن', className: 'bg-purple-500/10 text-purple-700 border-purple-500/20' },
-      delivered: { label: 'تم التوصيل', className: 'bg-green-500/10 text-green-700 border-green-500/20' },
-      cancelled: { label: 'ملغي', className: 'bg-red-500/10 text-red-700 border-red-500/20' },
+    const config: Record<string, { label: string; variant: 'soft-warning' | 'soft-primary' | 'soft-secondary' | 'soft-success' | 'soft-destructive' }> = {
+      pending: { label: 'قيد الانتظار', variant: 'soft-warning' },
+      processing: { label: 'قيد المعالجة', variant: 'soft-primary' },
+      shipped: { label: 'تم الشحن', variant: 'soft-secondary' },
+      delivered: { label: 'تم التوصيل', variant: 'soft-success' },
+      cancelled: { label: 'ملغي', variant: 'soft-destructive' },
     };
 
-    const { label, className } = config[status] || config.pending;
-    return <Badge variant="outline" className={className}>{label}</Badge>;
+    const { label, variant } = config[status] || config.pending;
+    return <Badge variant={variant}>{label}</Badge>;
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[600px]">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-cyan-500 mx-auto" />
-          <p className="text-muted-foreground">جاري تحميل البيانات...</p>
+        <div className="text-center space-y-6">
+          <div className="relative">
+            <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse" />
+            <div className="relative w-20 h-20 mx-auto rounded-xl overflow-hidden bg-card border border-border shadow-lg">
+              <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-2" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+              <p className="text-muted-foreground font-medium">جاري تحميل البيانات...</p>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 pb-6 sm:pb-8">
+    <div className="space-y-6 pb-8">
+      {/* Market Setup Prompt */}
+      {!hasMarket && (
+        <Card className="border-2 border-dashed border-primary/40 bg-gradient-to-r from-primary/5 via-accent/5 to-secondary/5 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl" />
+          <CardContent className="p-6 md:p-8 relative">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="relative">
+                <div className="absolute -inset-3 bg-gradient-to-r from-primary to-secondary rounded-2xl blur-lg opacity-40" />
+                <div className="relative p-4 gradient-primary rounded-2xl shadow-xl">
+                  <Store className="h-10 w-10 text-white" />
+                </div>
+              </div>
+              <div className="flex-1 text-center md:text-right space-y-2">
+                <h3 className="text-2xl font-heading font-bold">
+                  {t('dashboard.setupPrompt.title', 'أنشئ متجرك الإلكتروني')}
+                </h3>
+                <p className="text-muted-foreground text-base max-w-xl">
+                  {t('dashboard.setupPrompt.description', 'يمكنك إنشاء الصفحات والمحتوى الآن، ثم أكمل إعداد المتجر لاحقاً للحصول على نطاقك الخاص')}
+                </p>
+              </div>
+              <Link to="/dashboard/market-setup">
+                <Button size="lg" className="gradient-primary shadow-lg gap-2 font-semibold h-12 px-8">
+                  <Sparkles className="h-5 w-5" />
+                  {t('dashboard.setupPrompt.button', 'إعداد المتجر')}
+                  <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:gap-4 pb-3 sm:pb-4 border-b">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b">
         <div className="space-y-1">
-          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-            لوحة التحكم
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">نظرة عامة على أداء متجرك</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg overflow-hidden bg-card border border-border shadow-sm">
+              <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-1" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-heading font-bold gradient-text">
+                لوحة التحكم
+              </h1>
+              <p className="text-muted-foreground text-sm">نظرة عامة على أداء متجرك</p>
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-full sm:w-[180px] md:w-[200px] h-9">
-              <Calendar className="h-4 w-4 ml-2" />
+            <SelectTrigger className="w-[160px] h-10 bg-card">
+              <Calendar className="h-4 w-4 ml-2 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -208,101 +318,62 @@ export default function Dashboard() {
               <SelectItem value="year">آخر سنة</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" className="h-9 w-9" title="تحميل التقرير">
+          <Button variant="outline" size="icon" className="h-10 w-10" title="تحديث" onClick={() => loadDashboardData()}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" className="h-10 w-10" title="تحميل التقرير">
             <Download className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" className="h-9 w-9" title="تصفية">
+          <Button variant="outline" size="icon" className="h-10 w-10" title="تصفية">
             <Filter className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-
-
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="border-r-4 border-r-cyan-500 hover:shadow-lg transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02]">
-          <CardContent className="p-4 sm:p-5 md:p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1.5 sm:space-y-2 min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-muted-foreground font-medium">المحفوظ</p>
-                <p className="text-2xl sm:text-3xl font-bold text-foreground truncate">{stats?.saved || 0}</p>
-                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-medium">
-                  <TrendingUp className="h-3 w-3 flex-shrink-0" />
-                  <span>+25.83%</span>
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 rounded-xl flex-shrink-0">
-                <Bookmark className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-cyan-600 dark:text-cyan-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-r-4 border-r-green-500 hover:shadow-lg transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02]">
-          <CardContent className="p-4 sm:p-5 md:p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1.5 sm:space-y-2 min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-muted-foreground font-medium">{t('dashboard.main.totalCustomers')}</p>
-                <p className="text-2xl sm:text-3xl font-bold text-foreground truncate">{stats?.visits || stats?.customerCount || 0}</p>
-                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-medium">
-                  <TrendingUp className="h-3 w-3 flex-shrink-0" />
-                  <span>+25.83%</span>
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl flex-shrink-0">
-                <Users className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-r-4 border-r-purple-500 hover:shadow-lg transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02]">
-          <CardContent className="p-4 sm:p-5 md:p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1.5 sm:space-y-2 min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-muted-foreground font-medium">{t('dashboard.main.totalOrders')}</p>
-                <p className="text-2xl sm:text-3xl font-bold text-foreground truncate">{stats?.orderCount || 0}</p>
-                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-medium">
-                  <TrendingUp className="h-3 w-3 flex-shrink-0" />
-                  <span>+25.83%</span>
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl flex-shrink-0">
-                <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-purple-600 dark:text-purple-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-r-4 border-r-blue-500 hover:shadow-lg transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02]">
-          <CardContent className="p-4 sm:p-5 md:p-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1.5 sm:space-y-2 min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-muted-foreground font-medium">{t('dashboard.main.totalSales')}</p>
-                <p className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground truncate">{stats?.revenue.toFixed(2) || '0.00'} {t('common.currency')}</p>
-                <div className="flex items-center gap-1 text-[10px] sm:text-xs text-green-600 dark:text-green-400 font-medium">
-                  <TrendingUp className="h-3 w-3 flex-shrink-0" />
-                  <span>+25.83%</span>
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl flex-shrink-0">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+        <StatCard
+          title="المحفوظ"
+          value={stats?.saved || 0}
+          icon={Bookmark}
+          trend="+25.83%"
+          color="primary"
+        />
+        <StatCard
+          title={t('dashboard.main.totalCustomers')}
+          value={stats?.visits || stats?.customerCount || 0}
+          icon={Users}
+          trend="+12.5%"
+          color="success"
+        />
+        <StatCard
+          title={t('dashboard.main.totalOrders')}
+          value={stats?.orderCount || 0}
+          icon={ShoppingCart}
+          trend="+8.2%"
+          color="secondary"
+        />
+        <StatCard
+          title={t('dashboard.main.totalSales')}
+          value={`${stats?.revenue?.toFixed(2) || '0.00'} ${t('common.currency')}`}
+          icon={DollarSign}
+          trend="+18.7%"
+          color="accent"
+        />
       </div>
 
       {/* Chart and Notifications */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
         {/* Sales Chart */}
-        <Card className="lg:col-span-2 hover:shadow-lg transition-shadow">
-          <CardHeader className="border-b pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <Card className="lg:col-span-2 hover:shadow-lg transition-shadow border-border/50">
+          <CardHeader className="border-b pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <CardTitle className="text-base sm:text-lg font-semibold">{t('dashboard.main.salesChart')}</CardTitle>
-                <CardDescription className="mt-1 text-xs">
+                <CardTitle className="text-lg font-heading flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  {t('dashboard.main.salesChart')}
+                </CardTitle>
+                <CardDescription className="mt-1">
                   {(() => {
                     const now = new Date();
                     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -313,53 +384,53 @@ export default function Dashboard() {
                   })()}
                 </CardDescription>
               </div>
-              <Tabs value={chartView} onValueChange={setChartView} className="w-full sm:w-auto">
-                <TabsList className="h-8 sm:h-9 w-full sm:w-auto">
-                  <TabsTrigger value="visual" className="text-[10px] sm:text-xs px-2 sm:px-3 flex-1 sm:flex-none">{t('dashboard.main.visual')}</TabsTrigger>
-                  <TabsTrigger value="summary" className="text-[10px] sm:text-xs px-2 sm:px-3 flex-1 sm:flex-none">{t('dashboard.main.summary')}</TabsTrigger>
-                  <TabsTrigger value="detailed" className="text-[10px] sm:text-xs px-2 sm:px-3 flex-1 sm:flex-none">{t('dashboard.main.detailed')}</TabsTrigger>
+              <Tabs value={chartView} onValueChange={setChartView}>
+                <TabsList className="h-9 bg-muted/50">
+                  <TabsTrigger value="visual" className="text-xs px-3">{t('dashboard.main.visual')}</TabsTrigger>
+                  <TabsTrigger value="summary" className="text-xs px-3">{t('dashboard.main.summary')}</TabsTrigger>
+                  <TabsTrigger value="detailed" className="text-xs px-3">{t('dashboard.main.detailed')}</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6 pb-4 sm:pb-6">
+          <CardContent className="pt-6">
             {chartView === 'visual' && (
-              <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+              <ResponsiveContainer width="100%" height={320}>
                 <AreaChart data={salesData}>
                   <defs>
                     <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15}/>
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    stroke="#888" 
+                    stroke="hsl(var(--muted-foreground))" 
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis 
-                    stroke="#888" 
+                    stroke="hsl(var(--muted-foreground))" 
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: 'white', 
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '12px',
+                      boxShadow: 'var(--shadow-lg)',
                       fontSize: '12px'
                     }}
                   />
                   <Area 
                     type="monotone" 
                     dataKey="revenue" 
-                    stroke="#06b6d4" 
-                    strokeWidth={2.5}
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={3}
                     fillOpacity={1} 
                     fill="url(#colorRevenue)" 
                   />
@@ -367,17 +438,21 @@ export default function Dashboard() {
               </ResponsiveContainer>
             )}
             {chartView === 'summary' && (
-              <div className="h-[250px] sm:h-[300px] flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-3 opacity-50" />
+              <div className="h-[320px] flex items-center justify-center text-muted-foreground">
+                <div className="text-center space-y-3">
+                  <div className="w-16 h-16 mx-auto rounded-xl bg-muted/50 flex items-center justify-center">
+                    <BarChart3 className="h-8 w-8 opacity-50" />
+                  </div>
                   <p className="text-sm">{t('dashboard.main.showSummary')}</p>
                 </div>
               </div>
             )}
             {chartView === 'detailed' && (
-              <div className="h-[250px] sm:h-[300px] flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <BarChart3 className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-3 opacity-50" />
+              <div className="h-[320px] flex items-center justify-center text-muted-foreground">
+                <div className="text-center space-y-3">
+                  <div className="w-16 h-16 mx-auto rounded-xl bg-muted/50 flex items-center justify-center">
+                    <BarChart3 className="h-8 w-8 opacity-50" />
+                  </div>
                   <p className="text-sm">{t('dashboard.main.showDetailed')}</p>
                 </div>
               </div>
@@ -386,40 +461,51 @@ export default function Dashboard() {
         </Card>
 
         {/* Notifications */}
-        <Card>
-          <CardHeader className="border-b pb-3 sm:pb-4 px-4 sm:px-6 pt-4 sm:pt-6">
+        <Card className="border-border/50">
+          <CardHeader className="border-b pb-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base sm:text-lg">{t('dashboard.main.notifications')}</CardTitle>
-              <Button variant="ghost" size="sm" className="text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3">{t('dashboard.header.clearAll')}</Button>
+              <CardTitle className="text-lg font-heading flex items-center gap-2">
+                <Bell className="h-5 w-5 text-secondary" />
+                {t('dashboard.main.notifications')}
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground hover:text-foreground">
+                {t('dashboard.header.clearAll')}
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="divide-y max-h-[300px] sm:max-h-[350px] overflow-y-auto">
+            <div className="divide-y max-h-[380px] overflow-y-auto scrollbar-thin">
               {notifications.length === 0 ? (
-                <div className="p-6 sm:p-8 text-center text-muted-foreground">
-                  <p className="text-xs sm:text-sm">{t('dashboard.main.noNotifications')}</p>
+                <div className="p-10 text-center text-muted-foreground">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-muted/50 flex items-center justify-center">
+                    <Bell className="h-7 w-7 opacity-40" />
+                  </div>
+                  <p className="text-sm">{t('dashboard.main.noNotifications')}</p>
                 </div>
               ) : (
                 notifications.map((notif) => (
-                  <div key={notif.id} className={`p-3 sm:p-4 hover:bg-muted/50 transition-colors cursor-pointer ${!notif.read ? 'bg-cyan-50/30 dark:bg-cyan-900/10' : ''}`}>
-                    <div className="flex items-start gap-2 sm:gap-3">
-                      <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 ${
-                        notif.type === 'order' ? 'bg-green-100 dark:bg-green-900/30' :
-                        notif.type === 'stock' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
-                        notif.type === 'review' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                        'bg-purple-100 dark:bg-purple-900/30'
+                  <div key={notif.id} className={`p-4 hover:bg-muted/30 transition-colors cursor-pointer ${!notif.read ? 'bg-primary/5' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2.5 rounded-xl flex-shrink-0 ${
+                        notif.type === 'order' ? 'bg-success/10' :
+                        notif.type === 'stock' ? 'bg-warning/10' :
+                        notif.type === 'review' ? 'bg-primary/10' :
+                        'bg-secondary/10'
                       }`}>
-                        {notif.type === 'order' && <ShoppingCart className="h-4 w-4 text-green-600" />}
-                        {notif.type === 'stock' && <Package className="h-4 w-4 text-yellow-600" />}
-                        {notif.type === 'payment' && <DollarSign className="h-4 w-4 text-purple-600" />}
+                        {notif.type === 'order' && <ShoppingCart className="h-4 w-4 text-success" />}
+                        {notif.type === 'stock' && <Package className="h-4 w-4 text-warning" />}
+                        {notif.type === 'payment' && <DollarSign className="h-4 w-4 text-secondary" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-medium text-foreground">{notif.title}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 line-clamp-2">{notif.message}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1.5 sm:mt-2">{notif.time}</p>
+                        <p className="text-sm font-semibold">{notif.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{notif.message}</p>
+                        <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {notif.time}
+                        </div>
                       </div>
                       {!notif.read && (
-                        <div className="w-2 h-2 bg-cyan-500 rounded-full flex-shrink-0 mt-2" />
+                        <div className="w-2.5 h-2.5 bg-primary rounded-full flex-shrink-0 mt-1.5 animate-pulse" />
                       )}
                     </div>
                   </div>
@@ -431,45 +517,53 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Orders */}
-      <Card>
+      <Card className="border-border/50">
         <CardHeader className="border-b pb-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">{t('dashboard.main.recentOrders')}</CardTitle>
-            <Button variant="ghost" size="sm" asChild className="text-cyan-600 hover:text-cyan-700 text-xs h-8">
-              <Link to="/dashboard/orders">
+            <CardTitle className="text-lg font-heading flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-accent" />
+              {t('dashboard.main.recentOrders')}
+            </CardTitle>
+            <Link to="/dashboard/orders">
+              <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 text-xs h-8 gap-1">
                 {t('dashboard.main.viewAll')}
-              </Link>
-            </Button>
+                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
+              </Button>
+            </Link>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           {recentOrders.length === 0 ? (
-            <div className="p-12 text-center text-gray-500">
-              <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-30" />
+            <div className="p-16 text-center text-muted-foreground">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-muted/50 flex items-center justify-center">
+                <ShoppingCart className="h-8 w-8 opacity-40" />
+              </div>
               <p className="text-sm">{t('dashboard.main.noOrders')}</p>
             </div>
           ) : (
             <div className="divide-y">
               {recentOrders.map((order) => (
-                <div key={order.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <div key={order.id} className="p-4 md:p-5 hover:bg-muted/30 transition-colors group">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="p-2.5 bg-gray-100 dark:bg-gray-700 rounded-lg flex-shrink-0">
-                        <ShoppingCart className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                      <div className="p-3 bg-accent/10 rounded-xl flex-shrink-0 group-hover:bg-accent/20 transition-colors">
+                        <ShoppingCart className="h-5 w-5 text-accent" />
                       </div>
                       <div className="min-w-0">
-                        <p className="font-medium text-gray-900 dark:text-white text-sm">
+                        <p className="font-semibold text-sm">
                           #{order.orderNumber || order.id.slice(0, 8)}
                         </p>
-                        <p className="text-xs text-gray-500 truncate">{order.customer?.name || t('dashboard.sidebar.customers')}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {order.customer?.name || t('dashboard.sidebar.customers')}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="text-left">
-                        <p className="font-semibold text-gray-900 dark:text-white text-sm">
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      <div className="text-left hidden sm:block">
+                        <p className="font-bold text-sm">
                           {order.total?.toFixed(2) || '0.00'} {t('common.currency')}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {new Date(order.createdAt).toLocaleDateString('ar-SA', { 
                             month: 'short', 
                             day: 'numeric' 
@@ -477,11 +571,11 @@ export default function Dashboard() {
                         </p>
                       </div>
                       {getStatusBadge(order.status)}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                        <Link to={`/dashboard/orders/${order.id}`}>
+                      <Link to={`/dashboard/orders/${order.id}`}>
+                        <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
                           <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                        </Button>
+                      </Link>
                     </div>
                   </div>
                 </div>

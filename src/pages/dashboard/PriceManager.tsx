@@ -97,8 +97,8 @@ export default function PriceManager() {
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل البيانات',
+        title: 'تعذر تحميل البيانات',
+        description: 'حدث خطأ أثناء تحميل بيانات الأسعار. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -196,8 +196,8 @@ export default function PriceManager() {
     } catch (error) {
       console.error('Failed to update price:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث السعر',
+        title: 'تعذر تحديث السعر',
+        description: 'حدث خطأ أثناء تحديث السعر. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -208,8 +208,8 @@ export default function PriceManager() {
   const handleBulkUpdate = async () => {
     if (!bulkUpdateValue || filteredProducts.length === 0) {
       toast({
-        title: 'خطأ',
-        description: 'يرجى إدخال قيمة التحديث',
+        title: 'قيمة التحديث مطلوبة',
+        description: 'يرجى إدخال قيمة التحديث للمتابعة',
         variant: 'destructive',
       });
       return;
@@ -270,8 +270,8 @@ export default function PriceManager() {
     } catch (error) {
       console.error('Failed to bulk update:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث الأسعار',
+        title: 'تعذر تحديث الأسعار',
+        description: 'حدث خطأ أثناء تحديث الأسعار. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

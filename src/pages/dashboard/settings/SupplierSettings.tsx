@@ -52,8 +52,8 @@ export default function SupplierSettings() {
       setSuppliers(Array.isArray(response) ? response : []);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل تحميل الموردين',
+        title: 'تعذر تحميل الموردين',
+        description: 'حدث خطأ أثناء تحميل الموردين. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }
@@ -88,8 +88,8 @@ export default function SupplierSettings() {
       loadSuppliers();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ المورد',
+        title: 'تعذر حفظ المورد',
+        description: 'حدث خطأ أثناء حفظ المورد. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -124,8 +124,8 @@ export default function SupplierSettings() {
       loadSuppliers();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حذف المورد',
+        title: 'تعذر حذف المورد',
+        description: 'حدث خطأ أثناء حذف المورد. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

@@ -90,8 +90,8 @@ export default function AccountProfile() {
     } catch (error) {
       console.error('Failed to update profile:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث الملف الشخصي. يرجى المحاولة مرة أخرى.',
+        title: 'تعذر تحديث الملف الشخصي',
+        description: 'حدث خطأ أثناء تحديث الملف الشخصي. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

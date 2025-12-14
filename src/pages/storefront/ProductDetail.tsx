@@ -61,8 +61,8 @@ export default function ProductDetail() {
     } catch (error) {
       console.error('Failed to load product:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل المنتج',
+        title: 'تعذر تحميل المنتج',
+        description: 'حدث خطأ أثناء تحميل بيانات المنتج. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -80,8 +80,8 @@ export default function ProductDetail() {
     // If product has variants but none is selected, show error
     if (product.variants && product.variants.length > 0 && !selectedVariant) {
       toast({
-        title: 'خطأ',
-        description: 'الرجاء اختيار خيار المنتج أولاً',
+        title: 'اختر خيار المنتج',
+        description: 'يرجى اختيار أحد خيارات المنتج قبل الإضافة للسلة',
         variant: 'destructive',
       });
       return;
@@ -99,11 +99,9 @@ export default function ProductDetail() {
       });
     } catch (error) {
       console.error('Failed to add to cart:', error);
-      // Show the actual error message from the API
-      const errorMessage = error instanceof Error ? error.message : 'فشل إضافة المنتج للسلة';
       toast({
-        title: 'خطأ',
-        description: errorMessage,
+        title: 'تعذرت الإضافة للسلة',
+        description: 'حدث خطأ أثناء إضافة المنتج للسلة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

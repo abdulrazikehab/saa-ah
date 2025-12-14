@@ -43,8 +43,8 @@ export default function DomainManagement() {
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: error.message || 'فشل إضافة النطاق',
+        title: 'تعذر إضافة النطاق',
+        description: 'حدث خطأ أثناء إضافة النطاق. يرجى المحاولة مرة أخرى.',
       });
     } finally {
       setLoading(false);
@@ -87,8 +87,8 @@ export default function DomainManagement() {
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: error.message || 'فشل تحديث النطاق الفرعي',
+        title: 'تعذر تحديث النطاق الفرعي',
+        description: 'حدث خطأ أثناء تحديث النطاق الفرعي. يرجى المحاولة مرة أخرى.',
       });
     } finally {
       setLoading(false);

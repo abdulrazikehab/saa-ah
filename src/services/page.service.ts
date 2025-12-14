@@ -1,6 +1,9 @@
 import { apiClient } from './core/api-client';
 import type { Page, CreatePageData, PageHistory } from './types';
 
+// Helper to safely encode ID for URL (handles special characters like + and /)
+const encodeId = (id: string): string => encodeURIComponent(id);
+
 export const pageService = {
   getPages: async (): Promise<Page[]> => {
     const response = await apiClient.fetch(`${apiClient.coreUrl}/pages`, {
@@ -10,16 +13,14 @@ export const pageService = {
     return Array.isArray(response) ? response : [];
   },
 
-
-
   getPage: async (id: string): Promise<Page> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/pages/${id}`, {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/${encodeId(id)}`, {
       requireAuth: true,
     });
   },
 
   getPageBySlug: async (slug: string): Promise<Page> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/pages/slug/${slug}`, {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/slug/${encodeURIComponent(slug)}`, {
       requireAuth: false, // Public endpoint for viewing pages on subdomains
     });
   },
@@ -33,7 +34,7 @@ export const pageService = {
   },
 
   updatePage: async (id: string, data: Partial<CreatePageData>): Promise<Page> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/pages/${id}`, {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/${encodeId(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
       requireAuth: true,
@@ -41,21 +42,21 @@ export const pageService = {
   },
 
   deletePage: async (id: string): Promise<void> => {
-    await apiClient.fetch(`${apiClient.coreUrl}/pages/${id}`, {
+    await apiClient.fetch(`${apiClient.coreUrl}/pages/${encodeId(id)}`, {
       method: 'DELETE',
       requireAuth: true,
     });
   },
 
   getHistory: async (id: string): Promise<PageHistory[]> => {
-    const response = await apiClient.fetch(`${apiClient.coreUrl}/pages/${id}/history`, {
+    const response = await apiClient.fetch(`${apiClient.coreUrl}/pages/${encodeId(id)}/history`, {
       requireAuth: true,
     });
     return Array.isArray(response) ? response : [];
   },
 
   restoreVersion: async (id: string, historyId: string): Promise<Page> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/pages/${id}/restore/${historyId}`, {
+    return apiClient.fetch(`${apiClient.coreUrl}/pages/${encodeId(id)}/restore/${encodeId(historyId)}`, {
       method: 'POST',
       requireAuth: true,
     });

@@ -30,7 +30,7 @@ const OAuthCallback = () => {
         if (error) {
           setStatus('error');
           setDebugInfo(prev => prev + '\nServer Error: ' + error);
-          toast.error(`Authentication failed: ${error}`);
+          toast.error('عذراً، حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
           return;
         }
 
@@ -38,7 +38,7 @@ const OAuthCallback = () => {
         if (!accessToken || !refreshToken) {
           setStatus('error');
           setDebugInfo(prev => prev + '\nMissing Tokens');
-          toast.error('Authentication failed: Missing tokens');
+          toast.error('تعذر إتمام تسجيل الدخول. يرجى المحاولة مرة أخرى.');
           return;
         }
 
@@ -64,14 +64,14 @@ const OAuthCallback = () => {
           console.error('Login with tokens error:', loginError);
           setStatus('error');
           setDebugInfo(prev => prev + '\nLogin Error: ' + (loginError instanceof Error ? loginError.message : String(loginError)));
-          toast.error('Failed to verify session');
+          toast.error('تعذر التحقق من جلسة تسجيل الدخول. يرجى المحاولة مرة أخرى.');
         }
 
       } catch (error) {
         console.error('OAuth callback error:', error);
         setStatus('error');
         setDebugInfo(prev => prev + '\nGeneral Error: ' + (error instanceof Error ? error.message : String(error)));
-        toast.error('Authentication failed');
+        toast.error('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
       }
     };
 

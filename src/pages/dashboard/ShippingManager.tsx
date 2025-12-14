@@ -58,8 +58,8 @@ export default function ShippingManager() {
     } catch (error) {
       console.error('Failed to load shipping zones:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل مناطق الشحن',
+        title: 'تعذر تحميل مناطق الشحن',
+        description: 'حدث خطأ أثناء تحميل مناطق الشحن. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -148,8 +148,8 @@ export default function ShippingManager() {
     } catch (error) {
       console.error('Failed to save shipping config:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ إعدادات الشحن',
+        title: 'تعذر حفظ إعدادات الشحن',
+        description: 'حدث خطأ أثناء حفظ إعدادات الشحن. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

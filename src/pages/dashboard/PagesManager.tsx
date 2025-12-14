@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Plus, Edit, Trash2, Search, Eye, Copy, FileText, 
-  Sparkles, LayoutTemplate, Globe, Calendar, Loader2
+  Sparkles, LayoutTemplate, Globe, Calendar, Loader2, Store, AlertCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
+import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
 
 export default function PagesManager() {
   const [pages, setPages] = useState<Page[]>([]);
@@ -62,6 +64,14 @@ export default function PagesManager() {
     loadTemplates();
     loadTenantInfo();
   }, []);
+  
+  // Check if user has a market/store set up (must be after all hooks)
+  const hasMarket = !!(user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system');
+  
+  // Show market setup prompt if no market
+  if (!hasMarket) {
+    return <MarketSetupPrompt />;
+  }
 
   const loadTenantInfo = async () => {
     try {
@@ -81,8 +91,8 @@ export default function PagesManager() {
     } catch (error) {
       console.error('Failed to load pages:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الصفحات',
+        title: 'تعذر تحميل الصفحات',
+        description: 'حدث خطأ أثناء تحميل الصفحات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
       setPages([]);
@@ -109,8 +119,8 @@ export default function PagesManager() {
       loadPages();
     } catch (error) {
       toast({
-        title: 'خطأ',
-        description: 'فشل حذف الصفحة',
+        title: 'تعذر حذف الصفحة',
+        description: 'حدث خطأ أثناء حذف الصفحة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -128,8 +138,8 @@ export default function PagesManager() {
       loadPages();
     } catch (error) {
       toast({
-        title: 'خطأ',
-        description: 'فشل نسخ الصفحة',
+        title: 'تعذر نسخ الصفحة',
+        description: 'حدث خطأ أثناء نسخ الصفحة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -153,6 +163,20 @@ export default function PagesManager() {
 
   return (
     <div className="space-y-6">
+      {/* Market Setup Notice - Show when user doesn't have a market */}
+      {!hasMarket && (
+        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600">
+          <Store className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-800 dark:text-amber-200">لم تقم بإعداد متجرك بعد</AlertTitle>
+          <AlertDescription className="text-amber-700 dark:text-amber-300">
+            يمكنك إنشاء الصفحات الآن، ولكن لن تكون مرئية للعملاء حتى تقوم بإعداد متجرك.{' '}
+            <Link to="/dashboard/market-setup" className="font-semibold underline hover:no-underline">
+              إعداد المتجر الآن
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -353,7 +377,7 @@ export default function PagesManager() {
                     size="sm"
                     variant="outline"
                     className="flex-1 border-2"
-                    onClick={() => navigate(`/dashboard/pages/${page.id}`)}
+                    onClick={() => navigate(`/dashboard/pages/${encodeURIComponent(page.id)}`)}
                   >
                     <Edit className="ml-2 h-4 w-4" />
                     تعديل

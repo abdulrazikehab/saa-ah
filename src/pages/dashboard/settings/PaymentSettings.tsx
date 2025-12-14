@@ -99,8 +99,8 @@ export default function PaymentSettings() {
     } catch (error: any) {
       console.error('Failed to load payment gateways:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل بوابات الدفع',
+        title: 'تعذر تحميل بوابات الدفع',
+        description: 'حدث خطأ أثناء تحميل بوابات الدفع. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }
@@ -200,8 +200,8 @@ export default function PaymentSettings() {
       });
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

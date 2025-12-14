@@ -125,7 +125,7 @@ export default function UserGiftsManager() {
   const loadGifts = async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/gifts', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      const response = await coreApi.get('/admin/master/gifts', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setGifts(response.data || response.gifts || []);
     } catch (error) {
       console.error('Failed to load gifts:', error);
@@ -137,7 +137,7 @@ export default function UserGiftsManager() {
 
   const loadUsers = async () => {
     try {
-      const response = await coreApi.get('/admin/master/users?limit=100', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      const response = await coreApi.get('/admin/master/users?limit=100', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setUsers(response.data || response.users || []);
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -147,7 +147,7 @@ export default function UserGiftsManager() {
 
   const loadTenants = async () => {
     try {
-      const response = await coreApi.get('/admin/master/tenants', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      const response = await coreApi.get('/admin/master/tenants', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setTenants(response.data?.tenants || response.tenants || []);
     } catch (error) {
       console.error('Failed to load tenants:', error);
@@ -173,7 +173,7 @@ export default function UserGiftsManager() {
     };
 
     try {
-      await coreApi.post('/admin/master/gifts', giftData, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.post('/admin/master/gifts', giftData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '🎁 Gift Granted!',
         description: 'The gift has been successfully granted'
@@ -194,7 +194,7 @@ export default function UserGiftsManager() {
     if (!confirm('Are you sure you want to revoke this gift?')) return;
     
     try {
-      await coreApi.post(`/admin/master/gifts/${giftId}/revoke`, {}, { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      await coreApi.post(`/admin/master/gifts/${giftId}/revoke`, {}, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: '✅ Success',
         description: 'Gift has been revoked'

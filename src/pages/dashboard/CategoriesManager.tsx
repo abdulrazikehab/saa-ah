@@ -16,6 +16,8 @@ import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
+import { useAuth } from '@/contexts/AuthContext';
+import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
 
 // Interfaces for Customer Tiers & Offers
 interface Customer {
@@ -64,6 +66,7 @@ export default function CategoriesManager() {
   const isRTL = i18n.language === 'ar';
   const { toast } = useToast();
   const { addUpdate } = useTabUpdatesContext();
+  const { user } = useAuth();
   
   // Categories state
   const [categories, setCategories] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]>([]);
@@ -140,6 +143,14 @@ export default function CategoriesManager() {
   useEffect(() => {
     loadCategories();
   }, [loadCategories]);
+  
+  // Check if user has a market set up (must be after all hooks)
+  const hasMarket = !!(user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system');
+  
+  // Show market setup prompt if no market
+  if (!hasMarket) {
+    return <MarketSetupPrompt />;
+  }
 
   const handleOpenDialog = (category?: any) => {
     if (category) {

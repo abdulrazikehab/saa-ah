@@ -32,8 +32,8 @@ export default function UsersSettings() {
       setUsers(Array.isArray(response) ? response : []);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل تحميل المستخدمين',
+        title: 'تعذر تحميل المستخدمين',
+        description: 'حدث خطأ أثناء تحميل المستخدمين. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }

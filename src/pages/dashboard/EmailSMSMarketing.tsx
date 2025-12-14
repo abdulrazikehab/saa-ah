@@ -59,8 +59,8 @@ export default function EmailSMSMarketing() {
     } catch (error) {
       console.error('Failed to load campaigns:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الحملات',
+        title: 'تعذر تحميل الحملات',
+        description: 'حدث خطأ أثناء تحميل الحملات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -86,8 +86,8 @@ export default function EmailSMSMarketing() {
     } catch (error) {
       console.error('Failed to save campaign:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الحملة',
+        title: 'تعذر حفظ الحملة',
+        description: 'حدث خطأ أثناء حفظ الحملة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -105,8 +105,8 @@ export default function EmailSMSMarketing() {
     } catch (error) {
       console.error('Failed to delete campaign:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حذف الحملة',
+        title: 'تعذر حذف الحملة',
+        description: 'حدث خطأ أثناء حذف الحملة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

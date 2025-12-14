@@ -10,9 +10,7 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  Menu,
-  Store,
-  Plus
+  Menu
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,7 +46,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
-import { authService } from '@/services/auth.service';
+import { getLogoUrl } from '@/config/logo.config';
 
 interface DashboardHeaderProps {
   onMenuClick?: () => void;
@@ -80,63 +78,6 @@ export const DashboardHeader = ({
   const { toast } = useToast();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [markets, setMarkets] = useState<Array<{ id: string; name: string; subdomain: string }>>([]);
-  const [checkingMarkets, setCheckingMarkets] = useState(false);
-
-  useEffect(() => {
-    loadMarkets();
-  }, []);
-
-  const loadMarkets = async () => {
-    try {
-      const marketsData = await authService.getUserMarkets();
-      setMarkets(marketsData);
-    } catch (error) {
-      console.error('Failed to load markets:', error);
-    }
-  };
-
-  const handleMarketButtonClick = async () => {
-    if (checkingMarkets) return;
-    
-    try {
-      setCheckingMarkets(true);
-      const marketsData = await authService.getUserMarkets();
-      const canCreateData = await authService.canCreateMarket();
-      
-      // Filter out current market
-      const otherMarkets = marketsData.filter(m => m.id !== user?.tenantId);
-      
-      if (otherMarkets.length > 0) {
-        // Switch to the first other market
-        await authService.switchStore(otherMarkets[0].id);
-        await refreshUser();
-        toast({
-          title: t('common.success'),
-          description: 'تم التبديل إلى المتجر بنجاح',
-        });
-        window.location.reload();
-      } else if (canCreateData.allowed) {
-        // No other markets, create a new one
-        navigate('/dashboard/market-setup');
-      } else {
-        toast({
-          title: t('common.info'),
-          description: 'لا يمكنك إنشاء متجر جديد. تم الوصول إلى الحد الأقصى.',
-        });
-      }
-    } catch (error: unknown) {
-      console.error('Failed to handle market action:', error);
-      const errorMessage = error instanceof Error ? error.message : 'فشلت العملية';
-      toast({
-        title: t('common.error'),
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      setCheckingMarkets(false);
-    }
-  };
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -245,7 +186,7 @@ export const DashboardHeader = ({
 
           {/* Saeaa Logo */}
           <div className={`hidden sm:flex items-center flex-shrink-0 ${isRTL ? 'mr-2 md:mr-6' : 'ml-2 md:ml-6'}`}>
-            <img src="/branding/saeaa-logo.png" alt="Saeaa - سِعَة" className="h-7 sm:h-8 object-contain bg-transparent" />
+            <img src={getLogoUrl()} alt="Saeaa - سِعَة" className="h-7 sm:h-8 object-contain bg-transparent" />
           </div>
 
         </div>
@@ -303,21 +244,6 @@ export const DashboardHeader = ({
 
         {/* Right Section - Actions */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-          {/* Create/Switch Market Button */}
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="gap-2 hidden sm:flex"
-            onClick={handleMarketButtonClick}
-            disabled={checkingMarkets}
-          >
-            <Store className="h-4 w-4" />
-            <span className="hidden md:inline">
-              {checkingMarkets ? 'جاري التحميل...' : markets.filter(m => m.id !== user?.tenantId).length > 0 ? 'تبديل المتجر' : 'إنشاء متجر'}
-            </span>
-            <Plus className="h-4 w-4 md:hidden" />
-          </Button>
-          
           {/* Store Switcher */}
           <StoreSwitcher />
 

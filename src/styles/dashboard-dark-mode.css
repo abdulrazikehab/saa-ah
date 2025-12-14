@@ -1,232 +1,94 @@
 /* ========================================
-   DASHBOARD DARK MODE - PROPER DESIGN
+   DASHBOARD DARK MODE - REFINED DESIGN
+   Uses CSS custom properties from index.css
+   Minimal use of !important
    ======================================== */
 
-/* Dark mode root colors */
+/* Dark mode root colors - inherits from index.css */
 .dark {
-  --dashboard-bg: #0F172A;
-  --dashboard-surface: #1E293B;
-  --dashboard-surface-hover: #334155;
-  --dashboard-text: #F1F5F9;
-  --dashboard-text-secondary: #CBD5E1;
-  --dashboard-text-muted: #94A3B8;
-  --dashboard-border: #334155;
-  --dashboard-primary: #60A5FA;
-  --dashboard-primary-hover: #3B82F6;
-  --dashboard-success: #34D399;
-  --dashboard-warning: #FBBF24;
-  --dashboard-error: #F87171;
+  /* All base colors are defined in index.css via CSS variables */
+  color-scheme: dark;
 }
 
-/* Override blue text in dark mode */
-.dark .text-blue-600,
-.dark .text-blue-500,
-.dark [class*="text-blue"] {
-  color: var(--dashboard-text) !important;
-}
-
-/* Dashboard specific overrides */
+/* Dashboard specific styles */
 .dark .dashboard-layout {
-  background-color: var(--dashboard-bg);
-  color: var(--dashboard-text);
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
-/* Sidebar */
+/* Sidebar Styling */
 .dark .dashboard-sidebar,
-.dark aside {
-  background-color: var(--dashboard-surface) !important;
-  border-right-color: var(--dashboard-border) !important;
+.dark aside[data-sidebar] {
+  background-color: hsl(var(--sidebar-background));
+  border-color: hsl(var(--sidebar-border));
 }
 
 .dark .dashboard-sidebar a,
-.dark aside a {
-  color: var(--dashboard-text-secondary) !important;
+.dark aside[data-sidebar] a {
+  color: hsl(var(--sidebar-foreground) / 0.8);
 }
 
 .dark .dashboard-sidebar a:hover,
-.dark aside a:hover,
+.dark aside[data-sidebar] a:hover,
 .dark .dashboard-sidebar a.active,
-.dark aside a.active {
-  color: var(--dashboard-primary) !important;
-  background-color: var(--dashboard-surface-hover) !important;
+.dark aside[data-sidebar] a.active {
+  color: hsl(var(--sidebar-primary));
+  background-color: hsl(var(--sidebar-accent));
 }
 
 /* Header */
 .dark .dashboard-header,
-.dark header {
-  background-color: var(--dashboard-surface) !important;
-  border-bottom-color: var(--dashboard-border) !important;
-  color: var(--dashboard-text) !important;
-}
-
-/* Cards */
-.dark .card,
-.dark [class*="Card"],
-.dark .bg-white {
-  background-color: var(--dashboard-surface) !important;
-  border-color: var(--dashboard-border) !important;
-  color: var(--dashboard-text) !important;
-}
-
-.dark .card:hover,
-.dark [class*="Card"]:hover {
-  background-color: var(--dashboard-surface-hover) !important;
-}
-
-/* Inputs */
-.dark input,
-.dark textarea,
-.dark select {
-  background-color: var(--dashboard-bg) !important;
-  border-color: var(--dashboard-border) !important;
-  color: var(--dashboard-text) !important;
-}
-
-.dark input:focus,
-.dark textarea:focus,
-.dark select:focus {
-  border-color: var(--dashboard-primary) !important;
-  outline-color: var(--dashboard-primary) !important;
-}
-
-.dark input::placeholder,
-.dark textarea::placeholder {
-  color: var(--dashboard-text-muted) !important;
-}
-
-/* Buttons */
-.dark button:not(.theme-ignore) {
-  background-color: var(--dashboard-primary) !important;
-  color: white !important;
-  border-color: var(--dashboard-primary) !important;
-}
-
-.dark button:not(.theme-ignore):hover {
-  background-color: var(--dashboard-primary-hover) !important;
-}
-
-.dark button[variant="outline"],
-.dark button.variant-outline {
-  background-color: transparent !important;
-  color: var(--dashboard-primary) !important;
-  border-color: var(--dashboard-primary) !important;
-}
-
-.dark button[variant="outline"]:hover,
-.dark button.variant-outline:hover {
-  background-color: var(--dashboard-primary) !important;
-  color: white !important;
-}
-
-.dark button[variant="ghost"],
-.dark button.variant-ghost {
-  background-color: transparent !important;
-  color: var(--dashboard-text) !important;
-}
-
-.dark button[variant="ghost"]:hover,
-.dark button.variant-ghost:hover {
-  background-color: var(--dashboard-surface-hover) !important;
+.dark header[data-header] {
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
 }
 
 /* Tables */
 .dark table {
-  background-color: var(--dashboard-surface) !important;
-  color: var(--dashboard-text) !important;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
 }
 
 .dark thead {
-  background-color: var(--dashboard-bg) !important;
-  color: var(--dashboard-text) !important;
-  border-bottom-color: var(--dashboard-border) !important;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.dark thead th {
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
 }
 
 .dark tbody tr {
-  border-bottom-color: var(--dashboard-border) !important;
+  border-color: hsl(var(--border));
 }
 
 .dark tbody tr:hover {
-  background-color: var(--dashboard-surface-hover) !important;
+  background-color: hsl(var(--muted) / 0.5);
 }
 
-.dark th,
-.dark td {
-  color: var(--dashboard-text) !important;
-}
-
-/* Modals/Dialogs */
-.dark .modal,
-.dark .dialog,
+/* Modals/Dialogs - scoped to data attributes */
 .dark [role="dialog"] {
-  background-color: var(--dashboard-surface) !important;
-  color: var(--dashboard-text) !important;
-  border-color: var(--dashboard-border) !important;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
 }
 
-/* Dropdowns */
-.dark .dropdown,
-.dark .menu,
+/* Dropdowns - scoped to data attributes */
 .dark [role="menu"] {
-  background-color: var(--dashboard-surface) !important;
-  border-color: var(--dashboard-border) !important;
+  background-color: hsl(var(--popover));
+  border-color: hsl(var(--border));
 }
 
-.dark .dropdown-item:hover,
-.dark .menu-item:hover {
-  background-color: var(--dashboard-surface-hover) !important;
-}
-
-/* Badges */
-.dark .badge {
-  background-color: var(--dashboard-primary) !important;
-  color: white !important;
-}
-
-.dark .badge-success {
-  background-color: var(--dashboard-success) !important;
-}
-
-.dark .badge-warning {
-  background-color: var(--dashboard-warning) !important;
-}
-
-.dark .badge-error {
-  background-color: var(--dashboard-error) !important;
+.dark [role="menuitem"]:hover {
+  background-color: hsl(var(--accent));
 }
 
 /* Stats Cards */
 .dark .stat-card {
-  background: linear-gradient(135deg, var(--dashboard-primary), #8B5CF6) !important;
-  color: white !important;
-}
-
-/* Text colors */
-.dark h1,
-.dark h2,
-.dark h3,
-.dark h4,
-.dark h5,
-.dark h6 {
-  color: var(--dashboard-text) !important;
-}
-
-.dark p {
-  color: var(--dashboard-text-secondary) !important;
-}
-
-.dark .text-muted,
-.dark .text-gray-500,
-.dark .text-gray-600 {
-  color: var(--dashboard-text-muted) !important;
-}
-
-/* Links */
-.dark a:not(.theme-ignore) {
-  color: var(--dashboard-primary) !important;
-}
-
-.dark a:not(.theme-ignore):hover {
-  color: var(--dashboard-primary-hover) !important;
+  background: var(--gradient-primary);
+  color: white;
 }
 
 /* Scrollbars */
@@ -236,102 +98,26 @@
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: var(--dashboard-bg);
+  background: hsl(var(--background));
+  border-radius: 5px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: var(--dashboard-border);
+  background: hsl(var(--border));
   border-radius: 5px;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--dashboard-surface-hover);
-}
-
-/* Code blocks */
-.dark pre,
-.dark code {
-  background-color: var(--dashboard-bg) !important;
-  color: var(--dashboard-text) !important;
-  border-color: var(--dashboard-border) !important;
-}
-
-/* Tooltips */
-.dark .tooltip,
-.dark [role="tooltip"] {
-  background-color: var(--dashboard-bg) !important;
-  color: var(--dashboard-text) !important;
-  border: 1px solid var(--dashboard-border) !important;
-}
-
-/* Tabs */
-.dark .tab {
-  color: var(--dashboard-text-muted) !important;
-  border-bottom: 2px solid transparent;
-}
-
-.dark .tab.active,
-.dark .tab:hover {
-  color: var(--dashboard-primary) !important;
-  border-bottom-color: var(--dashboard-primary) !important;
-}
-
-/* Progress bars */
-.dark .progress-bar {
-  background-color: var(--dashboard-primary) !important;
-}
-
-/* Alerts */
-.dark .alert {
-  background-color: var(--dashboard-surface) !important;
-  border-color: var(--dashboard-border) !important;
-  color: var(--dashboard-text) !important;
-}
-
-.dark .alert-success {
-  background-color: rgba(52, 211, 153, 0.1) !important;
-  border-color: var(--dashboard-success) !important;
-  color: var(--dashboard-success) !important;
-}
-
-.dark .alert-warning {
-  background-color: rgba(251, 191, 36, 0.1) !important;
-  border-color: var(--dashboard-warning) !important;
-  color: var(--dashboard-warning) !important;
-}
-
-.dark .alert-error {
-  background-color: rgba(248, 113, 113, 0.1) !important;
-  border-color: var(--dashboard-error) !important;
-  color: var(--dashboard-error) !important;
+  background: hsl(var(--muted-foreground) / 0.3);
 }
 
 /* Selection */
 .dark ::selection {
-  background-color: var(--dashboard-primary);
-  color: white;
+  background-color: hsl(var(--primary) / 0.3);
+  color: hsl(var(--primary-foreground));
 }
 
-/* Dividers */
-.dark hr {
-  border-color: var(--dashboard-border) !important;
-}
-
-/* Form labels */
-.dark label {
-  color: var(--dashboard-text-secondary) !important;
-}
-
-/* Disabled states */
-.dark :disabled,
-.dark [disabled] {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Focus states */
+/* Focus states - let components handle their own focus */
 .dark *:focus-visible {
-  outline-color: var(--dashboard-primary) !important;
-  outline-width: 2px !important;
-  outline-style: solid !important;
+  outline-color: hsl(var(--ring));
 }

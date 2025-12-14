@@ -17,6 +17,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { authApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft, Mail, Send, CheckCircle2, Sparkles } from 'lucide-react';
+import { VersionFooter } from '@/components/common/VersionFooter';
+import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,6 +29,7 @@ export default function ForgotPassword() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { toast } = useToast();
+  const logoUrl = getLogoUrl();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -47,8 +50,8 @@ export default function ForgotPassword() {
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: error instanceof Error ? error.message : 'حدث خطأ ما',
+        title: 'تعذر إرسال الرابط',
+        description: 'حدث خطأ أثناء إرسال رابط إعادة التعيين. يرجى المحاولة مرة أخرى.',
       });
     } finally {
       setIsLoading(false);
@@ -59,21 +62,25 @@ export default function ForgotPassword() {
     return (
       <div className="min-h-screen flex">
         {/* Left Side - Branding */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-12 flex-col justify-between relative overflow-hidden">
+        <div className="hidden lg:flex lg:w-1/2 gradient-primary p-12 flex-col justify-between relative overflow-hidden">
+          <div className="absolute inset-0 bg-grid-pattern opacity-10" />
           <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse-slow" />
           <div className="absolute bottom-20 left-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '2s' }} />
           
           <div className="relative z-10">
-            <Link to="/" className="flex items-center gap-3 group">
-              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-                <img src="/saas-logo.png" alt="Logo" className="w-8 h-8 bg-transparent object-contain" />
+            <Link to="/" className="flex items-center gap-4 group">
+              <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
+                <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
-              <span className="text-3xl font-bold text-white">Saa'ah</span>
+              <div className="flex flex-col">
+                <span className="text-3xl font-heading font-bold text-white">{BRAND_NAME_AR}</span>
+                <span className="text-lg text-white/80">{BRAND_NAME_EN}</span>
+              </div>
             </Link>
           </div>
 
           <div className="relative z-10 space-y-6">
-            <h1 className="text-5xl font-bold text-white leading-tight">
+            <h1 className="text-5xl font-heading font-bold text-white leading-tight">
               لا تقلق!<br />سنساعدك في استعادة حسابك
             </h1>
             <p className="text-xl text-white/90">
@@ -81,45 +88,48 @@ export default function ForgotPassword() {
             </p>
           </div>
 
-          <div className="relative z-10 text-white/60 text-sm">
-            © 2024 Saa'ah. جميع الحقوق محفوظة.
+          <div className="relative z-10 text-white/50 text-sm">
+            © 2024 {BRAND_NAME_EN}. جميع الحقوق محفوظة.
           </div>
         </div>
 
         {/* Right Side - Success Message */}
-        <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-900">
+        <div className="flex-1 flex items-center justify-center p-6 bg-background">
           <div className="w-full max-w-md">
-            <Link to="/" className="flex lg:hidden items-center justify-center gap-3 mb-8">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <img src="/saas-logo.png" alt="Logo" className="w-8 h-8 bg-transparent object-contain" />
+            <Link to="/" className="flex lg:hidden items-center justify-center gap-3 mb-8 group">
+              <div className="w-14 h-14 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
+                <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
-              <span className="text-2xl font-bold gradient-text">Saa'ah</span>
+              <div className="flex flex-col">
+                <span className="text-2xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</span>
+                <span className="text-base text-primary">{BRAND_NAME_EN}</span>
+              </div>
             </Link>
 
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-800">
+            <Card className="shadow-xl border-border/50">
               <CardHeader className="text-center space-y-4 pb-6">
-                <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+                <div className="mx-auto w-20 h-20 rounded-full gradient-primary flex items-center justify-center shadow-lg">
                   <CheckCircle2 className="h-10 w-10 text-white" />
                 </div>
                 <div className="space-y-2">
-                  <CardTitle className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <CardTitle className="text-2xl font-heading font-bold">
                     تحقق من بريدك الإلكتروني
                   </CardTitle>
-                  <CardDescription className="text-base text-gray-600 dark:text-gray-400">
+                  <CardDescription className="text-base">
                     لقد أرسلنا رابط إعادة تعيين كلمة المرور إلى
                   </CardDescription>
-                  <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                  <p className="text-sm font-semibold text-primary">
                     {form.getValues('email')}
                   </p>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800">
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                  <p className="text-sm text-foreground/80">
                     انقر على الرابط في البريد الإلكتروني لإعادة تعيين كلمة المرور. إذا لم تجد البريد، تحقق من مجلد الرسائل غير المرغوب فيها.
                   </p>
                 </div>
-                <Button asChild className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
+                <Button asChild className="w-full h-11 gradient-primary">
                   <Link to="/auth/login" className="flex items-center gap-2">
                     <ArrowLeft className="h-4 w-4" />
                     العودة إلى تسجيل الدخول
@@ -136,57 +146,66 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-12 flex-col justify-between relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 gradient-primary p-12 flex-col justify-between relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-pattern opacity-10" />
         <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse-slow" />
         <div className="absolute bottom-20 left-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '2s' }} />
         
         <div className="relative z-10">
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-              <img src="/saas-logo.png" alt="Logo" className="w-8 h-8 bg-transparent object-contain" />
+          <Link to="/" className="flex items-center gap-4 group">
+            <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
+              <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
             </div>
-            <span className="text-3xl font-bold text-white">Saa'ah</span>
+            <div className="flex flex-col">
+              <span className="text-3xl font-heading font-bold text-white">{BRAND_NAME_AR}</span>
+              <span className="text-lg text-white/80">{BRAND_NAME_EN}</span>
+            </div>
           </Link>
         </div>
 
         <div className="relative z-10 space-y-6">
-          <h1 className="text-5xl font-bold text-white leading-tight">
+          <h1 className="text-5xl font-heading font-bold text-white leading-tight">
             نسيت كلمة المرور؟<br />لا مشكلة!
           </h1>
           <p className="text-xl text-white/90">
             أدخل بريدك الإلكتروني وسنرسل لك تعليمات إعادة التعيين
           </p>
           <div className="flex items-center gap-3 text-white pt-4">
-            <CheckCircle2 className="h-6 w-6" />
+            <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
             <span>عملية آمنة ومشفرة</span>
           </div>
         </div>
 
-        <div className="relative z-10 text-white/60 text-sm">
-          © 2024 Saa'ah. جميع الحقوق محفوظة.
+        <div className="relative z-10 text-white/50 text-sm">
+          © 2024 {BRAND_NAME_EN}. جميع الحقوق محفوظة.
         </div>
       </div>
 
       {/* Right Side - Form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-900">
+      <div className="flex-1 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md">
-          <Link to="/" className="flex lg:hidden items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <img src="/saas-logo.png" alt="Logo" className="w-8 h-8 bg-transparent object-contain" />
+          <Link to="/" className="flex lg:hidden items-center justify-center gap-3 mb-8 group">
+            <div className="w-14 h-14 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
+              <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
             </div>
-            <span className="text-2xl font-bold gradient-text">Saa'ah</span>
+            <div className="flex flex-col">
+              <span className="text-2xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</span>
+              <span className="text-base text-primary">{BRAND_NAME_EN}</span>
+            </div>
           </Link>
 
-          <Card className="border-0 shadow-xl bg-white dark:bg-gray-800">
+          <Card className="shadow-xl border-border/50">
             <CardHeader className="space-y-1 text-center pb-6">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <Sparkles className="h-5 w-5 text-indigo-500 animate-pulse" />
-                <CardTitle className="text-2xl font-bold text-gray-900 dark:text-white">
+                <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+                <CardTitle className="text-2xl font-heading font-bold">
                   استعادة كلمة المرور
                 </CardTitle>
-                <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+                <Sparkles className="h-5 w-5 text-secondary animate-pulse" />
               </div>
-              <CardDescription className="text-base text-gray-600 dark:text-gray-400">
+              <CardDescription className="text-base">
                 أدخل بريدك الإلكتروني لإعادة تعيين كلمة المرور
               </CardDescription>
             </CardHeader>
@@ -198,20 +217,20 @@ export default function ForgotPassword() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        <FormLabel className="text-sm font-medium">
                           البريد الإلكتروني
                         </FormLabel>
                         <FormControl>
                           <div className="relative">
                             <Mail className={`absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${
-                              focusedField === 'email' ? 'text-indigo-500' : 'text-gray-400'
+                              focusedField === 'email' ? 'text-primary' : 'text-muted-foreground'
                             }`} />
                             <Input 
                               placeholder="you@example.com" 
                               {...field}
                               onFocus={() => setFocusedField('email')}
                               onBlur={() => setFocusedField(null)}
-                              className="h-11 pr-10 border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-500"
+                              className="h-11 pr-10 border-border focus:border-primary focus:ring-primary"
                             />
                           </div>
                         </FormControl>
@@ -221,7 +240,7 @@ export default function ForgotPassword() {
                   />
                   <Button 
                     type="submit" 
-                    className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium shadow-lg hover:shadow-xl transition-all"
+                    className="w-full h-11 gradient-primary font-medium shadow-lg hover:shadow-xl transition-all"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -242,7 +261,7 @@ export default function ForgotPassword() {
             <CardFooter className="flex justify-center pt-2">
               <Link 
                 to="/auth/login" 
-                className="text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 font-medium transition-colors"
+                className="text-sm text-muted-foreground hover:text-primary flex items-center gap-2 font-medium transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 العودة إلى تسجيل الدخول
@@ -251,15 +270,16 @@ export default function ForgotPassword() {
           </Card>
 
           <div className="mt-6 text-center space-y-2">
-            <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
-              <Link to="/privacy" className="hover:text-indigo-600 transition-colors">الخصوصية</Link>
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              <Link to="/privacy" className="hover:text-primary transition-colors">الخصوصية</Link>
               <span>•</span>
-              <Link to="/terms" className="hover:text-indigo-600 transition-colors">الشروط</Link>
+              <Link to="/terms" className="hover:text-primary transition-colors">الشروط</Link>
               <span>•</span>
-              <Link to="/help" className="hover:text-indigo-600 transition-colors">المساعدة</Link>
+              <Link to="/help" className="hover:text-primary transition-colors">المساعدة</Link>
             </div>
           </div>
         </div>
+        <VersionFooter className="absolute bottom-0 left-0 right-0 py-2 bg-background" />
       </div>
     </div>
   );

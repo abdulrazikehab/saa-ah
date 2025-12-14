@@ -14,7 +14,7 @@ export const productService = {
   getProducts: async (params?: ProductQueryParams): Promise<Product[]> => {
     const url = `${apiClient.coreUrl}/products?${new URLSearchParams(params as Record<string, string>)}`;
     const response = await apiClient.fetch(url, {
-      requireAuth: true,
+      requireAuth: false, // Public access for storefront
     });
     // Backend returns { data: [...], meta: {...} } or just [...]
     // After central unwrapping, response is already the data object
@@ -23,7 +23,7 @@ export const productService = {
 
   getProduct: async (id: string): Promise<Product> => {
     return apiClient.fetch(`${apiClient.coreUrl}/products/${id}`, {
-      requireAuth: true,
+      requireAuth: false, // Public access for storefront
     });
   },
 
@@ -54,7 +54,7 @@ export const productService = {
   // Categories
   getCategories: async (): Promise<Category[]> => {
     const response = await apiClient.fetch(`${apiClient.coreUrl}/categories`, {
-      requireAuth: true,
+      requireAuth: false, // Public access for storefront
     });
     // Backend returns { categories: [...] }
     // After central unwrapping, response is { categories: [...] }
@@ -62,7 +62,9 @@ export const productService = {
   },
 
   getCategory: async (id: string): Promise<Category> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/categories/${id}`);
+    return apiClient.fetch(`${apiClient.coreUrl}/categories/${id}`, {
+      requireAuth: false, // Public access for storefront
+    });
   },
 
   createCategory: async (data: CreateCategoryData): Promise<Category> => {
@@ -90,7 +92,9 @@ export const productService = {
 
   // Variants
   getVariants: async (productId: string): Promise<ProductVariant[]> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/products/${productId}/variants`);
+    return apiClient.fetch(`${apiClient.coreUrl}/products/${productId}/variants`, {
+      requireAuth: false, // Public access for storefront
+    });
   },
 
   createVariant: async (productId: string, data: CreateVariantData): Promise<ProductVariant> => {
@@ -120,6 +124,43 @@ export const productService = {
 
   deleteCollection: async (id: string): Promise<void> => {
     await apiClient.fetch(`${apiClient.coreUrl}/collections/${id}`, {
+      method: 'DELETE',
+      requireAuth: true,
+    });
+  },
+
+  // Brands
+  getBrands: async (): Promise<any[]> => {
+    const response = await apiClient.fetch(`${apiClient.coreUrl}/brands`, {
+      requireAuth: false,
+    });
+    return Array.isArray(response) ? response : [];
+  },
+
+  getBrand: async (id: string): Promise<any> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/brands/${id}`, {
+      requireAuth: false,
+    });
+  },
+
+  createBrand: async (data: Record<string, unknown>): Promise<any> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/brands`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  },
+
+  updateBrand: async (id: string, data: Record<string, unknown>): Promise<any> => {
+    return apiClient.fetch(`${apiClient.coreUrl}/brands/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  },
+
+  deleteBrand: async (id: string): Promise<void> => {
+    await apiClient.fetch(`${apiClient.coreUrl}/brands/${id}`, {
       method: 'DELETE',
       requireAuth: true,
     });

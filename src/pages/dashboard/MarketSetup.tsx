@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { coreApi } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface MarketSetupData {
   storeName: string;
@@ -22,6 +23,7 @@ export default function MarketSetup() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const { refreshUser } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<MarketSetupData>({
@@ -120,6 +122,9 @@ export default function MarketSetup() {
         customDomain: formData.customDomain,
         template: formData.template
       });
+
+      // Refresh user context to get updated tenant info (tenantId, tenantSubdomain)
+      await refreshUser();
 
       toast({
         title: t('marketSetup.success.title', 'Store Created Successfully!'),

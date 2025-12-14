@@ -38,8 +38,8 @@ export default function EmployeesManager() {
     } catch (error) {
       console.error('Failed to load staff:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل بيانات الموظفين',
+        title: 'تعذر تحميل بيانات الموظفين',
+        description: 'حدث خطأ أثناء تحميل بيانات الموظفين. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -54,8 +54,8 @@ export default function EmployeesManager() {
   const handleAddStaff = async () => {
     if (!newStaffEmail) {
       toast({
-        title: 'خطأ',
-        description: 'الرجاء إدخال البريد الإلكتروني',
+        title: 'البريد الإلكتروني مطلوب',
+        description: 'يرجى إدخال البريد الإلكتروني للموظف',
         variant: 'destructive',
       });
       return;
@@ -80,8 +80,8 @@ export default function EmployeesManager() {
     } catch (error) {
       console.error('Failed to create staff:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل إضافة الموظف',
+        title: 'تعذر إضافة الموظف',
+        description: 'حدث خطأ أثناء إضافة الموظف. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -102,8 +102,8 @@ export default function EmployeesManager() {
     } catch (error) {
       console.error('Failed to delete staff:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حذف الموظف',
+        title: 'تعذر حذف الموظف',
+        description: 'حدث خطأ أثناء حذف الموظف. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

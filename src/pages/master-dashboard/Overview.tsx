@@ -49,7 +49,7 @@ export default function MasterOverview() {
 
   const loadOverview = async () => {
     try {
-      const response = await coreApi.get('/admin/master/overview', { requireAuth: false, adminApiKey: 'getAdminApiKey()' });
+      const response = await coreApi.get('/admin/master/overview', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setOverview(response);
     } catch (error) {
       console.error('Failed to load overview:', error);

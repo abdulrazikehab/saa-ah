@@ -82,8 +82,8 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
     if (password !== confirmPassword) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: 'كلمتا المرور غير متطابقتين',
+        title: 'كلمتا المرور غير متطابقتين',
+        description: 'تأكد من تطابق كلمتي المرور وحاول مرة أخرى',
       });
       return;
     }

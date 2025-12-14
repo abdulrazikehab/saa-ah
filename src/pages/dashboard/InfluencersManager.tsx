@@ -60,8 +60,8 @@ export default function InfluencersManager() {
     } catch (error) {
       console.error('Failed to load influencers:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل المؤثرين',
+        title: 'تعذر تحميل المؤثرين',
+        description: 'حدث خطأ أثناء تحميل المؤثرين. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -97,8 +97,8 @@ export default function InfluencersManager() {
     } catch (error) {
       console.error('Failed to save influencer:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ المؤثر',
+        title: 'تعذر حفظ المؤثر',
+        description: 'حدث خطأ أثناء حفظ المؤثر. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -116,8 +116,8 @@ export default function InfluencersManager() {
     } catch (error) {
       console.error('Failed to delete influencer:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حذف المؤثر',
+        title: 'تعذر حذف المؤثر',
+        description: 'حدث خطأ أثناء حذف المؤثر. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

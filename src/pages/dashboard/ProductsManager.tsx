@@ -16,6 +16,8 @@ import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
+import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
 
 interface Category {
   id: string;
@@ -88,6 +90,7 @@ export default function ProductsManager() {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -133,6 +136,7 @@ export default function ProductsManager() {
   });
   const [productImages, setProductImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
     loadData();
@@ -176,6 +180,14 @@ export default function ProductsManager() {
       }
     }
   }, [searchParams, loading, setSearchParams, products]);
+  
+  // Check if user has a market set up
+  const hasMarket = !!(user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system');
+  
+  // Show market setup prompt if no market (must be after all hooks)
+  if (!hasMarket) {
+    return <MarketSetupPrompt />;
+  }
 
   const loadData = async () => {
     try {
@@ -265,8 +277,8 @@ export default function ProductsManager() {
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل البيانات',
+        title: 'تعذر تحميل البيانات',
+        description: 'حدث خطأ أثناء تحميل المنتجات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -296,13 +308,13 @@ export default function ProductsManager() {
       if (res.images && res.images.length > 0) {
         const newImageUrls = res.images.map((img) => img.secureUrl || img.url || '');
         setProductImages([...productImages, ...newImageUrls]);
-        toast({ title: 'نجح', description: 'تم رفع الصور بنجاح' });
+        toast({ title: 'تم الرفع بنجاح', description: 'تم رفع الصور بنجاح' });
       }
     } catch (error) {
       console.error('Failed to upload images:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل رفع الصور',
+        title: 'تعذر رفع الصور',
+        description: 'حدث خطأ أثناء رفع الصور. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -369,8 +381,8 @@ export default function ProductsManager() {
     } catch (error) {
       console.error('Failed to save product:', error);
       toast({
-        title: 'خطأ',
-        description: t('common.error') + ': ' + t('dashboard.products.addProduct'),
+        title: 'تعذر حفظ المنتج',
+        description: 'حدث خطأ أثناء حفظ المنتج. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -386,8 +398,8 @@ export default function ProductsManager() {
     } catch (error) {
       console.error('Failed to delete product:', error);
       toast({
-        title: 'خطأ',
-        description: t('common.error') + ': ' + t('dashboard.products.delete'),
+        title: 'تعذر حذف المنتج',
+        description: 'حدث خطأ أثناء حذف المنتج. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -486,8 +498,6 @@ export default function ProductsManager() {
     }
     return <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">متوفر</Badge>;
   };
-
-  const [activeTab, setActiveTab] = useState('all');
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = (product.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -604,10 +614,9 @@ export default function ProductsManager() {
       loadData();
       e.target.value = '';
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : t('dashboard.products.importError');
       toast({ 
-        title: 'خطأ', 
-        description: errorMessage, 
+        title: 'تعذر استيراد المنتجات', 
+        description: 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
         variant: 'destructive' 
       });
     }

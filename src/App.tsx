@@ -44,6 +44,7 @@ import DomainsSettings from "./pages/dashboard/settings/DomainsSettings";
 import UsersSettings from "./pages/dashboard/settings/UsersSettings";
 import IntegrationsSettings from "./pages/dashboard/settings/IntegrationsSettings";
 import KycSettings from "./pages/dashboard/settings/KycSettings";
+import BillingSettings from "./pages/dashboard/settings/BillingSettings";
 import DomainManagement from "./pages/dashboard/DomainManagement";
 import TemplatesPage from "./pages/dashboard/TemplatesPage";
 import MarketSetup from "./pages/dashboard/MarketSetup";
@@ -326,6 +327,7 @@ const App = () => {
                     <Route path="users" element={<UsersSettings />} />
                     <Route path="integrations" element={<IntegrationsSettings />} />
                     <Route path="kyc" element={<KycSettings />} />
+                    <Route path="billing" element={<BillingSettings />} />
                   </Route>
                   {/* Redirect legacy settings route */}
                   <Route path="/dashboard/store-settings" element={<Settings />} />

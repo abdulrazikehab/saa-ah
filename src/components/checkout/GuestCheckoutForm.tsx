@@ -100,8 +100,8 @@ export function GuestCheckoutForm({ cartItems, totalAmount, onComplete }: GuestC
     } catch (error) {
       console.error('Checkout error:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل إنشاء الطلب. يرجى المحاولة مرة أخرى.',
+        title: 'تعذر إتمام الطلب',
+        description: 'حدث خطأ أثناء إنشاء الطلب. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

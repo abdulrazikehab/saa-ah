@@ -1,6 +1,6 @@
 import { 
   ArrowRight, Store, Globe, Palette, TrendingUp, Shield, Zap, Check, 
-  Star, Users, Package, BarChart3, Sparkles, Play, ChevronRight
+  Star, Users, Package, BarChart3, Sparkles, Play, ChevronRight, ShoppingCart
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { coreApi } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
+import { VersionFooter } from '@/components/common/VersionFooter';
+import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR } from '@/config/logo.config';
 
 export default function Landing() {
   const navigate = useNavigate();
   const { isAuthenticated, loading } = useAuth();
-  const [logoUrl, setLogoUrl] = useState<string>('/saas-logo.png');
+  const [logoUrl, setLogoUrl] = useState<string>(getLogoUrl());
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
@@ -32,7 +34,6 @@ export default function Landing() {
         const config = await coreApi.get('/site-config');
         if (config?.settings?.storeLogoUrl) {
           setLogoUrl(config.settings.storeLogoUrl);
-          // Update favicon dynamically
           const favicon = document.getElementById('favicon') as HTMLLinkElement;
           if (favicon) {
             favicon.href = config.settings.storeLogoUrl;
@@ -51,51 +52,45 @@ export default function Landing() {
       icon: Store,
       title: t('landing.features.items.store.title'),
       description: t('landing.features.items.store.description'),
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100 dark:bg-purple-900/20'
+      gradient: 'from-primary to-primary/70'
     },
     {
       icon: Globe,
       title: t('landing.features.items.domain.title'),
       description: t('landing.features.items.domain.description'),
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100 dark:bg-blue-900/20'
+      gradient: 'from-accent to-accent/70'
     },
     {
       icon: Palette,
       title: t('landing.features.items.design.title'),
       description: t('landing.features.items.design.description'),
-      color: 'text-pink-600',
-      bgColor: 'bg-pink-100 dark:bg-pink-900/20'
+      gradient: 'from-secondary to-secondary/70'
     },
     {
       icon: TrendingUp,
       title: t('landing.features.items.analytics.title'),
       description: t('landing.features.items.analytics.description'),
-      color: 'text-green-600',
-      bgColor: 'bg-green-100 dark:bg-green-900/20'
+      gradient: 'from-success to-success/70'
     },
     {
       icon: Shield,
       title: t('landing.features.items.security.title'),
       description: t('landing.features.items.security.description'),
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-100 dark:bg-indigo-900/20'
+      gradient: 'from-primary to-accent'
     },
     {
       icon: Zap,
       title: t('landing.features.items.performance.title'),
       description: t('landing.features.items.performance.description'),
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-100 dark:bg-yellow-900/20'
+      gradient: 'from-warning to-secondary'
     }
   ];
 
   const stats = [
-    { value: '10,000+', label: t('landing.stats.activeStores') },
-    { value: '50,000+', label: t('landing.stats.productsSold') },
-    { value: '99%', label: t('landing.stats.customerSatisfaction') },
-    { value: '24/7', label: t('landing.stats.support') }
+    { value: '10,000+', label: t('landing.stats.activeStores'), icon: Store },
+    { value: '50,000+', label: t('landing.stats.productsSold'), icon: Package },
+    { value: '99%', label: t('landing.stats.customerSatisfaction'), icon: Users },
+    { value: '24/7', label: t('landing.stats.support'), icon: Shield }
   ];
 
   const plans = [
@@ -156,42 +151,47 @@ export default function Landing() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Navigation */}
-      <nav className="border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-gray-900/60 sticky top-0 z-50 shadow-sm">
+      <nav className="border-b bg-background/90 backdrop-blur-xl sticky top-0 z-50 shadow-sm">
         <div className="container flex h-20 items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
+          <Link to="/" className="flex items-center gap-4 group">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-              <div className="relative w-10 h-10 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center overflow-hidden">
-                <img src={logoUrl} alt="سِعَة" className="h-8 w-8 object-contain" onError={(e) => {
-                  // Fallback to icon if image fails to load
-                  e.currentTarget.style.display = 'none';
-                  const parent = e.currentTarget.parentElement;
-                  if (parent) {
-                    parent.innerHTML = '<svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>';
-                  }
-                }} />
+              <div className="absolute -inset-2 bg-gradient-to-r from-primary via-accent to-secondary rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
+              <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-background shadow-lg border border-border/50">
+                <img 
+                  src={logoUrl} 
+                  alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} 
+                  className="w-full h-full object-contain p-2" 
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const parent = e.currentTarget.parentElement;
+                    if (parent) {
+                      parent.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary to-accent"><svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg></div>';
+                    }
+                  }} 
+                />
               </div>
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              سِعَة
-            </span>
+            <div className="flex flex-col">
+              <span className="text-2xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</span>
+              <span className="text-xs text-muted-foreground font-medium">{BRAND_NAME_EN}</span>
+            </div>
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-3">
             <ThemeToggle />
-            {/* Language Switch Buttons */}
-            <Button variant="ghost" size="sm" onClick={() => i18n.changeLanguage('en')}>EN</Button>
-            <Button variant="ghost" size="sm" onClick={() => i18n.changeLanguage('ar')}>AR</Button>
-            {/* Existing LanguageToggle component (optional) */}
+            <div className="hidden sm:flex items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={() => i18n.changeLanguage('en')} className="text-xs">EN</Button>
+              <Button variant="ghost" size="sm" onClick={() => i18n.changeLanguage('ar')} className="text-xs">AR</Button>
+            </div>
             <LanguageToggle />
             <Link to="/auth/login">
-              <Button variant="ghost" size="lg" className="hidden sm:inline-flex">
+              <Button variant="ghost" size="default" className="hidden sm:inline-flex font-semibold">
                 {t('nav.login')}
               </Button>
             </Link>
             <Link to="/auth/signup">
-              <Button size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg">
+              <Button size="default" className="gradient-primary shadow-lg hover:shadow-xl transition-shadow font-semibold">
                 {t('landing.hero.startFree')}
                 <ArrowRight className="mr-2 h-4 w-4 rtl:rotate-180" />
               </Button>
@@ -201,79 +201,116 @@ export default function Landing() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        {/* Background Decorations */}
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-        <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+      <section className="relative overflow-hidden min-h-[90vh] flex items-center">
+        {/* Animated Background */}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-background to-background" />
+          <div className="absolute inset-0 bg-gradient-mesh opacity-70" />
+          <div className="absolute inset-0 bg-dots-pattern opacity-30" />
+        </div>
         
-        <div className="container relative py-24 md:py-32 lg:py-40">
+        {/* Floating Elements */}
+        <div className="absolute top-20 left-[10%] w-64 h-64 bg-primary/20 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-20 right-[10%] w-80 h-80 bg-secondary/15 rounded-full blur-3xl animate-float-delayed" />
+        <div className="absolute top-1/3 right-[20%] w-48 h-48 bg-accent/10 rounded-full blur-3xl animate-pulse-slow" />
+        
+        {/* Decorative Shapes */}
+        <div className="absolute top-40 left-[5%] w-3 h-3 bg-primary rounded-full animate-pulse" />
+        <div className="absolute top-60 right-[15%] w-2 h-2 bg-secondary rounded-full animate-pulse" style={{ animationDelay: '0.5s' }} />
+        <div className="absolute bottom-40 left-[20%] w-4 h-4 bg-accent/50 rounded-full animate-pulse" style={{ animationDelay: '1s' }} />
+        
+        <div className="container relative py-20 md:py-32">
           <div className="mx-auto max-w-5xl text-center">
+            {/* Logo Badge */}
+            <div className="flex justify-center mb-8 animate-scale-in">
+              <div className="relative">
+                <div className="absolute -inset-4 bg-gradient-to-r from-primary via-secondary to-accent rounded-3xl blur-2xl opacity-30 animate-pulse-slow" />
+                <div className="relative w-28 h-28 md:w-36 md:h-36 rounded-2xl overflow-hidden bg-background shadow-2xl border border-border/50">
+                  <img 
+                    src={logoUrl} 
+                    alt={`${BRAND_NAME_EN} Logo`}
+                    className="w-full h-full object-contain p-2"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Badge */}
-            <Badge className="mb-6 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 hover:bg-indigo-200 px-4 py-2 text-sm font-medium">
+            <Badge variant="soft-primary" className="mb-8 px-5 py-2.5 text-sm font-semibold animate-slide-up">
               <Sparkles className="mr-2 h-4 w-4" />
               {t('landing.hero.badge')}
             </Badge>
 
             {/* Heading */}
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8 leading-tight">
-              <span className="bg-gradient-to-r from-gray-900 via-indigo-900 to-purple-900 dark:from-white dark:via-indigo-200 dark:to-purple-200 bg-clip-text text-transparent">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-heading font-bold tracking-tight mb-8 leading-[1.1] animate-slide-up" style={{ animationDelay: '0.1s' }}>
+              <span className="text-foreground">
                 {t('landing.hero.title')}
               </span>
               <br />
-              <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                {t('landing.hero.titleHighlight')}
+              <span className="relative">
+                <span className="gradient-text">{t('landing.hero.titleHighlight')}</span>
+                <svg className="absolute -bottom-2 left-0 w-full h-3 text-primary/30" viewBox="0 0 200 8" preserveAspectRatio="none">
+                  <path d="M0 7 Q50 0 100 7 T200 7" stroke="currentColor" strokeWidth="3" fill="none" />
+                </svg>
               </span>
             </h1>
 
             {/* Subheading */}
-            <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-12 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-12 max-w-3xl mx-auto leading-relaxed animate-slide-up" style={{ animationDelay: '0.2s' }}>
               {t('landing.hero.subtitle')}
             </p>
 
             {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16 animate-slide-up" style={{ animationDelay: '0.3s' }}>
               <Link to="/auth/signup">
-                <Button size="lg" className="gap-2 text-lg px-10 py-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-xl hover:shadow-2xl transition-all">
+                <Button size="xl" className="gap-3 gradient-primary shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all w-full sm:w-auto">
+                  <ShoppingCart className="h-5 w-5" />
                   {t('landing.hero.startFree')}
                   <ArrowRight className="h-5 w-5 rtl:rotate-180" />
                 </Button>
               </Link>
-              <Button size="lg" variant="outline" className="text-lg px-10 py-6 border-2 hover:bg-gray-100 dark:hover:bg-gray-800">
-                <Play className="ml-2 h-5 w-5" />
+              <Button size="xl" variant="outline" className="border-2 hover:bg-muted/50 gap-3 w-full sm:w-auto">
+                <Play className="h-5 w-5" />
                 {t('landing.hero.watchDemo')}
               </Button>
             </div>
 
             {/* Trust Badges */}
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span>{t('landing.hero.noCreditCard')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span>{t('landing.hero.readyIn5')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
-                <span>{t('landing.hero.support247')}</span>
-              </div>
+            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-sm text-muted-foreground animate-fade-in" style={{ animationDelay: '0.4s' }}>
+              {[
+                { text: t('landing.hero.noCreditCard'), delay: '0s' },
+                { text: t('landing.hero.readyIn5'), delay: '0.1s' },
+                { text: t('landing.hero.support247'), delay: '0.2s' }
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2 animate-slide-up" style={{ animationDelay: item.delay }}>
+                  <div className="w-6 h-6 rounded-full bg-success/15 flex items-center justify-center">
+                    <Check className="h-3.5 w-3.5 text-success" />
+                  </div>
+                  <span className="font-medium">{item.text}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="py-16 bg-white dark:bg-gray-900 border-y">
-        <div className="container">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+      <section className="py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-accent/5 to-secondary/5" />
+        <div className="container relative">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
             {stats.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+              <div 
+                key={index} 
+                className="text-center group p-6 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+              >
+                <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <stat.icon className="h-6 w-6 text-primary" />
+                </div>
+                <div className="text-3xl md:text-4xl font-heading font-bold gradient-text mb-2">
                   {stat.value}
                 </div>
-                <div className="text-gray-600 dark:text-gray-400 font-medium">
+                <div className="text-muted-foreground font-medium text-sm">
                   {stat.label}
                 </div>
               </div>
@@ -283,37 +320,34 @@ export default function Landing() {
       </section>
 
       {/* Features Section */}
-      <section className="py-24">
-        <div className="container">
+      <section className="py-24 relative">
+        <div className="absolute inset-0 bg-gradient-mesh opacity-30" />
+        <div className="container relative">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-4 py-2">
+            <Badge variant="soft-secondary" className="mb-6 px-4 py-2">
               <Star className="mr-2 h-4 w-4" />
               {t('landing.features.badge')}
             </Badge>
-            <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                {t('landing.features.title')}
-              </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-bold mb-6">
+              <span className="text-foreground">{t('landing.features.title')}</span>
               <br />
-              <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                {t('landing.features.titleHighlight')}
-</span>
+              <span className="gradient-text">{t('landing.features.titleHighlight')}</span>
             </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
               {t('landing.features.subtitle')}
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, index) => (
               <Card 
                 key={index} 
-                className="border-0 shadow-lg hover:shadow-2xl transition-all duration-300 group hover:-translate-y-1"
+                className="group border-border/50 hover:border-primary/30 bg-card/50 backdrop-blur-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-2 overflow-hidden"
               >
-                <CardHeader>
-                  <div className={`h-14 w-14 rounded-xl ${feature.bgColor} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
-                    <feature.icon className={`h-7 w-7 ${feature.color}`} />
+                <CardHeader className="pb-4">
+                  <div className={`h-14 w-14 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                    <feature.icon className="h-7 w-7 text-white" />
                   </div>
-                  <CardTitle className="text-2xl mb-3">{feature.title}</CardTitle>
+                  <CardTitle className="text-xl mb-2 group-hover:text-primary transition-colors">{feature.title}</CardTitle>
                   <CardDescription className="text-base leading-relaxed">
                     {feature.description}
                   </CardDescription>
@@ -325,39 +359,37 @@ export default function Landing() {
       </section>
 
       {/* Pricing Section */}
-      <section className="py-24 bg-gray-50 dark:bg-gray-900">
-        <div className="container">
+      <section className="py-24 bg-muted/30 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-secondary/10 rounded-full blur-3xl" />
+        <div className="container relative">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-4 py-2">
+            <Badge variant="soft-success" className="mb-6 px-4 py-2">
               <BarChart3 className="mr-2 h-4 w-4" />
               {t('landing.pricing.badge')}
             </Badge>
-            <h2 className="text-4xl md:text-5xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
-                {t('landing.pricing.title')}
-              </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-bold mb-6">
+              <span className="text-foreground">{t('landing.pricing.title')}</span>
               <br />
-              <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                {t('landing.pricing.titleHighlight')}
-              </span>
+              <span className="gradient-text">{t('landing.pricing.titleHighlight')}</span>
             </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+            <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto">
               {t('landing.pricing.subtitle')}
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto">
             {plans.map((plan, index) => (
               <Card 
                 key={index} 
-                className={`relative border-0 shadow-lg transition-all duration-300 ${
+                className={`relative transition-all duration-300 ${
                   plan.highlighted 
-                    ? 'md:scale-110 shadow-2xl border-2 border-indigo-500' 
-                    : 'hover:shadow-xl'
+                    ? 'md:scale-105 shadow-2xl border-2 border-primary bg-card z-10' 
+                    : 'border-border/50 hover:shadow-xl hover:border-primary/30 bg-card/50'
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-10">
-                    <Badge className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 text-sm font-bold shadow-lg">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
+                    <Badge className="gradient-primary text-white px-5 py-1.5 text-sm font-bold shadow-lg">
                       <Star className="mr-2 h-4 w-4" />
                       {t('landing.pricing.popular')}
                     </Badge>
@@ -366,29 +398,29 @@ export default function Landing() {
                 <CardHeader className="text-center pb-8 pt-10">
                   <CardTitle className="text-2xl font-bold mb-2">{plan.name}</CardTitle>
                   <CardDescription className="text-base mb-6">{plan.description}</CardDescription>
-                  <div className="mt-6">
+                  <div className="mt-4">
                     <div className="flex items-baseline justify-center gap-2">
-                      <span className="text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                      <span className="text-5xl font-heading font-bold gradient-text">
                         {plan.price}
                       </span>
                       {plan.period && (
-                        <span className="text-gray-600 dark:text-gray-400">
+                        <span className="text-muted-foreground">
                           {t('landing.pricing.currency')} / {plan.period}
                         </span>
                       )}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pb-8">
                   <ul className="space-y-4 mb-8">
                     {plan.features.map((feature, i) => (
                       <li key={i} className="flex items-start gap-3">
                         <div className="flex-shrink-0 mt-0.5">
-                          <div className="h-5 w-5 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                            <Check className="h-3.5 w-3.5 text-green-600" />
+                          <div className="h-5 w-5 rounded-full bg-success/15 flex items-center justify-center">
+                            <Check className="h-3 w-3 text-success" />
                           </div>
                         </div>
-                        <span className="text-gray-700 dark:text-gray-300">{feature}</span>
+                        <span className="text-foreground/80">{feature}</span>
                       </li>
                     ))}
                   </ul>
@@ -396,7 +428,7 @@ export default function Landing() {
                     <Button 
                       className={`w-full h-12 text-base font-semibold ${
                         plan.highlighted
-                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg'
+                          ? 'gradient-primary shadow-lg hover:shadow-xl'
                           : ''
                       }`}
                       variant={plan.highlighted ? 'default' : 'outline'}
@@ -414,22 +446,27 @@ export default function Landing() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600" />
+      <section className="py-28 relative overflow-hidden">
+        <div className="absolute inset-0 gradient-primary" />
         <div className="absolute inset-0 bg-grid-pattern opacity-10" />
+        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-white/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-white/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
         <div className="container relative text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+          <div className="w-20 h-20 mx-auto mb-8 rounded-2xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-2xl">
+            <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-2" />
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-heading font-bold text-white mb-6">
             {t('landing.cta.title')}
           </h2>
-          <p className="text-white/90 text-xl mb-10 max-w-2xl mx-auto">
+          <p className="text-white/90 text-lg md:text-xl mb-12 max-w-2xl mx-auto">
             {t('landing.cta.subtitle')}
           </p>
           <Link to="/auth/signup">
             <Button 
-              size="lg" 
-              variant="secondary" 
-              className="text-lg px-12 py-6 gap-3 shadow-2xl hover:shadow-3xl bg-white hover:bg-gray-100 text-indigo-600 font-bold"
+              size="xl" 
+              className="gap-3 shadow-2xl bg-white hover:bg-white/95 text-primary font-bold hover:scale-[1.02] transition-all"
             >
+              <ShoppingCart className="h-5 w-5" />
               {t('landing.cta.button')}
               <ArrowRight className="h-5 w-5 rtl:rotate-180" />
             </Button>
@@ -438,29 +475,32 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t py-16 bg-gray-900 text-white">
+      <footer className="border-t py-16 bg-accent text-white">
         <div className="container">
           <div className="grid md:grid-cols-4 gap-12 mb-12">
             <div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center overflow-hidden">
-                  <img src={logoUrl} alt="سِعَة" className="h-8 w-8 object-contain" onError={(e) => {
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-14 h-14 bg-white/10 rounded-xl overflow-hidden backdrop-blur-sm">
+                  <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-1" onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     const parent = e.currentTarget.parentElement;
                     if (parent) {
-                      parent.innerHTML = '<svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>';
+                      parent.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg></div>';
                     }
                   }} />
                 </div>
-                <span className="text-2xl font-bold">سِعَة</span>
+                <div>
+                  <span className="text-2xl font-heading font-bold">{BRAND_NAME_AR}</span>
+                  <p className="text-white/60 text-sm">{BRAND_NAME_EN}</p>
+                </div>
               </div>
-              <p className="text-gray-400 leading-relaxed">
+              <p className="text-white/70 leading-relaxed">
                 {t('landing.footer.description')}
               </p>
             </div>
             <div>
               <h3 className="font-bold text-lg mb-6">{t('landing.footer.product')}</h3>
-              <ul className="space-y-3 text-gray-400">
+              <ul className="space-y-3 text-white/70">
                 <li><a href="#features" className="hover:text-white transition-colors">{t('landing.footer.links.features')}</a></li>
                 <li><a href="#pricing" className="hover:text-white transition-colors">{t('landing.footer.links.pricing')}</a></li>
                 <li><a href="#templates" className="hover:text-white transition-colors">{t('landing.footer.links.templates')}</a></li>
@@ -469,7 +509,7 @@ export default function Landing() {
             </div>
             <div>
               <h3 className="font-bold text-lg mb-6">{t('landing.footer.support')}</h3>
-              <ul className="space-y-3 text-gray-400">
+              <ul className="space-y-3 text-white/70">
                 <li><a href="#help" className="hover:text-white transition-colors">{t('landing.footer.links.helpCenter')}</a></li>
                 <li><a href="#faq" className="hover:text-white transition-colors">{t('landing.footer.links.faq')}</a></li>
                 <li><a href="#contact" className="hover:text-white transition-colors">{t('landing.footer.links.contact')}</a></li>
@@ -478,7 +518,7 @@ export default function Landing() {
             </div>
             <div>
               <h3 className="font-bold text-lg mb-6">{t('landing.footer.company')}</h3>
-              <ul className="space-y-3 text-gray-400">
+              <ul className="space-y-3 text-white/70">
                 <li><a href="#about" className="hover:text-white transition-colors">{t('landing.footer.links.about')}</a></li>
                 <li><a href="#blog" className="hover:text-white transition-colors">{t('landing.footer.links.blog')}</a></li>
                 <li><a href="#careers" className="hover:text-white transition-colors">{t('landing.footer.links.careers')}</a></li>
@@ -486,16 +526,17 @@ export default function Landing() {
               </ul>
             </div>
           </div>
-          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-gray-400 text-sm">
+          <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-white/60 text-sm">
               {t('landing.footer.copyright')}
             </p>
-            <div className="flex gap-6 text-sm text-gray-400">
+            <div className="flex gap-6 text-sm text-white/60">
               <a href="#privacy" className="hover:text-white transition-colors">{t('landing.footer.links.privacy')}</a>
               <a href="#terms" className="hover:text-white transition-colors">{t('landing.footer.links.terms')}</a>
               <a href="#cookies" className="hover:text-white transition-colors">{t('landing.footer.links.cookies')}</a>
             </div>
           </div>
+          <VersionFooter className="mt-8 pt-4 border-t border-white/10" />
         </div>
       </footer>
     </div>

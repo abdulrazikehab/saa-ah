@@ -96,8 +96,8 @@ export default function SalesChannels() {
     } catch (error) {
       console.error('Failed to load sales channels:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل قنوات البيع',
+        title: 'تعذر تحميل قنوات البيع',
+        description: 'حدث خطأ أثناء تحميل قنوات البيع. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -121,8 +121,8 @@ export default function SalesChannels() {
     } catch (error) {
       console.error('Failed to toggle channel:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث القناة',
+        title: 'تعذر تحديث القناة',
+        description: 'حدث خطأ أثناء تحديث القناة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -139,8 +139,8 @@ export default function SalesChannels() {
     } catch (error) {
       console.error('Failed to update config:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { useTranslation } from 'react-i18next';
+import { getLogoUrl } from '@/config/logo.config';
 
 export const Navbar = () => {
   const { t } = useTranslation();
@@ -21,7 +22,7 @@ export const Navbar = () => {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/branding/saeaa-logo.png" alt="Saeaa" className="h-10 w-auto" />
+            <img src={getLogoUrl()} alt="Saeaa" className="h-10 w-auto" />
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             {navigation.map((item) => (

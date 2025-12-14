@@ -3,19 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Saeaa - سِعَة | منصة التجارة الإلكترونية</title>
-    <meta name="description" content="Create your online store in minutes with Saeaa - سِعَة" />
-    <meta name="author" content="Saeaa - سِعَة" />
+    <title>سعة - Saeaa | منصة التجارة الإلكترونية</title>
+    <meta name="description" content="أنشئ متجرك الإلكتروني في دقائق مع سعة - Saeaa" />
+    <meta name="author" content="سعة - Saeaa" />
 
-    <meta property="og:title" content="Saeaa - سِعَة | E-commerce Platform" />
-    <meta property="og:description" content="Create your online store in minutes with Saeaa" />
+    <meta property="og:title" content="سعة - Saeaa | منصة التجارة الإلكترونية" />
+    <meta property="og:description" content="أنشئ متجرك الإلكتروني في دقائق مع سعة" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/branding/saeaa-logo.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@SaeaaPlatform" />
     <meta name="twitter:image" content="/branding/saeaa-logo.png" />
-    <link rel="icon" type="image/png" href="/branding/saeaa-logo.png" id="favicon" />
+    <link rel="icon" type="image/png" href="/branding/saeaa-logo.png?v=5" id="favicon" />
+    <script>
+      // Update favicon with cache-busting
+      (function() {
+        const favicon = document.getElementById('favicon');
+        if (favicon) {
+          favicon.href = '/branding/saeaa-logo.png?v=5';
+        }
+      })();
+    </script>
     <script>
       // Set direction before React loads based on saved language
       (function() {

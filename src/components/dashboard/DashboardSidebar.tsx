@@ -48,6 +48,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useTranslation } from 'react-i18next';
+import { APP_VERSION, GIT_COMMIT } from '@/version';
 
 interface DashboardSidebarProps {
   className?: string;
@@ -590,6 +591,20 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                 <Smartphone className="h-4 w-4 text-white" />
                 <div className="text-xs text-white font-medium">App Store</div>
               </a>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Version Info */}
+      {!collapsed && (
+        <div className="px-4 py-2 border-t border-border">
+          <div className="text-xs text-muted-foreground text-center">
+            <div>v{APP_VERSION}</div>
+            {GIT_COMMIT !== 'dev' && (
+              <div className="text-[10px] opacity-70 mt-0.5">
+                {GIT_COMMIT.substring(0, 7)}
+              </div>
             )}
           </div>
         </div>

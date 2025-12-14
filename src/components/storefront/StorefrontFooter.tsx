@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Twitter, Instagram, Youtube, Mail, Phone, MapPin } from 'lucide-react';
 import { coreApi } from '@/lib/api';
+import { VersionFooter } from '@/components/common/VersionFooter';
 
 export function StorefrontFooter() {
   const [siteConfig, setSiteConfig] = useState<any>(null);
@@ -272,6 +273,8 @@ export function StorefrontFooter() {
           </div>
         </div>
       </div>
+      {/* Version Footer */}
+      <VersionFooter className="bg-gray-900 dark:bg-black text-gray-400 py-3" />
     </footer>
   );
 }

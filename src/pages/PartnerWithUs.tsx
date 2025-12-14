@@ -150,8 +150,8 @@ export default function PartnerWithUs() {
     } catch (error) {
       console.error('Failed to load products:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل المنتجات',
+        title: 'تعذر تحميل المنتجات',
+        description: 'حدث خطأ أثناء تحميل المنتجات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -359,8 +359,8 @@ CRITICAL: Create 3 DISTINCT variations:
     } catch (error) {
       console.error('Failed to create marketplace:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل إنشاء المتجر',
+        title: 'تعذر إنشاء المتجر',
+        description: 'حدث خطأ أثناء إنشاء المتجر. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

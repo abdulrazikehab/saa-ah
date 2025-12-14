@@ -64,8 +64,8 @@ export default function CouponsManager() {
     } catch (error) {
       console.error('Failed to load coupons:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الكوبونات',
+        title: 'تعذر تحميل الكوبونات',
+        description: 'حدث خطأ أثناء تحميل الكوبونات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -113,8 +113,8 @@ export default function CouponsManager() {
     } catch (error) {
       console.error('Failed to save coupon:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الكوبون',
+        title: 'تعذر حفظ الكوبون',
+        description: 'حدث خطأ أثناء حفظ الكوبون. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -132,8 +132,8 @@ export default function CouponsManager() {
     } catch (error) {
       console.error('Failed to delete coupon:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حذف الكوبون',
+        title: 'تعذر حذف الكوبون',
+        description: 'حدث خطأ أثناء حذف الكوبون. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

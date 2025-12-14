@@ -33,8 +33,8 @@ export default function IntegrationsSettings() {
       setIntegrations(Array.isArray(response) ? response : []);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل تحميل التكاملات',
+        title: 'تعذر تحميل التكاملات',
+        description: 'حدث خطأ أثناء تحميل التكاملات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }

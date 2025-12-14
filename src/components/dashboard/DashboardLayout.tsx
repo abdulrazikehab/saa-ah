@@ -6,6 +6,7 @@ import { DashboardHeader } from './DashboardHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardBanner from './DashboardBanner';
 import { useTranslation } from 'react-i18next';
+import { VersionFooter } from '@/components/common/VersionFooter';
 
 export const DashboardLayout = () => {
   const { i18n } = useTranslation();
@@ -50,11 +51,13 @@ export const DashboardLayout = () => {
           />
 
           {/* Page Content */}
-          <main className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-[1920px] mx-auto w-full">
+          <main className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-[1920px] mx-auto w-full flex flex-col min-h-[calc(100vh-4rem)]">
             <DashboardBanner />
-            <div className="mt-4 sm:mt-6">
+            <div className="mt-4 sm:mt-6 flex-1">
               <Outlet />
             </div>
+            {/* Version Footer */}
+            <VersionFooter className="mt-8 pt-4 border-t border-border" />
           </main>
         </div>
       </div>

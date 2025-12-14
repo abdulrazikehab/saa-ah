@@ -11,6 +11,9 @@ import { Separator } from '@/components/ui/separator';
 import { InteractiveFace, FaceState } from '@/components/ui/InteractiveFace';
 import { useTranslation } from 'react-i18next';
 import { authService } from '@/services/auth.service';
+import { coreApi } from '@/lib/api';
+import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
+import { VersionFooter } from '@/components/common/VersionFooter';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -24,12 +27,28 @@ export default function Login() {
   const [faceState, setFaceState] = useState<FaceState>('excited');
   const [isFocused, setIsFocused] = useState(false);
   const [passwordFieldActive, setPasswordFieldActive] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string>(getLogoUrl());
   
   // Recovery ID states
   const [showRecoveryMode, setShowRecoveryMode] = useState(false);
   const [recoveryId, setRecoveryId] = useState('');
   const [recoveryPassword, setRecoveryPassword] = useState('');
   const [recoveredEmail, setRecoveredEmail] = useState<string | null>(null);
+
+  // Fetch site configuration to get logo
+  useEffect(() => {
+    const fetchSiteConfig = async () => {
+      try {
+        const config = await coreApi.get('/site-config');
+        if (config?.settings?.storeLogoUrl) {
+          setLogoUrl(config.settings.storeLogoUrl);
+        }
+      } catch (error) {
+        console.error('Failed to fetch site config:', error);
+      }
+    };
+    fetchSiteConfig();
+  }, []);
 
   // Handle focus state changes for face
   useEffect(() => {
@@ -67,11 +86,10 @@ export default function Login() {
       }, 1500);
     } catch (error: unknown) {
       setFaceState('sad');
-      const errorMessage = error instanceof Error ? error.message : 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
       toast({
         variant: 'destructive',
         title: 'خطأ في تسجيل الدخول',
-        description: errorMessage,
+        description: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
       });
     } finally {
       setLoading(false);
@@ -85,11 +103,9 @@ export default function Login() {
     try {
       const result = await authService.loginWithRecoveryId(recoveryId, recoveryPassword);
       
-      // Set tokens in auth context
       if (loginWithTokens) {
         loginWithTokens(result.accessToken, result.refreshToken);
       } else {
-        // Fallback: store tokens directly
         localStorage.setItem('accessToken', result.accessToken);
         localStorage.setItem('refreshToken', result.refreshToken);
       }
@@ -104,11 +120,10 @@ export default function Login() {
       }, 1500);
     } catch (error: unknown) {
       setFaceState('sad');
-      const errorMessage = error instanceof Error ? error.message : 'رمز الاسترداد أو كلمة المرور غير صحيحة';
       toast({
         variant: 'destructive',
         title: 'خطأ في تسجيل الدخول',
-        description: errorMessage,
+        description: 'رمز الاسترداد أو كلمة المرور غير صحيحة',
       });
     } finally {
       setLoading(false);
@@ -119,8 +134,8 @@ export default function Login() {
     if (!recoveryId) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: 'يرجى إدخال رمز الاسترداد',
+        title: 'رمز الاسترداد مطلوب',
+        description: 'يرجى إدخال رمز الاسترداد للمتابعة',
       });
       return;
     }
@@ -136,8 +151,8 @@ export default function Login() {
     } catch (error: unknown) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: 'رمز الاسترداد غير صحيح',
+        title: 'لم نتمكن من العثور على الحساب',
+        description: 'تأكد من صحة رمز الاسترداد وحاول مرة أخرى',
       });
     } finally {
       setLoading(false);
@@ -146,7 +161,6 @@ export default function Login() {
 
   const handleGoogleSignIn = () => {
     const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001';
-    // Production URL already includes /auth, dev needs it appended
     const googleAuthUrl = authBaseUrl.includes('localhost')
       ? `${authBaseUrl}/auth/google`
       : `${authBaseUrl}/google`;
@@ -156,26 +170,29 @@ export default function Login() {
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Branding (hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-12 flex-col justify-between relative overflow-hidden">
-        {/* Decorative circles */}
+      <div className="hidden lg:flex lg:w-1/2 gradient-primary p-12 flex-col justify-between relative overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute inset-0 bg-grid-pattern opacity-10" />
         <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse-slow" />
         <div className="absolute bottom-20 left-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '2s' }} />
         
         <div className="relative z-10">
           <Link to="/" className="inline-flex flex-col gap-4 group">
             <div className="flex items-center gap-4">
-              <img src="/branding/saeaa-logo.png" alt="Saeaa - سِعَة" className="h-20 w-auto object-contain bg-transparent group-hover:scale-110 transition-transform" />
+              <div className="w-20 h-20 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
+                <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
+              </div>
               <div className="flex flex-col">
-                <h1 className="text-4xl font-bold text-white">سِعَة</h1>
-                <p className="text-xl font-semibold text-purple-200">Saeaa</p>
+                <h1 className="text-4xl font-heading font-bold text-white">{BRAND_NAME_AR}</h1>
+                <p className="text-xl font-semibold text-white/80">{BRAND_NAME_EN}</p>
               </div>
             </div>
-            <p className="text-white/80 text-sm">منصة أسواقك الرقمية | Your Digital Markets Platform</p>
+            <p className="text-white/70 text-sm">{BRAND_TAGLINE_AR} | {BRAND_TAGLINE_EN}</p>
           </Link>
         </div>
 
         <div className="relative z-10 space-y-6">
-          <h1 className="text-5xl font-bold text-white leading-tight">
+          <h1 className="text-5xl font-heading font-bold text-white leading-tight">
             مرحباً بعودتك!
             <br />
             سجل دخولك الآن
@@ -185,41 +202,49 @@ export default function Login() {
           </p>
           <div className="space-y-4 pt-4">
             <div className="flex items-center gap-3 text-white">
-              <CheckCircle2 className="h-6 w-6" />
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
               <span>وصول فوري إلى لوحة التحكم</span>
             </div>
             <div className="flex items-center gap-3 text-white">
-              <CheckCircle2 className="h-6 w-6" />
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
               <span>أمان عالي المستوى</span>
             </div>
             <div className="flex items-center gap-3 text-white">
-              <CheckCircle2 className="h-6 w-6" />
+              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
               <span>دعم فني متاح 24/7</span>
             </div>
           </div>
         </div>
 
-        <div className="relative z-10 text-white/60 text-sm">
+        <div className="relative z-10 text-white/50 text-sm">
           {t('landing.footer.copyright')}
         </div>
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-900">
+      <div className="flex-1 flex items-center justify-center p-6 bg-background">
         <div className="w-full max-w-md">
           {/* Mobile Logo with Bilingual Branding */}
           <Link to="/" className="lg:hidden flex flex-col items-center gap-3 mb-8 group">
             <div className="flex items-center gap-3">
-              <img src="/branding/saeaa-logo.png" alt="Saeaa - سِعَة" className="h-16 w-auto object-contain bg-transparent group-hover:scale-110 transition-transform" />
+              <div className="w-16 h-16 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
+                <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
+              </div>
               <div className="flex flex-col">
-                <h1 className="text-3xl font-bold gradient-text">سِعَة</h1>
-                <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">Saeaa</p>
+                <h1 className="text-3xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</h1>
+                <p className="text-lg font-semibold text-primary">{BRAND_NAME_EN}</p>
               </div>
             </div>
-            <p className="text-gray-600 dark:text-gray-400 text-xs text-center">منصة أسواقك الرقمية | Your Digital Markets Platform</p>
+            <p className="text-muted-foreground text-xs text-center">{BRAND_TAGLINE_AR} | {BRAND_TAGLINE_EN}</p>
           </Link>
 
-          <Card className="border-0 shadow-xl bg-white dark:bg-gray-800">
+          <Card className="shadow-xl border-border/50">
             <CardHeader className="space-y-1 text-center pb-6">
               {/* Interactive Face */}
               <div className="flex justify-center mb-4">
@@ -229,10 +254,10 @@ export default function Login() {
                 />
               </div>
               
-              <CardTitle className="text-2xl font-bold text-gray-900 dark:text-white">
+              <CardTitle className="text-2xl font-heading font-bold">
                 {showRecoveryMode ? 'استرداد الحساب' : 'تسجيل الدخول'}
               </CardTitle>
-              <CardDescription className="text-base text-gray-600 dark:text-gray-400">
+              <CardDescription className="text-base">
                 {showRecoveryMode 
                   ? 'أدخل رمز الاسترداد السري وكلمة المرور' 
                   : 'سجل دخولك لإدارة متجرك الإلكتروني'}
@@ -246,7 +271,7 @@ export default function Login() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full h-11 border-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="w-full h-11 border-2 hover:bg-muted/50 transition-colors"
                     onClick={handleGoogleSignIn}
                   >
                     <svg className="ml-2 h-5 w-5" viewBox="0 0 24 24">
@@ -255,7 +280,7 @@ export default function Login() {
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                     </svg>
-                    <span className="text-gray-700 dark:text-gray-300">Google</span>
+                    <span className="text-foreground">Google</span>
                   </Button>
 
                   <div className="relative">
@@ -263,18 +288,18 @@ export default function Login() {
                       <Separator />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white dark:bg-gray-800 px-2 text-gray-500">{t('common.or', 'OR')}</span>
+                      <span className="bg-card px-2 text-muted-foreground">{t('common.or', 'OR')}</span>
                     </div>
                   </div>
 
                   {/* Login Form */}
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="identifier" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Label htmlFor="identifier" className="text-sm font-medium">
                         {t('auth.login.emailOrUsername', 'البريد الإلكتروني أو اسم المستخدم')}
                       </Label>
                       <div className="relative">
-                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
                           id="identifier"
                           type="text"
@@ -284,17 +309,17 @@ export default function Login() {
                           onFocus={() => setIsFocused(true)}
                           onBlur={() => setIsFocused(false)}
                           required
-                          className="h-11 pr-10 border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-500"
+                          className="h-11 pr-10 border-border focus:border-primary focus:ring-primary"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Label htmlFor="password" className="text-sm font-medium">
                         {t('auth.login.password')}
                       </Label>
                       <div className="relative">
-                        <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
                           id="password"
                           type={showPassword ? 'text' : 'password'}
@@ -309,12 +334,12 @@ export default function Login() {
                             setPasswordFieldActive(false);
                           }}
                           required
-                          className="h-11 px-10 border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-500"
+                          className="h-11 px-10 border-border focus:border-primary focus:ring-primary"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         >
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
@@ -326,13 +351,13 @@ export default function Login() {
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
                         />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">تذكرني</span>
+                        <span className="text-sm text-muted-foreground">تذكرني</span>
                       </label>
                       <Link
                         to="/forgot-password"
-                        className="text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-semibold transition-colors"
+                        className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors"
                       >
                         نسيت كلمة المرور؟
                       </Link>
@@ -340,7 +365,7 @@ export default function Login() {
 
                     <Button 
                       type="submit" 
-                      className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-medium shadow-lg hover:shadow-xl transition-all mt-6"
+                      className="w-full h-11 gradient-primary font-medium shadow-md hover:shadow-lg transition-all mt-6"
                       disabled={loading}
                     >
                       {loading ? (
@@ -363,7 +388,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowRecoveryMode(true)}
-                      className="text-sm text-gray-500 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2 mx-auto"
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2 mx-auto"
                     >
                       <Key className="w-4 h-4" />
                       نسيت بريدك الإلكتروني؟ استخدم رمز الاسترداد
@@ -372,14 +397,14 @@ export default function Login() {
                 </>
               ) : (
                 <>
-              {/* Recovery Mode Form */}
+                  {/* Recovery Mode Form */}
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="recoveryId" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Label htmlFor="recoveryId" className="text-sm font-medium">
                         رمز الاسترداد | Recovery ID
                       </Label>
                       <div className="relative">
-                        <Key className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <Key className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
                           id="recoveryId"
                           type="text"
@@ -388,7 +413,7 @@ export default function Login() {
                           onChange={handleInputChange(setRecoveryId)}
                           onFocus={() => setIsFocused(true)}
                           onBlur={() => setIsFocused(false)}
-                          className="h-11 pr-10 border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-indigo-500 font-mono text-center tracking-wider"
+                          className="h-11 pr-10 border-border focus:border-primary focus:ring-primary font-mono text-center tracking-wider"
                         />
                       </div>
                     </div>
@@ -399,7 +424,7 @@ export default function Login() {
                         type="button"
                         onClick={handleRecoverEmail}
                         disabled={loading || !recoveryId}
-                        className="w-full h-11 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                        className="w-full h-11 gradient-primary"
                       >
                         {loading ? (
                           <Loader2 className="h-5 w-5 animate-spin" />
@@ -415,23 +440,21 @@ export default function Login() {
                     {/* Step 2: Email Revealed - Show options */}
                     {recoveredEmail && (
                       <div className="space-y-4">
-                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl p-4 text-center">
-                          <p className="text-sm text-green-700 dark:text-green-300 mb-1">
+                        <div className="bg-success/10 border border-success/20 rounded-xl p-4 text-center">
+                          <p className="text-sm text-success mb-1">
                             ✅ تم العثور على حسابك!
                           </p>
-                          <p className="text-lg font-mono font-bold text-green-800 dark:text-green-200 dir-ltr">
+                          <p className="text-lg font-mono font-bold text-success dir-ltr">
                             {recoveredEmail}
                           </p>
                         </div>
 
                         <div className="space-y-3">
-                          {/* Option 1: Send Password Reset Email */}
                           <Button
                             type="button"
                             onClick={async () => {
                               setLoading(true);
                               try {
-                                // Send password reset using recovery ID (server gets the real email)
                                 await authService.sendResetByRecoveryId(recoveryId);
                                 toast({
                                   title: 'تم الإرسال!',
@@ -440,15 +463,15 @@ export default function Login() {
                               } catch (error) {
                                 toast({
                                   variant: 'destructive',
-                                  title: 'خطأ',
-                                  description: 'فشل إرسال رابط إعادة التعيين. تأكد من رمز الاسترداد.',
+                                  title: 'تعذر الإرسال',
+                                  description: 'لم نتمكن من إرسال رابط إعادة التعيين. يرجى المحاولة مرة أخرى.',
                                 });
                               } finally {
                                 setLoading(false);
                               }
                             }}
                             disabled={loading}
-                            className="w-full h-11 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                            className="w-full h-11 bg-success hover:bg-success/90"
                           >
                             {loading ? (
                               <Loader2 className="h-5 w-5 animate-spin" />
@@ -460,7 +483,6 @@ export default function Login() {
                             )}
                           </Button>
 
-                          {/* Option 2: Go to login with the email */}
                           <Button
                             type="button"
                             variant="outline"
@@ -492,7 +514,7 @@ export default function Login() {
                         setRecoveryPassword('');
                         setRecoveredEmail(null);
                       }}
-                      className="text-sm text-gray-500 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2 mx-auto"
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2 mx-auto"
                     >
                       <ArrowLeft className="w-4 h-4" />
                       العودة لتسجيل الدخول بالبريد
@@ -504,11 +526,11 @@ export default function Login() {
 
             <CardFooter className="flex flex-col gap-4 pt-2">
               <Separator />
-              <p className="text-sm text-center text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-center text-muted-foreground">
                 ليس لديك حساب؟{' '}
                 <Link 
                   to="/register" 
-                  className="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-semibold hover:underline"
+                  className="text-primary hover:text-primary/80 font-semibold hover:underline"
                 >
                   إنشاء حساب جديد
                 </Link>
@@ -518,15 +540,16 @@ export default function Login() {
 
           {/* Footer Links */}
           <div className="mt-6 text-center space-y-2">
-            <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
-              <Link to="/privacy" className="hover:text-indigo-600 transition-colors">{t('landing.footer.links.privacy')}</Link>
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              <Link to="/privacy" className="hover:text-primary transition-colors">{t('landing.footer.links.privacy')}</Link>
               <span>•</span>
-              <Link to="/terms" className="hover:text-indigo-600 transition-colors">{t('landing.footer.links.terms')}</Link>
+              <Link to="/terms" className="hover:text-primary transition-colors">{t('landing.footer.links.terms')}</Link>
               <span>•</span>
-              <Link to="/help" className="hover:text-indigo-600 transition-colors">{t('landing.footer.links.helpCenter')}</Link>
+              <Link to="/help" className="hover:text-primary transition-colors">{t('landing.footer.links.helpCenter')}</Link>
             </div>
           </div>
         </div>
+        <VersionFooter className="absolute bottom-0 left-0 right-0 py-2 bg-background" />
       </div>
     </div>
   );

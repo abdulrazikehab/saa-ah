@@ -50,8 +50,8 @@ export default function CheckoutSettings() {
       });
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

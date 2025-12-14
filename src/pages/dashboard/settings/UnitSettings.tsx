@@ -48,8 +48,8 @@ export default function UnitSettings() {
       setUnits(Array.isArray(response) ? response : []);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل تحميل الوحدات',
+        title: 'تعذر تحميل الوحدات',
+        description: 'حدث خطأ أثناء تحميل الوحدات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }
@@ -84,8 +84,8 @@ export default function UnitSettings() {
       loadUnits();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ الوحدة',
+        title: 'تعذر حفظ الوحدة',
+        description: 'حدث خطأ أثناء حفظ الوحدة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -118,8 +118,8 @@ export default function UnitSettings() {
       loadUnits();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حذف الوحدة',
+        title: 'تعذر حذف الوحدة',
+        description: 'حدث خطأ أثناء حذف الوحدة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

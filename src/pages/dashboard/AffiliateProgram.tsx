@@ -70,8 +70,8 @@ export default function AffiliateProgram() {
     } catch (error) {
       console.error('Failed to load affiliate data:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل بيانات برنامج الشركاء',
+        title: 'تعذر تحميل بيانات برنامج الشركاء',
+        description: 'حدث خطأ أثناء تحميل البيانات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -95,8 +95,8 @@ export default function AffiliateProgram() {
     } catch (error) {
       console.error('Failed to save settings:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -116,8 +116,8 @@ export default function AffiliateProgram() {
     } catch (error) {
       console.error('Failed to invite customers:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل إرسال الدعوات',
+        title: 'تعذر إرسال الدعوات',
+        description: 'حدث خطأ أثناء إرسال دعوات العملاء. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -141,8 +141,8 @@ export default function AffiliateProgram() {
     } catch (error) {
       console.error('Failed to send invites:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل إرسال الدعوات',
+        title: 'تعذر إرسال الدعوات',
+        description: 'حدث خطأ أثناء إرسال الدعوات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -166,8 +166,8 @@ export default function AffiliateProgram() {
     } catch (error) {
       console.error('Failed to update affiliate:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث حالة الشريك',
+        title: 'تعذر تحديث حالة الشريك',
+        description: 'حدث خطأ أثناء تحديث حالة الشريك. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

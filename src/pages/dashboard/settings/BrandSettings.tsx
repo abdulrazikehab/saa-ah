@@ -65,8 +65,8 @@ export default function BrandSettings() {
       setBrands(Array.isArray(response) ? response : []);
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل تحميل العلامات التجارية',
+        title: 'تعذر تحميل العلامات التجارية',
+        description: 'حدث خطأ أثناء تحميل العلامات التجارية. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     }
@@ -111,8 +111,8 @@ export default function BrandSettings() {
       loadBrands();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حفظ العلامة التجارية',
+        title: 'تعذر حفظ العلامة التجارية',
+        description: 'حدث خطأ أثناء حفظ العلامة التجارية. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -154,8 +154,8 @@ export default function BrandSettings() {
       loadBrands();
     } catch (error: any) {
       toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل حذف العلامة التجارية',
+        title: 'تعذر حذف العلامة التجارية',
+        description: 'حدث خطأ أثناء حذف العلامة التجارية. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }

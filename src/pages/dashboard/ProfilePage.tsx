@@ -58,8 +58,8 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Failed to load profile:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل الملف الشخصي',
+        title: 'تعذر تحميل الملف الشخصي',
+        description: 'حدث خطأ أثناء تحميل الملف الشخصي. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -110,8 +110,8 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Failed to save profile:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الملف الشخصي',
+        title: 'تعذر حفظ الملف الشخصي',
+        description: 'حدث خطأ أثناء حفظ الملف الشخصي. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

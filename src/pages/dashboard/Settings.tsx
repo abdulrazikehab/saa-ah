@@ -124,8 +124,8 @@ export default function Settings() {
     } catch (error) {
       console.error('Failed to save settings:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ الإعدادات',
+        title: 'تعذر حفظ الإعدادات',
+        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -218,7 +218,7 @@ export default function Settings() {
                         }
                       } catch (err) {
                         console.error(err);
-                        toast({ title: 'خطأ', description: 'فشل رفع الشعار', variant: 'destructive' });
+                        toast({ title: 'تعذر رفع الشعار', description: 'حدث خطأ أثناء رفع الشعار. يرجى المحاولة مرة أخرى.', variant: 'destructive' });
                       }
                     }}
                   />

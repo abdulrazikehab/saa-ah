@@ -101,7 +101,7 @@ export default function PlansManager() {
   const loadPlans = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/plans', { requireAuth: false, adminApiKey: getAdminApiKey() });
+      const response = await coreApi.get('/admin/master/plans', { requireAuth: true, adminApiKey: getAdminApiKey() });
       // Handle different response formats
       const plansData = (response as any)?.plans || (response as any)?.data?.plans || (Array.isArray(response) ? response : []);
       setPlans(plansData);
@@ -150,7 +150,7 @@ export default function PlansManager() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await coreApi.post('/admin/master/plans', formData, { requireAuth: false, adminApiKey: getAdminApiKey() });
+      await coreApi.post('/admin/master/plans', formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan created successfully',
@@ -171,7 +171,7 @@ export default function PlansManager() {
     e.preventDefault();
     if (!editingPlan) return;
     try {
-      await coreApi.put(`/admin/master/plans/${editingPlan.id}`, formData, { requireAuth: false, adminApiKey: getAdminApiKey() });
+      await coreApi.put(`/admin/master/plans/${editingPlan.id}`, formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan updated successfully',
@@ -191,7 +191,7 @@ export default function PlansManager() {
 
   const handleToggle = async (id: string) => {
     try {
-      await coreApi.patch(`/admin/master/plans/${id}/toggle`, {}, { requireAuth: false, adminApiKey: getAdminApiKey() });
+      await coreApi.patch(`/admin/master/plans/${id}/toggle`, {}, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan status updated',
@@ -209,7 +209,7 @@ export default function PlansManager() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this plan?')) return;
     try {
-      await coreApi.delete(`/admin/master/plans/${id}`, { requireAuth: false, adminApiKey: getAdminApiKey() });
+      await coreApi.delete(`/admin/master/plans/${id}`, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Plan deleted successfully',
@@ -350,13 +350,20 @@ export default function PlansManager() {
 
               {/* Price */}
               <div className="mb-4">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-white">{plan.price}</span>
-                  <span className="text-gray-400">{plan.currency}</span>
-                  <span className="text-gray-500 text-sm">
-                    /{plan.billingCycle === 'MONTHLY' ? 'month' : plan.billingCycle === 'YEARLY' ? 'year' : 'lifetime'}
-                  </span>
-                </div>
+                {Number(plan.price) === 0 ? (
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-green-500">Free</span>
+                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-0.5 rounded-full">Forever</span>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-bold text-white">{plan.price}</span>
+                    <span className="text-gray-400">{plan.currency}</span>
+                    <span className="text-gray-500 text-sm">
+                      /{plan.billingCycle === 'MONTHLY' ? 'month' : plan.billingCycle === 'YEARLY' ? 'year' : 'lifetime'}
+                    </span>
+                  </div>
+                )}
                 {plan.description && (
                   <p className="text-sm text-gray-400 mt-2">{plan.description}</p>
                 )}

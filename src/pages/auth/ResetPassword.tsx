@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { authApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Mail, Key, Eye, EyeOff, CheckCircle2, Sparkles } from 'lucide-react';
+import { VersionFooter } from '@/components/common/VersionFooter';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -94,8 +95,8 @@ export default function ResetPassword() {
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: error instanceof Error ? error.message : 'حدث خطأ ما',
+        title: 'تعذر تغيير كلمة المرور',
+        description: 'تأكد من صحة رمز التحقق والبريد الإلكتروني وحاول مرة أخرى.',
       });
     } finally {
       setIsLoading(false);
@@ -103,7 +104,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex relative">
       {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-12 flex-col justify-between relative overflow-hidden">
         <div className="absolute top-20 right-20 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse-slow" />
@@ -112,7 +113,7 @@ export default function ResetPassword() {
         <div className="relative z-10">
           <Link to="/" className="flex items-center gap-3 group">
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
-              <img src="/saas-logo.png" alt="Logo" className="w-8 h-8 bg-transparent" />
+              <img src={getLogoUrl()} alt="Logo" className="w-8 h-8 bg-transparent" />
             </div>
             <span className="text-3xl font-bold text-white">Saa'ah</span>
           </Link>
@@ -151,7 +152,7 @@ export default function ResetPassword() {
         <div className="w-full max-w-md">
           <Link to="/" className="flex lg:hidden items-center justify-center gap-3 mb-8">
             <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-              <img src="/saas-logo.png" alt="Logo" className="w-8 h-8 bg-transparent object-contain" />
+              <img src={getLogoUrl()} alt="Logo" className="w-8 h-8 bg-transparent object-contain" />
             </div>
             <span className="text-2xl font-bold gradient-text">Saa'ah</span>
           </Link>
@@ -339,6 +340,7 @@ export default function ResetPassword() {
             </Link>
           </div>
         </div>
+        <VersionFooter className="absolute bottom-0 left-0 right-0 py-2 bg-gray-50 dark:bg-gray-900" />
       </div>
     </div>
   );

@@ -120,7 +120,14 @@ export const authService = {
       requireAuth: true,
     }),
 
-  switchStore: (tenantId: string): Promise<{ success: boolean; tenantId: string }> =>
+  switchStore: (tenantId: string): Promise<{ 
+    success: boolean; 
+    tenantId: string; 
+    accessToken?: string;
+    refreshToken?: string;
+    tenantName?: string;
+    tenantSubdomain?: string;
+  }> =>
     apiClient.fetch(`${apiClient.authUrl}/auth/markets/switch`, {
       method: 'POST',
       body: JSON.stringify({ tenantId }),

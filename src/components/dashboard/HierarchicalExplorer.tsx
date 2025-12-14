@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, Folder, FolderOpen, Package, ArrowLeft, Plus, Tag, Eye, Edit, X, Image as ImageIcon, AlertTriangle, Home, Store, Box } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, Package, ArrowLeft, Plus, Tag, Eye, Edit, X, Image as ImageIcon, AlertTriangle, Home, Store, Box, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -126,6 +126,11 @@ export function HierarchicalExplorer({
   });
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [creatingBrand, setCreatingBrand] = useState(false);
+  
+  // Delete brand state
+  const [showDeleteBrandDialog, setShowDeleteBrandDialog] = useState(false);
+  const [brandToDelete, setBrandToDelete] = useState<Brand | null>(null);
+  const [deletingBrand, setDeletingBrand] = useState(false);
 
   // Product details state
   const [showProductDetails, setShowProductDetails] = useState(false);
@@ -227,8 +232,8 @@ export function HierarchicalExplorer({
     } catch (error) {
       console.error('Failed to load product details:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل تفاصيل المنتج',
+        title: 'تعذر تحميل المنتج',
+        description: 'حدث خطأ أثناء تحميل تفاصيل المنتج. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
       setShowProductDetails(false);
@@ -285,8 +290,8 @@ export function HierarchicalExplorer({
     } catch (error) {
       console.error('Failed to save product:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حفظ التغييرات',
+        title: 'تعذر حفظ التغييرات',
+        description: 'لم نتمكن من حفظ تعديلات المنتج. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -352,6 +357,30 @@ export function HierarchicalExplorer({
     setCurrentView('categories');
     setCategoryPath([]);
     onBrandSelect?.(brandId);
+  };
+
+  const handleDeleteBrand = async () => {
+    if (!brandToDelete) return;
+    
+    setDeletingBrand(true);
+    try {
+      await coreApi.deleteBrand(brandToDelete.id);
+      toast({
+        title: 'تم الحذف',
+        description: `تم حذف العلامة التجارية "${brandToDelete.nameAr || brandToDelete.name}" بنجاح`,
+      });
+      setShowDeleteBrandDialog(false);
+      setBrandToDelete(null);
+      onBrandsUpdate?.();
+    } catch (error: any) {
+      toast({
+        title: 'خطأ',
+        description: error.message || 'فشل حذف العلامة التجارية',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingBrand(false);
+    }
   };
 
   const handleCategoryClick = async (category: Category) => {
@@ -535,8 +564,8 @@ export function HierarchicalExplorer({
   const handleCreateCategory = async () => {
     if (!newCategoryData.name.trim()) {
       toast({
-        title: 'خطأ',
-        description: 'اسم الفئة مطلوب',
+        title: 'اسم الفئة مطلوب',
+        description: 'يرجى إدخال اسم للفئة الجديدة',
         variant: 'destructive',
       });
       return;
@@ -555,7 +584,7 @@ export function HierarchicalExplorer({
       const existingSubcategories = categories.filter(cat => cat.parentId === parentId);
       if (existingSubcategories.length >= MAX_SUBCATEGORIES) {
         toast({
-          title: 'خطأ',
+          title: 'الحد الأقصى للفئات الفرعية',
           description: `لا يمكن إضافة أكثر من ${MAX_SUBCATEGORIES} فئات فرعية لكل فئة رئيسية`,
           variant: 'destructive',
         });
@@ -626,10 +655,9 @@ export function HierarchicalExplorer({
       }
     } catch (error: unknown) {
       console.error('Failed to create category:', error);
-      const errorMessage = error instanceof Error ? error.message : 'فشل إنشاء الفئة';
       toast({
-        title: 'خطأ',
-        description: errorMessage,
+        title: 'تعذر إنشاء الفئة',
+        description: 'حدث خطأ أثناء إنشاء الفئة الجديدة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -640,8 +668,8 @@ export function HierarchicalExplorer({
   const handleCreateBrand = async () => {
     if (!newBrandData.name.trim()) {
       toast({
-        title: 'خطأ',
-        description: 'اسم العلامة التجارية مطلوب',
+        title: 'اسم العلامة التجارية مطلوب',
+        description: 'يرجى إدخال اسم للعلامة التجارية الجديدة',
         variant: 'destructive',
       });
       return;
@@ -692,10 +720,9 @@ export function HierarchicalExplorer({
       }
     } catch (error: unknown) {
       console.error('Failed to create brand:', error);
-      const errorMessage = error instanceof Error ? error.message : 'فشل إنشاء العلامة التجارية';
       toast({
-        title: 'خطأ',
-        description: errorMessage,
+        title: 'تعذر إنشاء العلامة التجارية',
+        description: 'حدث خطأ أثناء إنشاء العلامة التجارية الجديدة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -891,37 +918,61 @@ export function HierarchicalExplorer({
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {brands.map((brand) => (
-                        <div
-                          key={brand.id}
-                          className="group cursor-pointer"
-                          onClick={() => handleBrandClick(brand.id)}
-                        >
-                          <div className="flex flex-col items-center p-4 rounded-lg hover:bg-slate-800 transition-colors">
-                            {/* Brand Logo/Icon */}
-                            <div className={`w-16 h-16 mb-3 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-200 ${
-                              brand.logo 
-                                ? 'bg-white shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/40 group-hover:scale-105' 
-                                : 'bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 group-hover:border-cyan-500'
-                            }`}>
-                              {brand.logo ? (
-                                <img 
-                                  src={brand.logo} 
-                                  alt={brand.name} 
-                                  className="w-full h-full object-contain p-1.5"
-                                />
-                              ) : (
-                                <Store className="h-8 w-8 text-cyan-500" />
-                              )}
+                        <ContextMenu key={brand.id}>
+                          <ContextMenuTrigger asChild>
+                            <div
+                              className="group cursor-pointer"
+                              onClick={() => handleBrandClick(brand.id)}
+                            >
+                              <div className="flex flex-col items-center p-4 rounded-lg hover:bg-slate-800 transition-colors">
+                                {/* Brand Logo/Icon */}
+                                <div className={`w-16 h-16 mb-3 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-200 ${
+                                  brand.logo 
+                                    ? 'bg-white shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/40 group-hover:scale-105' 
+                                    : 'bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 group-hover:border-cyan-500'
+                                }`}>
+                                  {brand.logo ? (
+                                    <img 
+                                      src={brand.logo} 
+                                      alt={brand.name} 
+                                      className="w-full h-full object-contain p-1.5"
+                                    />
+                                  ) : (
+                                    <Store className="h-8 w-8 text-cyan-500" />
+                                  )}
+                                </div>
+                                {/* Brand Name */}
+                                <p className="text-sm text-slate-300 text-center font-medium truncate w-full group-hover:text-white">
+                                  {brand.nameAr || brand.name}
+                                </p>
+                                {brand.code && (
+                                  <p className="text-xs text-slate-500 mt-0.5">{brand.code}</p>
+                                )}
+                              </div>
                             </div>
-                            {/* Brand Name */}
-                            <p className="text-sm text-slate-300 text-center font-medium truncate w-full group-hover:text-white">
-                              {brand.nameAr || brand.name}
-                            </p>
-                            {brand.code && (
-                              <p className="text-xs text-slate-500 mt-0.5">{brand.code}</p>
-                            )}
-                          </div>
-                        </div>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="w-48">
+                            <ContextMenuItem
+                              onClick={() => handleBrandClick(brand.id)}
+                              className="gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                              عرض المحتوى
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBrandToDelete(brand);
+                                setShowDeleteBrandDialog(true);
+                              }}
+                              className="gap-2 text-red-500 focus:text-red-500"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              حذف العلامة التجارية
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
                       ))}
                     </div>
                   )}
@@ -1418,6 +1469,40 @@ export function HierarchicalExplorer({
               disabled={creatingBrand || !newBrandData.name.trim()}
             >
               {creatingBrand ? 'جاري الإنشاء...' : 'إنشاء'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Brand Confirmation Dialog */}
+      <Dialog open={showDeleteBrandDialog} onOpenChange={setShowDeleteBrandDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-500">حذف العلامة التجارية</DialogTitle>
+            <DialogDescription>
+              هل أنت متأكد من حذف العلامة التجارية "{brandToDelete?.nameAr || brandToDelete?.name}"؟
+              <br />
+              <span className="text-red-400 font-medium">هذا الإجراء لا يمكن التراجع عنه.</span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteBrandDialog(false);
+                setBrandToDelete(null);
+              }}
+              disabled={deletingBrand}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteBrand}
+              disabled={deletingBrand}
+            >
+              {deletingBrand ? 'جاري الحذف...' : 'حذف'}
             </Button>
           </DialogFooter>
         </DialogContent>

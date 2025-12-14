@@ -90,7 +90,7 @@ export default function CustomersManager() {
       loadLoyaltyPrograms();
     } catch (error) {
       console.error('Program submit error', error);
-      toast({ title: 'خطأ', description: 'فشل حفظ البرنامج', variant: 'destructive' });
+      toast({ title: 'تعذر حفظ البرنامج', description: 'حدث خطأ أثناء حفظ البرنامج. يرجى المحاولة مرة أخرى.', variant: 'destructive' });
     }
   };
 
@@ -103,8 +103,8 @@ export default function CustomersManager() {
     } catch (error) {
       console.error('Failed to load customers:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل بيانات العملاء',
+        title: 'تعذر تحميل بيانات العملاء',
+        description: 'حدث خطأ أثناء تحميل بيانات العملاء. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
       setCustomers([]);

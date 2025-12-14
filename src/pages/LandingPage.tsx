@@ -6,6 +6,8 @@ import {
   Check, Star, Smartphone, ChevronRight, Moon, Sun, Crown, Building2, Loader2, Play
 } from 'lucide-react';
 import publicService, { Partner, Plan, PlatformStats, Testimonial } from '@/services/public.service';
+import { getLogoUrl } from '@/config/logo.config';
+import { VersionFooter } from '@/components/common/VersionFooter';
 
 export default function LandingPage() {
   const [isDark, setIsDark] = useState(true);
@@ -153,7 +155,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-20">
             <div className="flex items-center gap-3">
               <img 
-                src="/branding/saeaa-logo.png" 
+                src={getLogoUrl()} 
                 alt="Saeaa - سِعَة" 
                 className="h-12 w-auto"
               />
@@ -420,9 +422,12 @@ export default function LandingPage() {
           ) : (
             <div className={`grid ${displayPartners.length === 1 ? 'md:grid-cols-1 max-w-md' : displayPartners.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-8 max-w-4xl mx-auto`}>
               {displayPartners.map((partner, index) => (
-                <div 
-                  key={partner.id} 
-                  className={`group relative overflow-hidden ${isDark ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-white border-gray-200'} border rounded-2xl p-8 hover:border-purple-500/50 transition-all hover:shadow-2xl ${isDark ? 'hover:shadow-purple-900/20' : 'hover:shadow-purple-500/20'}`}
+                <a 
+                  key={partner.id}
+                  href={partner.website || '#'}
+                  target={partner.website ? '_blank' : undefined}
+                  rel={partner.website ? 'noopener noreferrer' : undefined}
+                  className={`group relative overflow-hidden ${isDark ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700' : 'bg-white border-gray-200'} border rounded-2xl p-8 hover:border-purple-500/50 transition-all hover:shadow-2xl ${isDark ? 'hover:shadow-purple-900/20' : 'hover:shadow-purple-500/20'} ${partner.website ? 'cursor-pointer' : 'cursor-default'}`}
                 >
                   <div className="flex flex-col items-center text-center">
                     <div className={`w-24 h-24 mb-6 ${isDark ? 'bg-white/10' : 'bg-gray-100'} backdrop-blur-sm rounded-2xl p-4 group-hover:scale-110 transition-transform`}>
@@ -438,16 +443,18 @@ export default function LandingPage() {
                     <h3 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
                       {partner.name} {partner.nameAr !== partner.name && `- ${partner.nameAr}`}
                     </h3>
-                    <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>{partner.descriptionAr}</p>
+                    <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>{partner.descriptionAr || partner.description}</p>
                     <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'} leading-relaxed`}>
                       {partner.description}
                     </p>
-                    <div className="mt-6 inline-flex items-center gap-2 text-purple-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-sm">تصفح المنتجات</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </div>
+                    {partner.website && (
+                      <div className="mt-6 inline-flex items-center gap-2 text-purple-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-sm">زيارة الموقع</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </div>
+                    )}
                   </div>
-                </div>
+                </a>
               ))}
             </div>
           )}
@@ -566,13 +573,20 @@ export default function LandingPage() {
                   </div>
                   
                   <div className="mb-6">
-                    <div className="flex items-baseline gap-1">
-                      <span className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{plan.price}</span>
-                      <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>{plan.currency}</span>
-                      <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                        /{plan.billingCycle === 'MONTHLY' ? 'شهر' : plan.billingCycle === 'YEARLY' ? 'سنة' : 'مدى الحياة'}
-                      </span>
-                    </div>
+                    {Number(plan.price) === 0 ? (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-bold text-green-500">مجاني</span>
+                        <span className="text-xs bg-green-500/10 text-green-500 px-2 py-0.5 rounded-full">للأبد</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{plan.price}</span>
+                        <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>{plan.currency}</span>
+                        <span className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                          /{plan.billingCycle === 'MONTHLY' ? 'شهر' : plan.billingCycle === 'YEARLY' ? 'سنة' : 'مدى الحياة'}
+                        </span>
+                      </div>
+                    )}
                     {plan.description && (
                       <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-2`}>{plan.descriptionAr || plan.description}</p>
                     )}
@@ -589,13 +603,15 @@ export default function LandingPage() {
                   
                   <Link
                     to="/register"
-                    className={`block w-full text-center py-3 rounded-xl font-semibold ${plan.isPopular 
-                      ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700' 
-                      : isDark 
-                        ? 'bg-slate-700 text-white hover:bg-slate-600' 
-                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'} transition-all`}
+                    className={`block w-full text-center py-3 rounded-xl font-semibold ${Number(plan.price) === 0
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700'
+                      : plan.isPopular 
+                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700' 
+                        : isDark 
+                          ? 'bg-slate-700 text-white hover:bg-slate-600' 
+                          : 'bg-gray-100 text-gray-900 hover:bg-gray-200'} transition-all`}
                   >
-                    ابدأ الآن
+                    {Number(plan.price) === 0 ? 'ابدأ مجاناً' : 'ابدأ الآن'}
                   </Link>
                 </div>
               ))}
@@ -667,7 +683,7 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <img 
-                src="/branding/saeaa-logo.png" 
+                src={getLogoUrl()} 
                 alt="Saeaa - سِعَة" 
                 className="h-10 w-auto"
               />
@@ -676,6 +692,7 @@ export default function LandingPage() {
               © 2025 Saeaa - سِعَة. جميع الحقوق محفوظة.
             </div>
           </div>
+          <VersionFooter className={`mt-4 pt-4 border-t ${isDark ? 'border-slate-800 text-slate-400' : 'border-gray-200 text-gray-500'}`} />
         </div>
       </footer>
 

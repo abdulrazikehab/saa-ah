@@ -70,8 +70,8 @@ export default function HierarchicalManager() {
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل البيانات',
+        title: 'تعذر تحميل البيانات',
+        description: 'حدث خطأ أثناء تحميل البيانات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {

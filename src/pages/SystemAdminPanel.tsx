@@ -357,7 +357,7 @@ export default function SystemAdminPanel() {
   const fetchDashboardStats = useCallback(async () => {
     try {
       setStatsLoading(true);
-      const response = await coreApi.get('/admin/master/overview', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
+      const response = await coreApi.get('/admin/master/overview', { requireAuth: true, adminApiKey: ADMIN_PASSWORD });
       setDashboardStats(response);
     } catch (error) {
       // Error logged to backend
@@ -368,7 +368,7 @@ export default function SystemAdminPanel() {
 
   const fetchSystemHealth = useCallback(async () => {
     try {
-      const response = await coreApi.get('/admin/master/system-health', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
+      const response = await coreApi.get('/admin/master/system-health', { requireAuth: true, adminApiKey: ADMIN_PASSWORD });
       setSystemHealth(response);
     } catch (error) {
       // Error logged to backend
@@ -379,8 +379,8 @@ export default function SystemAdminPanel() {
     try {
       // Fetch from both auth and core backends
       const [authData, coreData] = await Promise.allSettled([
-        apiClient.get(`${apiClient.authUrl}/auth/security-events`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
-        coreApi.get('/admin/master/security-events', { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
+        apiClient.get(`${apiClient.authUrl}/auth/security-events`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        coreApi.get('/admin/master/security-events', { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
       ]);
       
       const authLogs = authData.status === 'fulfilled' ? normalizeLogs(authData.value, 'security') : [];
@@ -408,8 +408,8 @@ export default function SystemAdminPanel() {
     try {
       // Fetch all error logs from both auth and core backends (with high limit to get all)
       const [authData, coreData] = await Promise.allSettled([
-        apiClient.get(`${apiClient.authUrl}/auth/error-logs?limit=10000`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
-        coreApi.get('/admin/master/error-logs?limit=10000', { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })),
+        apiClient.get(`${apiClient.authUrl}/auth/error-logs?limit=10000`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        coreApi.get('/admin/master/error-logs?limit=10000', { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })),
       ]);
       
       const authLogs = authData.status === 'fulfilled' ? normalizeLogs(authData.value, 'error') : [];
@@ -436,8 +436,8 @@ export default function SystemAdminPanel() {
     try {
       // Fetch from both auth and core backends
       const [authData, coreData] = await Promise.allSettled([
-        apiClient.get(`${apiClient.authUrl}/auth/audit-logs`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
-        coreApi.get('/admin/master/audit-logs', { requireAuth: false, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
+        apiClient.get(`${apiClient.authUrl}/auth/audit-logs`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        coreApi.get('/admin/master/audit-logs', { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
       ]);
       
       const authLogs = authData.status === 'fulfilled' ? normalizeLogs(authData.value, 'audit') : [];
@@ -478,7 +478,7 @@ export default function SystemAdminPanel() {
   // Fetch Customer Fingerprints
   const fetchCustomerFingerprints = useCallback(async () => {
     try {
-      const data = await coreApi.get('/admin/master/customers', { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
+      const data = await coreApi.get('/admin/master/customers', { requireAuth: true, adminApiKey: ADMIN_PASSWORD });
       setCustomerFingerprints(data);
     } catch (error) {
       // Error logged to backend
@@ -646,7 +646,7 @@ export default function SystemAdminPanel() {
 
     try {
       setResetting(true);
-      await coreApi.post('/admin/master/reset-database', {}, { requireAuth: false, adminApiKey: ADMIN_PASSWORD });
+      await coreApi.post('/admin/master/reset-database', {}, { requireAuth: true, adminApiKey: ADMIN_PASSWORD });
       toast({
         title: '✅ Success',
         description: 'Database has been reset successfully',
@@ -1283,7 +1283,7 @@ export default function SystemAdminPanel() {
                   <div className="flex items-center gap-2">
                     <button 
                       onClick={() => {
-                        apiClient.fetch(`${apiClient.authUrl}/auth/test-security-event`, { requireAuth: false, adminApiKey: ADMIN_PASSWORD })
+                        apiClient.fetch(`${apiClient.authUrl}/auth/test-security-event`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD })
                           .then(data => {
                             toast({ title: language === 'ar' ? 'تم إنشاء حدث اختبار' : 'Test event created', description: data.message });
                             fetchLogs();

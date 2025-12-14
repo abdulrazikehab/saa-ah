@@ -55,8 +55,8 @@ export default function ReviewsManager() {
     } catch (error) {
       console.error('Failed to load reviews:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحميل التقييمات',
+        title: 'تعذر تحميل التقييمات',
+        description: 'حدث خطأ أثناء تحميل التقييمات. يرجى تحديث الصفحة.',
         variant: 'destructive',
       });
     } finally {
@@ -79,8 +79,8 @@ export default function ReviewsManager() {
     } catch (error) {
       console.error('Failed to update review status:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تحديث حالة التقييم',
+        title: 'تعذر تحديث حالة التقييم',
+        description: 'حدث خطأ أثناء تحديث حالة التقييم. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -96,8 +96,8 @@ export default function ReviewsManager() {
     } catch (error) {
       console.error('Failed to delete review:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل حذف التقييم',
+        title: 'تعذر حذف التقييم',
+        description: 'حدث خطأ أثناء حذف التقييم. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     }
@@ -117,8 +117,8 @@ export default function ReviewsManager() {
     } catch (error) {
       console.error('Failed to save response:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل إضافة الرد',
+        title: 'تعذر إضافة الرد',
+        description: 'حدث خطأ أثناء إضافة الرد. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
