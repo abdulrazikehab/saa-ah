@@ -4,13 +4,24 @@ import { isErrorObject } from '@/lib/error-utils';
 // Determine base URLs based on environment
 const getBaseUrl = (defaultPort: string) => {
   // Check if we have environment variables
-  const envUrl = defaultPort === '3001' 
+  let envUrl = defaultPort === '3001' 
     ? import.meta.env.VITE_AUTH_API_URL 
     : import.meta.env.VITE_CORE_API_URL;
   
   if (envUrl) {
     // Remove trailing slashes for consistency
-    return envUrl.replace(/\/+$/, '');
+    envUrl = envUrl.replace(/\/+$/, '');
+    
+    // If URL uses HTTPS but is an IP address, convert to HTTP
+    // IP addresses typically don't have valid SSL certificates
+    // Check if it's an IP address (IPv4 pattern: xxx.xxx.xxx.xxx)
+    const ipv4Pattern = /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?/;
+    if (ipv4Pattern.test(envUrl) && envUrl.startsWith('https://')) {
+      console.warn(`Converting HTTPS to HTTP for IP address URL: ${envUrl}`);
+      envUrl = envUrl.replace(/^https:\/\//, 'http://');
+    }
+    
+    return envUrl;
   }
   
   // For local development, use localhost with the appropriate port
@@ -152,7 +163,14 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), fetchOptions.timeout || 60000);
 
-    console.log('🌐 fetchApi: Making request to', url, 'with headers:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : undefined });
+    // Safely extract Authorization header for logging (headers is always a Record<string, string> here)
+    const headersObj = headers as Record<string, string>;
+    const authHeader = headersObj['Authorization'] || headersObj['authorization'];
+    
+    console.log('🌐 fetchApi: Making request to', url, 'with headers:', { 
+      ...headersObj, 
+      Authorization: authHeader ? 'Bearer ***' : undefined 
+    });
     
     const response = await fetch(url, {
       ...fetchOptions,
