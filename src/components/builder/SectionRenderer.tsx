@@ -734,9 +734,9 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
             }}
           >
             <div className="max-w-3xl mx-auto">
-              {props.title && <h2 className="text-4xl font-bold mb-4">{props.title}</h2>}
-              {props.description && <p className="text-xl mb-8">{props.description}</p>}
-              {props.buttonText && <Button size="lg" variant="secondary">{props.buttonText}</Button>}
+              {props.title && <h2 className="text-4xl font-bold mb-4">{String(props.title)}</h2>}
+              {props.description && <p className="text-xl mb-8">{String(props.description)}</p>}
+              {props.buttonText && <Button size="lg" variant="secondary">{String(props.buttonText)}</Button>}
             </div>
           </div>
         );
@@ -827,7 +827,7 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
             </div>
             {props.description && (
               <p className="text-center text-gray-600 dark:text-gray-400 mt-4 max-w-2xl mx-auto">
-                {props.description}
+                {String(props.description)}
               </p>
             )}
           </div>
@@ -1024,11 +1024,11 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
               <div className="flex gap-2 max-w-md mx-auto">
                 <input
                   type="email"
-                  placeholder={props.placeholder || 'Enter your email'}
+                  placeholder={String(props.placeholder || 'Enter your email')}
                   className="flex-1 px-4 py-3 rounded-lg text-gray-900"
                 />
                 <Button size="lg" variant="secondary">
-                  {props.buttonText || 'Subscribe'}
+                  {String(props.buttonText || 'Subscribe')}
                 </Button>
               </div>
             </div>
@@ -1043,11 +1043,11 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
               {props.videoUrl ? (
                 <div className="aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden">
                   <video
-                    src={props.videoUrl}
+                    src={String(props.videoUrl)}
                     controls={props.controls !== false}
                     autoPlay={props.autoPlay === true}
                     loop={props.loop === true}
-                    poster={props.thumbnail}
+                    poster={props.thumbnail ? String(props.thumbnail) : undefined}
                     className="w-full h-full"
                   />
                 </div>
@@ -1706,7 +1706,6 @@ function ProductListSection({ props }: { props: ProductListProps }) {
                                   />
                                 ) : null;
                               })() || (
-                              ) : (
                                 <div className="w-12 h-12 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                                   <Package className="h-6 w-6 text-gray-400" />
                                 </div>
@@ -1911,7 +1910,7 @@ function StorePageSection({ props }: { props: StorePageProps }) {
                 className="px-4 py-3 border-2 border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-800 dark:text-white"
               >
                 <option value="all">كل الأقسام</option>
-                {categories.map((cat: any) => (
+                {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>{cat.nameAr || cat.name}</option>
                 ))}
               </select>
@@ -1967,7 +1966,7 @@ function StorePageSection({ props }: { props: StorePageProps }) {
         <div className="w-96 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl">
           <div className="p-6 border-b border-gray-200 dark:border-gray-800">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">سلة الشراء</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{cartCount} عنصر</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{Number(cartCount)} عنصر</p>
           </div>
           <div className="p-6">
           
@@ -2042,11 +2041,11 @@ function StorePageSection({ props }: { props: StorePageProps }) {
               <div className="border-t-2 border-gray-200 dark:border-gray-700 pt-6 space-y-4 sticky bottom-0 bg-white dark:bg-gray-900">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600 dark:text-gray-400 font-medium">عدد البطاقات</span>
-                  <span className="font-bold text-lg">{cartCount}</span>
+                  <span className="font-bold text-lg">{Number(cartCount)}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
                   <span className="text-gray-900 dark:text-white font-bold text-lg">الإجمالي</span>
-                  <span className="text-primary font-bold text-xl">{cartTotal.toFixed(2)} ر.س</span>
+                  <span className="text-primary font-bold text-xl">{Number(cartTotal).toFixed(2)} ر.س</span>
                 </div>
                 <Button
                   className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-semibold py-6 text-lg shadow-lg hover:shadow-xl transition-all"
@@ -2155,7 +2154,8 @@ function CategoriesHierarchySection({ props }: { props: CategoriesHierarchyProps
 
   useEffect(() => {
     loadCategories();
-  }, [props.productsPerCategory]); // Include loadCategories dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.productsPerCategory]); // loadCategories is stable, no need to include
 
   const toggleCategory = (categoryId: string) => {
     const newExpanded = new Set(expandedCategories);
