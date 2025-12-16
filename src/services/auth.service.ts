@@ -152,15 +152,19 @@ export const authService = {
     }),
 
   // Generic methods for custom endpoints
-  get: async (url: string) => {
-    return apiClient.fetch(`${apiClient.authUrl}${url}`, { requireAuth: true });
+  get: async (url: string, options?: { requireAuth?: boolean; adminApiKey?: string }) => {
+    return apiClient.fetch(`${apiClient.authUrl}${url}`, { 
+      requireAuth: options?.requireAuth ?? true,
+      adminApiKey: options?.adminApiKey,
+    });
   },
 
-  put: async (url: string, data?: any) => {
+  put: async (url: string, data?: any, options?: { requireAuth?: boolean; adminApiKey?: string }) => {
     return apiClient.fetch(`${apiClient.authUrl}${url}`, {
       method: 'PUT',
       body: JSON.stringify(data),
-      requireAuth: true,
+      requireAuth: options?.requireAuth ?? true,
+      adminApiKey: options?.adminApiKey,
     });
   },
 };

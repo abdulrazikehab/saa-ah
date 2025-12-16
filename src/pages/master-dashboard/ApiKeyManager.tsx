@@ -13,8 +13,7 @@ import {
   XCircle,
   AlertCircle,
   Search,
-  Loader2,
-  Building2
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getAdminApiKey } from '@/lib/admin-config';
@@ -42,17 +41,10 @@ interface ApiKey {
   updatedAt: string;
 }
 
-interface Tenant {
-  id: string;
-  name: string;
-  subdomain: string;
-}
 
 export default function ApiKeyManager() {
   const { toast } = useToast();
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedTenant, setSelectedTenant] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [editingApiKey, setEditingApiKey] = useState<ApiKey | null>(null);
@@ -63,25 +55,12 @@ export default function ApiKeyManager() {
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
-    tenantId: '',
   });
-
-  const loadTenants = useCallback(async () => {
-    try {
-      const response = await coreApi.get('/admin/master/tenants', { requireAuth: true, adminApiKey: getAdminApiKey() });
-      setTenants(response.tenants || []);
-    } catch (error) {
-      console.error('Failed to load tenants:', error);
-    }
-  }, []);
 
   const loadApiKeys = useCallback(async () => {
     try {
       setLoading(true);
-      const endpoint = selectedTenant === 'all' 
-        ? '/admin/master/api-keys'
-        : `/admin/master/api-keys?tenantId=${selectedTenant}`;
-      const response = await coreApi.get(endpoint, { requireAuth: true, adminApiKey: getAdminApiKey() });
+      const response = await coreApi.get('/admin/master/api-keys', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setApiKeys(response.apiKeys || response || []);
     } catch (error: any) {
       console.error('Failed to load API keys:', error);
@@ -94,11 +73,7 @@ export default function ApiKeyManager() {
     } finally {
       setLoading(false);
     }
-  }, [selectedTenant, toast]);
-
-  useEffect(() => {
-    loadTenants();
-  }, [loadTenants]);
+  }, [toast]);
 
   useEffect(() => {
     loadApiKeys();
@@ -106,11 +81,11 @@ export default function ApiKeyManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.tenantId) {
+    if (!formData.name || !formData.name.trim()) {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Please select a tenant'
+        description: 'Please enter an API key name'
       });
       return;
     }
@@ -118,13 +93,13 @@ export default function ApiKeyManager() {
     setLoading(true);
     try {
       if (editingApiKey) {
-        await coreApi.put(`/admin/master/api-keys/${editingApiKey.id}`, formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
+        await coreApi.put(`/admin/master/api-keys/${editingApiKey.id}`, { name: formData.name }, { requireAuth: true, adminApiKey: getAdminApiKey() });
         toast({
           title: 'Success',
           description: 'API key updated successfully'
         });
       } else {
-        const response = await coreApi.post('/admin/master/api-keys', formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
+        const response = await coreApi.post('/admin/master/api-keys', { name: formData.name.trim() }, { requireAuth: true, adminApiKey: getAdminApiKey() });
         setNewApiKey(response.apiKey);
         setIsRegenerateDialogOpen(true);
         setRegeneratingApiKey(null);
@@ -151,7 +126,6 @@ export default function ApiKeyManager() {
     setEditingApiKey(apiKey);
     setFormData({
       name: apiKey.name,
-      tenantId: apiKey.tenantId,
     });
     setIsDialogOpen(true);
   };
@@ -231,7 +205,7 @@ export default function ApiKeyManager() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', tenantId: '' });
+    setFormData({ name: '' });
     setEditingApiKey(null);
     setRegeneratingApiKey(null);
     setNewApiKey('');
@@ -251,11 +225,7 @@ export default function ApiKeyManager() {
   const filteredApiKeys = apiKeys.filter(apiKey => {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      return (
-        apiKey.name.toLowerCase().includes(searchLower) ||
-        apiKey.tenant?.name.toLowerCase().includes(searchLower) ||
-        apiKey.tenant?.subdomain.toLowerCase().includes(searchLower)
-      );
+      return apiKey.name.toLowerCase().includes(searchLower);
     }
     return true;
   });
@@ -266,7 +236,7 @@ export default function ApiKeyManager() {
         <div>
           <h2 className="text-3xl font-bold text-white mb-2">API Key Management</h2>
           <p className="text-gray-400">
-            Create and manage API keys for all tenants
+            Create and manage API keys to track usage of your APIs. Users can use these keys to authenticate their requests.
           </p>
         </div>
         <Button onClick={() => setIsDialogOpen(true)} className="bg-violet-600 hover:bg-violet-700">
@@ -279,7 +249,8 @@ export default function ApiKeyManager() {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription className="text-gray-300">
           Use API keys to authenticate API requests from external applications like websites or mobile apps.
-          Add the key in the request header as <code className="px-1 py-0.5 bg-gray-700 rounded">X-API-Key</code>
+          Add the key in the request header as <code className="px-1 py-0.5 bg-gray-700 rounded">X-API-Key</code>.
+          You can track which clients are using your APIs based on the API key name.
         </AlertDescription>
       </Alert>
 
@@ -287,25 +258,12 @@ export default function ApiKeyManager() {
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
-            placeholder="Search by name, tenant..."
+            placeholder="Search by name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10 bg-gray-800/50 border-gray-700 text-white"
           />
         </div>
-        <Select value={selectedTenant} onValueChange={setSelectedTenant}>
-          <SelectTrigger className="w-64 bg-gray-800/50 border-gray-700 text-white">
-            <SelectValue placeholder="Filter by tenant" />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-800 border-gray-700">
-            <SelectItem value="all">All Tenants</SelectItem>
-            {tenants.map((tenant) => (
-              <SelectItem key={tenant.id} value={tenant.id}>
-                {tenant.name} ({tenant.subdomain})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl overflow-hidden">
@@ -327,7 +285,6 @@ export default function ApiKeyManager() {
             <TableHeader>
               <TableRow className="border-gray-700">
                 <TableHead className="text-gray-300">Name</TableHead>
-                <TableHead className="text-gray-300">Tenant</TableHead>
                 <TableHead className="text-gray-300">Status</TableHead>
                 <TableHead className="text-gray-300">Last Used</TableHead>
                 <TableHead className="text-gray-300">Created</TableHead>
@@ -338,14 +295,6 @@ export default function ApiKeyManager() {
               {filteredApiKeys.map((apiKey) => (
                 <TableRow key={apiKey.id} className="border-gray-700 hover:bg-gray-800/50">
                   <TableCell className="font-medium text-white">{apiKey.name}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-300">
-                        {apiKey.tenant?.name || 'Unknown'} ({apiKey.tenant?.subdomain || 'N/A'})
-                      </span>
-                    </div>
-                  </TableCell>
                   <TableCell>
                     <Badge variant={apiKey.isActive ? 'default' : 'secondary'} className={apiKey.isActive ? 'bg-green-600' : 'bg-gray-600'}>
                       {apiKey.isActive ? (
@@ -412,45 +361,29 @@ export default function ApiKeyManager() {
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="bg-gray-800 border-gray-700">
-          <DialogHeader>
+            <DialogHeader>
             <DialogTitle className="text-white">{editingApiKey ? 'Edit API Key' : 'Create New API Key'}</DialogTitle>
             <DialogDescription className="text-gray-400">
               {editingApiKey
                 ? 'Update the API key name'
-                : 'Enter a descriptive name for the API key (e.g., "Saeaa Website", "Edara Mobile App")'}
+                : 'Enter a descriptive name for the API key. The key will be auto-generated and you can copy it.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="tenantId" className="text-gray-300">Tenant</Label>
-                <Select
-                  value={formData.tenantId}
-                  onValueChange={(value) => setFormData({ ...formData, tenantId: value })}
-                  disabled={!!editingApiKey}
-                >
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                    <SelectValue placeholder="Select tenant" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    {tenants.map((tenant) => (
-                      <SelectItem key={tenant.id} value={tenant.id}>
-                        {tenant.name} ({tenant.subdomain})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-gray-300">Name</Label>
+                <Label htmlFor="name" className="text-gray-300">API Key Name</Label>
                 <Input
                   id="name"
-                  placeholder="e.g., Saeaa Website, Edara Mobile App, Asus App"
+                  placeholder="e.g., Saeaa Website, Edara Mobile App, Mobile Client"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                   className="bg-gray-700 border-gray-600 text-white"
                 />
+                <p className="text-xs text-gray-400">
+                  Enter a descriptive name to identify which client or application will use this API key
+                </p>
               </div>
             </div>
             <DialogFooter>

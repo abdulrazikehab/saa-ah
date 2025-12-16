@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { getAdminApiKey } from '@/lib/admin-config';
 
 interface User {
   id: string;
@@ -41,7 +42,7 @@ export default function UserManagement() {
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await authApi.get('/auth/users');
+      const response = await authApi.get('/auth/users', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setUsers(response.users || []);
     } catch (error) {
       toast({
@@ -77,7 +78,7 @@ export default function UserManagement() {
     }
 
     try {
-      await authApi.put(`/auth/users/${editingUser.id}/market-limit`, { limit: marketLimit });
+      await authApi.put(`/auth/users/${editingUser.id}/market-limit`, { limit: marketLimit }, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Market limit updated successfully'
