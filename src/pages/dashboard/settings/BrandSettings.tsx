@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Package } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Package, Download, Upload } from 'lucide-react';
+import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,8 +63,17 @@ export default function BrandSettings() {
   const loadBrands = async () => {
     try {
       const response = await coreApi.get('/brands');
-      setBrands(Array.isArray(response) ? response : []);
+      // Validate response is an array of valid brand objects
+      if (Array.isArray(response)) {
+        const validBrands = response.filter((b: any) =>
+          b && typeof b === 'object' && b.id && !('error' in b)
+        );
+        setBrands(validBrands);
+      } else {
+        setBrands([]);
+      }
     } catch (error: any) {
+      setBrands([]);
       toast({
         title: 'تعذر تحميل العلامات التجارية',
         description: 'حدث خطأ أثناء تحميل العلامات التجارية. يرجى تحديث الصفحة.',
@@ -182,6 +192,141 @@ export default function BrandSettings() {
     setEditingBrand(null);
   };
 
+  const handleExport = () => {
+    const exportData = brands.map(brand => ({
+      Name: brand.name,
+      NameAr: brand.nameAr || '',
+      Code: brand.code || '',
+      ShortName: brand.shortName || '',
+      BrandType: brand.brandType || '',
+      Status: brand.status,
+      RechargeUsdValue: brand.rechargeUsdValue || 0,
+      UsdValueForCoins: brand.usdValueForCoins || 0,
+      SafetyStock: brand.safetyStock || 0,
+      LeadTime: brand.leadTime || 0,
+      ReorderPoint: brand.reorderPoint || 0,
+      AverageConsumptionPerMonth: brand.averageConsumptionPerMonth || 0,
+      AverageConsumptionPerDay: brand.averageConsumptionPerDay || 0,
+      AbcAnalysis: brand.abcAnalysis || '',
+      OdooCategoryId: brand.odooCategoryId || '',
+    }));
+
+    const headers = ['Name', 'NameAr', 'Code', 'ShortName', 'BrandType', 'Status', 'RechargeUsdValue', 'UsdValueForCoins', 'SafetyStock', 'LeadTime', 'ReorderPoint', 'AverageConsumptionPerMonth', 'AverageConsumptionPerDay', 'AbcAnalysis', 'OdooCategoryId'];
+    const ws = utils.json_to_sheet(exportData, { header: headers });
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, 'Brands');
+    writeFile(wb, 'brands_export.xlsx');
+    
+    toast({
+      title: 'نجح',
+      description: 'تم تصدير العلامات التجارية بنجاح',
+    });
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setLoading(true);
+      const data = await file.arrayBuffer();
+      const workbook = read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = utils.sheet_to_json<{
+        Name: string;
+        NameAr?: string;
+        Code?: string;
+        ShortName?: string;
+        BrandType?: string;
+        Status?: string;
+        RechargeUsdValue?: number | string;
+        UsdValueForCoins?: number | string;
+        SafetyStock?: number | string;
+        LeadTime?: number | string;
+        ReorderPoint?: number | string;
+        AverageConsumptionPerMonth?: number | string;
+        AverageConsumptionPerDay?: number | string;
+        AbcAnalysis?: string;
+        OdooCategoryId?: string;
+      }>(worksheet, { defval: '' });
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        const rowNum = i + 2; // Excel row number (1-indexed + header)
+
+        if (!row.Name || !row.Name.trim()) {
+          errors.push(`Row ${rowNum}: Name is required`);
+          errorCount++;
+          continue;
+        }
+
+        try {
+          await coreApi.post('/brands', {
+            name: row.Name.trim(),
+            nameAr: row.NameAr?.trim() || undefined,
+            code: row.Code?.trim() || undefined,
+            shortName: row.ShortName?.trim() || undefined,
+            brandType: row.BrandType?.trim() || undefined,
+            status: row.Status?.trim() || 'Active',
+            rechargeUsdValue: row.RechargeUsdValue 
+              ? (typeof row.RechargeUsdValue === 'string' ? parseFloat(row.RechargeUsdValue.replace(/[^\d.-]/g, '')) || 0 : row.RechargeUsdValue)
+              : 0,
+            usdValueForCoins: row.UsdValueForCoins
+              ? (typeof row.UsdValueForCoins === 'string' ? parseFloat(row.UsdValueForCoins.replace(/[^\d.-]/g, '')) || 0 : row.UsdValueForCoins)
+              : 0,
+            safetyStock: row.SafetyStock
+              ? (typeof row.SafetyStock === 'string' ? parseInt(row.SafetyStock.replace(/[^\d]/g, '')) || 0 : row.SafetyStock)
+              : 0,
+            leadTime: row.LeadTime
+              ? (typeof row.LeadTime === 'string' ? parseInt(row.LeadTime.replace(/[^\d]/g, '')) || 0 : row.LeadTime)
+              : 0,
+            reorderPoint: row.ReorderPoint
+              ? (typeof row.ReorderPoint === 'string' ? parseInt(row.ReorderPoint.replace(/[^\d]/g, '')) || 0 : row.ReorderPoint)
+              : 0,
+            averageConsumptionPerMonth: row.AverageConsumptionPerMonth
+              ? (typeof row.AverageConsumptionPerMonth === 'string' ? parseFloat(row.AverageConsumptionPerMonth.replace(/[^\d.-]/g, '')) || 0 : row.AverageConsumptionPerMonth)
+              : 0,
+            averageConsumptionPerDay: row.AverageConsumptionPerDay
+              ? (typeof row.AverageConsumptionPerDay === 'string' ? parseFloat(row.AverageConsumptionPerDay.replace(/[^\d.-]/g, '')) || 0 : row.AverageConsumptionPerDay)
+              : 0,
+            abcAnalysis: row.AbcAnalysis?.trim() || undefined,
+            odooCategoryId: row.OdooCategoryId?.trim() || undefined,
+          });
+          successCount++;
+        } catch (error: any) {
+          const errorMsg = error?.message || 'Unknown error';
+          errors.push(`Row ${rowNum} (${row.Name}): ${errorMsg}`);
+          errorCount++;
+        }
+      }
+
+      const errorText = errors.length > 0 
+        ? `\n\nErrors:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n... and ${errors.length - 10} more errors` : ''}`
+        : '';
+
+      toast({
+        title: successCount > 0 ? 'نجح الاستيراد' : 'فشل الاستيراد',
+        description: `تم استيراد ${successCount} علامة تجارية${successCount !== 1 ? '' : ''}${errorCount > 0 ? `، فشل ${errorCount}` : ''}${errorText}`,
+        variant: errorCount > successCount ? 'destructive' : 'default',
+      });
+      
+      loadBrands();
+      e.target.value = '';
+    } catch (error: any) {
+      toast({ 
+        title: 'تعذر استيراد العلامات التجارية', 
+        description: error?.message || 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -189,10 +334,30 @@ export default function BrandSettings() {
           <h2 className="text-2xl font-bold">إدارة العلامات التجارية</h2>
           <p className="text-gray-600 dark:text-gray-400">إضافة وإدارة العلامات التجارية للمنتجات</p>
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          إضافة علامة تجارية
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            تصدير
+          </Button>
+          <label>
+            <Button variant="outline" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                استيراد
+              </span>
+            </Button>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              className="hidden"
+            />
+          </label>
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            إضافة علامة تجارية
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -216,7 +381,7 @@ export default function BrandSettings() {
                 <TableRow key={brand.id}>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{brand.name}</div>
+                      <div className="font-medium">{String(brand.name || '')}</div>
                       {brand.nameAr && (
                         <div className="text-sm text-gray-500">{brand.nameAr}</div>
                       )}

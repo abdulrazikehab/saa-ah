@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authApi } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/error-utils';
 
 interface User {
   id: string;
@@ -84,8 +85,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: data.email,
         role: data.role,
         tenantId: data.tenantId,
-        tenantName: data.tenantName,
-        tenantSubdomain: data.tenantSubdomain,
+        tenantName: (data as any).tenantName,
+        tenantSubdomain: (data as any).tenantSubdomain,
         avatar: data.avatar,
       };
       
@@ -99,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: unknown) {
       toast({
         title: 'Login failed',
-        description: error instanceof Error ? error.message : 'Invalid credentials',
+        description: getErrorMessage(error) || 'Invalid credentials',
         variant: 'destructive',
       });
       throw error;

@@ -129,6 +129,7 @@ export default function ProductsManager() {
     dimensions: '',
     unitId: '',
     productId: '',
+    productCode: '',
     odooProductId: '',
     brandId: '',
     categoryIds: [] as string[],
@@ -201,7 +202,21 @@ export default function ProductsManager() {
         coreApi.get('/suppliers').catch(() => []) // Load suppliers, ignore if not available
       ]);
 
-      const mappedCategories = (categoriesData || []).map((c: CategoryResponse) => ({
+      // Validate categoriesData
+      let validCategories: CategoryResponse[] = [];
+      if (categoriesData && typeof categoriesData === 'object') {
+        if (Array.isArray(categoriesData)) {
+          validCategories = categoriesData.filter((c: any) => 
+            c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+          );
+        } else if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
+          validCategories = categoriesData.categories.filter((c: any) => 
+            c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+          );
+        }
+      }
+      
+      const mappedCategories = validCategories.map((c: CategoryResponse) => ({
         id: c.id,
         name: c.name,
         nameAr: c.nameAr || c.name,
@@ -209,14 +224,36 @@ export default function ProductsManager() {
       }));
       setCategories(mappedCategories);
       
-      // API client automatically unwraps { success: true, data: T } format
-      // So unitsData, brandsData, suppliersData are already the arrays
-      setUnits(Array.isArray(unitsData) ? unitsData : []);
-      setBrands(Array.isArray(brandsData) ? brandsData : []);
-      setSuppliers(Array.isArray(suppliersData) ? suppliersData : []);
+      // Validate unitsData, brandsData, suppliersData - filter out error objects
+      const validateArray = (data: any): any[] => {
+        if (Array.isArray(data)) {
+          return data.filter((item: any) => 
+            item && typeof item === 'object' && !('error' in item) && !('statusCode' in item)
+          );
+        }
+        return [];
+      };
+      
+      setUnits(validateArray(unitsData));
+      setBrands(validateArray(brandsData));
+      setSuppliers(validateArray(suppliersData));
 
-      // Cast to ProductApiResponse[] for proper typing of raw data
-      const rawProducts = productsData as unknown as ProductApiResponse[];
+      // Validate productsData - ensure it's not an error object
+      let rawProducts: ProductApiResponse[] = [];
+      if (productsData && typeof productsData === 'object') {
+        if (Array.isArray(productsData)) {
+          rawProducts = productsData.filter((p: any) => 
+            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
+          ) as ProductApiResponse[];
+        } else if (productsData.products && Array.isArray(productsData.products)) {
+          rawProducts = productsData.products.filter((p: any) => 
+            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
+          ) as ProductApiResponse[];
+        } else if (!('error' in productsData) && !('statusCode' in productsData)) {
+          // Single product object
+          rawProducts = [productsData as ProductApiResponse];
+        }
+      }
       
       console.log('📦 Raw products count:', rawProducts.length);
       if (rawProducts.length > 0) {
@@ -326,8 +363,95 @@ export default function ProductsManager() {
     setProductImages(productImages.filter((_, i) => i !== index));
   };
 
+  // Function to extract quantity from product name (e.g., "100 coin card" -> 100)
+  const extractQuantityFromName = (name: string, unitCode: string, unitName: string, unitNameAr?: string): number | null => {
+    if (!name || !unitCode) return null;
+    
+    const text = name.toLowerCase();
+    const code = unitCode.toLowerCase();
+    const unit = unitName.toLowerCase();
+    const unitAr = unitNameAr?.toLowerCase() || '';
+    
+    // Try to find pattern: number + unit code/name (e.g., "100 coin", "100 COIN", "100 عملة")
+    const patterns = [
+      new RegExp(`(\\d+)\\s*${code}\\b`, 'i'), // "100 coin"
+      new RegExp(`(\\d+)\\s*${unit}\\b`, 'i'), // "100 coin"
+      unitAr ? new RegExp(`(\\d+)\\s*${unitAr}\\b`, 'i') : null, // "100 عملة"
+    ].filter(Boolean) as RegExp[];
+    
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const quantity = parseInt(match[1], 10);
+        if (!isNaN(quantity) && quantity > 0) {
+          return quantity;
+        }
+      }
+    }
+    
+    return null;
+  };
+
   const handleSaveProduct = async () => {
     try {
+      // Validate required fields
+      if (!formData.name || formData.name.trim() === '') {
+        toast({
+          title: 'حقل مطلوب',
+          description: 'اسم المنتج مطلوب',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!formData.price || formData.price.trim() === '') {
+        toast({
+          title: 'حقل مطلوب',
+          description: 'سعر المنتج مطلوب',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const productPrice = parseFloat(formData.price);
+      if (isNaN(productPrice) || productPrice < 0) {
+        toast({
+          title: 'خطأ في السعر',
+          description: 'السعر يجب أن يكون رقماً صحيحاً أكبر من أو يساوي صفر',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Validate price against unit cost if unit is selected
+      if (formData.unitId && formData.price) {
+        const selectedUnit = units.find(u => u.id === formData.unitId);
+        if (selectedUnit) {
+          const unitCost = Number(selectedUnit.cost) || 0;
+          
+          // Try to extract quantity from product name
+          const quantity = extractQuantityFromName(
+            formData.name || formData.nameAr || '',
+            selectedUnit.code,
+            selectedUnit.name,
+            selectedUnit.nameAr
+          );
+          
+          if (quantity !== null && quantity > 0 && unitCost > 0) {
+            const expectedMinPrice = quantity * unitCost;
+            
+            if (productPrice < expectedMinPrice) {
+              toast({
+                title: 'خطأ في السعر',
+                description: `السعر يجب أن يكون ${expectedMinPrice.toFixed(2)} ر.س على الأقل (${quantity} ${selectedUnit.code} × ${unitCost.toFixed(2)} ر.س)`,
+                variant: 'destructive',
+              });
+              return; // Stop saving
+            }
+          }
+        }
+      }
+
       // Transform frontend form data to match backend DTO
       const productData = {
         name: formData.name,
@@ -354,9 +478,11 @@ export default function ProductsManager() {
         dimensions: formData.dimensions || undefined,
         unitId: formData.unitId || undefined,
         productId: formData.productId || undefined,
+        productCode: formData.productCode || undefined,
         odooProductId: formData.odooProductId || undefined,
         brandId: formData.brandId || undefined,
         supplierIds: formData.supplierIds.length > 0 ? formData.supplierIds : undefined,
+        tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         variants: [{
           name: 'Default',
           sku: formData.sku || undefined,
@@ -392,16 +518,41 @@ export default function ProductsManager() {
     if (!confirm(t('dashboard.products.delete') + '?')) return;
 
     try {
-      await coreApi.deleteProduct(id);
+      // Clean the ID before deletion (handle special characters)
+      let cleanId = id.trim();
+      if (cleanId.includes('/') || cleanId.includes('+')) {
+        const parts = cleanId.split(/[/+]/);
+        const validParts = parts.filter(part => {
+          const trimmed = part.trim();
+          return trimmed.length >= 20 && !trimmed.includes('/') && !trimmed.includes('+');
+        });
+        if (validParts.length > 0) {
+          cleanId = validParts.reduce((a, b) => a.length > b.length ? a : b).trim();
+        }
+      }
+      
+      await coreApi.deleteProduct(cleanId);
       toast({ title: t('common.success'), description: t('dashboard.products.delete') + ' ' + t('common.success') });
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete product:', error);
-      toast({
-        title: 'تعذر حذف المنتج',
-        description: 'حدث خطأ أثناء حذف المنتج. يرجى المحاولة مرة أخرى.',
-        variant: 'destructive',
-      });
+      const errorMessage = error?.message || 'حدث خطأ أثناء حذف المنتج';
+      const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
+      
+      if (isNotFound) {
+        // Product might have been already deleted, just refresh
+        toast({
+          title: 'تم الحذف',
+          description: 'المنتج غير موجود (ربما تم حذفه مسبقاً)',
+        });
+        loadData();
+      } else {
+        toast({
+          title: 'تعذر حذف المنتج',
+          description: errorMessage || 'حدث خطأ أثناء حذف المنتج. يرجى المحاولة مرة أخرى.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -428,6 +579,7 @@ export default function ProductsManager() {
       dimensions: '',
       unitId: '',
       productId: '',
+      productCode: '',
       odooProductId: '',
       brandId: '',
       categoryIds: [],
@@ -443,6 +595,7 @@ export default function ProductsManager() {
       categories?: Array<{ category?: { id: string }; id?: string }>;
       unit?: { id: string };
       productId?: string;
+      productCode?: string;
       odooProductId?: string;
       brand?: { id: string };
       suppliers?: Array<{ supplierId?: string; supplier?: { id: string } }>;
@@ -471,6 +624,7 @@ export default function ProductsManager() {
       dimensions: product.dimensions || '',
       unitId: extProduct.unit?.id || '',
       productId: extProduct.productId || '',
+      productCode: extProduct.productCode || '',
       odooProductId: extProduct.odooProductId || '',
       brandId: extProduct.brand?.id || '',
       supplierIds: extProduct.suppliers?.map((s) => s.supplierId || s.supplier?.id || '').filter(Boolean) || [],
@@ -518,21 +672,92 @@ export default function ProductsManager() {
 
   // Export products to Excel
   const handleExportProducts = () => {
-    const headers = ['SKU', 'Name', 'NameAr', 'Description', 'DescriptionAr', 'Price', 'CompareAtPrice', 'Stock', 'Category', 'Status', 'Featured'];
+    const headers = [
+      'ID',
+      'ProductID',
+      'ProductCode',
+      'OdooProductID',
+      'SKU', 
+      'Name', 
+      'NameAr', 
+      'Description', 
+      'DescriptionAr', 
+      'Price', 
+      'CompareAtPrice',
+      'Cost',
+      'Stock', 
+      'LowStockThreshold',
+      'Category', 
+      'Brand',
+      'BrandCode',
+      'Unit',
+      'UnitCode',
+      'Suppliers',
+      'Barcode',
+      'Weight',
+      'Dimensions',
+      'Tags',
+      'Status', 
+      'Featured',
+      'IsAvailable',
+      'IsPublished',
+      'SEOTitle',
+      'SEODescription',
+      'CreatedAt',
+      'UpdatedAt'
+    ];
     
-    const exportData = products.map(p => ({
-      SKU: p.sku || '',
-      Name: p.name,
-      NameAr: p.nameAr,
-      Description: p.description,
-      DescriptionAr: p.descriptionAr,
-      Price: p.price,
-      CompareAtPrice: p.compareAtPrice || '',
-      Stock: p.stock,
-      Category: p.category?.name || '',
-      Status: p.status,
-      Featured: p.featured ? 'Yes' : 'No',
-    }));
+    const exportData = products.map(p => {
+      // Get unit info
+      const unit = units.find(u => u.id === (p as any).unitId || (p as any).unit?.id);
+      const unitName = unit ? (unit.nameAr || unit.name || '') : '';
+      const unitCode = unit ? (unit.code || '') : '';
+      
+      // Get suppliers
+      const productSuppliers = (p as any).suppliers || [];
+      const supplierNames = productSuppliers
+        .map((ps: any) => {
+          const supplier = suppliers.find(s => s.id === (ps.supplierId || ps.supplier?.id));
+          return supplier ? (supplier.nameAr || supplier.name || '') : '';
+        })
+        .filter(Boolean)
+        .join('; ');
+      
+      return {
+        ID: p.id || '',
+        ProductID: (p as any).productId || '',
+        ProductCode: (p as any).productCode || '',
+        OdooProductID: (p as any).odooProductId || '',
+        SKU: p.sku || '',
+        Name: p.name || '',
+        NameAr: p.nameAr || '',
+        Description: p.description || '',
+        DescriptionAr: p.descriptionAr || '',
+        Price: p.price || 0,
+        CompareAtPrice: p.compareAtPrice || '',
+        Cost: p.cost || (p as any).costPerItem || '',
+        Stock: p.stock || 0,
+        LowStockThreshold: p.lowStockThreshold || '',
+        Category: p.category?.name || (p as any).categories?.[0]?.category?.name || (p as any).categories?.[0]?.name || '',
+        Brand: (p as any).brand?.name || '',
+        BrandCode: (p as any).brand?.code || '',
+        Unit: unitName,
+        UnitCode: unitCode,
+        Suppliers: supplierNames,
+        Barcode: p.barcode || '',
+        Weight: p.weight || '',
+        Dimensions: p.dimensions || '',
+        Tags: p.tags?.join(', ') || '',
+        Status: p.status || 'ACTIVE',
+        Featured: p.featured ? 'Yes' : 'No',
+        IsAvailable: (p as any).isAvailable !== false ? 'Yes' : 'No',
+        IsPublished: (p as any).isPublished !== false ? 'Yes' : 'No',
+        SEOTitle: (p as any).seoTitle || p.metaTitle || '',
+        SEODescription: (p as any).seoDescription || p.metaDescription || '',
+        CreatedAt: (p as any).createdAt || '',
+        UpdatedAt: (p as any).updatedAt || '',
+      };
+    });
 
     const ws = utils.json_to_sheet(exportData, { header: headers });
     const wb = utils.book_new();
@@ -551,6 +776,7 @@ export default function ProductsManager() {
     if (!file) return;
 
     try {
+      setLoading(true);
       const data = await file.arrayBuffer();
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -560,65 +786,236 @@ export default function ProductsManager() {
         NameAr?: string;
         Description?: string;
         DescriptionAr?: string;
-        Price: number;
-        CompareAtPrice?: number;
-        Stock?: number;
+        Price: number | string;
+        CompareAtPrice?: number | string;
+        Stock?: number | string;
         Category?: string;
+        Brand?: string;
+        BrandCode?: string;
         Status?: string;
         Featured?: string;
-      }>(worksheet);
+        Barcode?: string;
+        Weight?: string;
+        Dimensions?: string;
+        Tags?: string;
+      }>(worksheet, { defval: '' });
 
       let successCount = 0;
       let errorCount = 0;
+      const errors: string[] = [];
 
-      for (const row of jsonData) {
-        if (!row.Name || !row.Price) continue;
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        const rowNum = i + 2; // Excel row number (1-indexed + header)
         
-        // Find category by name
-        const category = categories.find(c => 
-          c.name.toLowerCase() === (row.Category || '').toLowerCase() ||
-          c.nameAr === row.Category
-        );
+        if (!row.Name) {
+          errors.push(`Row ${rowNum}: Name is required`);
+          errorCount++;
+          continue;
+        }
+
+        if (!row.Price || (typeof row.Price === 'string' && !row.Price.trim())) {
+          errors.push(`Row ${rowNum}: Price is required`);
+          errorCount++;
+          continue;
+        }
+        
+        // Find category by name (case-insensitive, supports both English and Arabic)
+        let categoryId: string | undefined;
+        if (row.Category) {
+          const category = categories.find(c => 
+            c.name?.toLowerCase() === row.Category?.toLowerCase() ||
+            c.nameAr?.toLowerCase() === row.Category?.toLowerCase() ||
+            c.slug?.toLowerCase() === row.Category?.toLowerCase()
+          );
+          categoryId = category?.id;
+          if (!categoryId && row.Category.trim()) {
+            errors.push(`Row ${rowNum}: Category "${row.Category}" not found`);
+          }
+        }
+
+        // Find brand by name or code
+        let brandId: string | undefined;
+        if (row.Brand || row.BrandCode) {
+          const brand = brands.find(b => 
+            b.name?.toLowerCase() === row.Brand?.toLowerCase() ||
+            b.nameAr?.toLowerCase() === row.Brand?.toLowerCase() ||
+            b.code?.toLowerCase() === row.BrandCode?.toLowerCase()
+          );
+          brandId = brand?.id;
+          if (!brandId && (row.Brand?.trim() || row.BrandCode?.trim())) {
+            errors.push(`Row ${rowNum}: Brand "${row.Brand || row.BrandCode}" not found`);
+          }
+        }
 
         try {
+          const price = typeof row.Price === 'string' ? parseFloat(row.Price.replace(/[^\d.-]/g, '')) : row.Price;
+          if (isNaN(price) || price < 0) {
+            throw new Error('Invalid price');
+          }
+
+          const compareAtPrice = row.CompareAtPrice 
+            ? (typeof row.CompareAtPrice === 'string' 
+                ? parseFloat(row.CompareAtPrice.replace(/[^\d.-]/g, '')) 
+                : row.CompareAtPrice)
+            : undefined;
+
+          const stock = row.Stock 
+            ? (typeof row.Stock === 'string' ? parseInt(row.Stock.replace(/[^\d]/g, '')) || 0 : row.Stock)
+            : 0;
+
+          const tags = row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+          // Generate unique SKU if not provided or if it might conflict
+          let productSku = row.SKU?.trim() || undefined;
+          if (!productSku) {
+            // Generate SKU from product name + timestamp to ensure uniqueness
+            const nameSlug = row.Name.trim()
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-')
+              .substring(0, 20);
+            productSku = `PROD-${nameSlug}-${Date.now()}-${i}`;
+          }
+
+          // Don't set variant SKU to avoid global unique constraint conflicts
+          // The backend will handle variant creation without SKU
+          const variantData: any = {
+            name: 'Default',
+            price,
+            inventoryQuantity: stock,
+          };
+          // Explicitly omit SKU to avoid conflicts with global unique constraint
+
+          // Use upsert mode to handle duplicates (update if exists, create if not)
           await coreApi.createProduct({
-            name: row.Name,
-            nameAr: row.NameAr || '',
-            description: row.Description || '',
-            descriptionAr: row.DescriptionAr || '',
-            price: typeof row.Price === 'string' ? parseFloat(row.Price) : row.Price,
-            compareAtPrice: row.CompareAtPrice ? (typeof row.CompareAtPrice === 'string' ? parseFloat(row.CompareAtPrice) : row.CompareAtPrice) : undefined,
-            sku: row.SKU || undefined,
-            categoryIds: category ? [category.id] : [],
-            isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED',
-            featured: row.Featured === 'Yes' || row.Featured === 'true',
-            variants: [{
-              name: 'Default',
-              sku: row.SKU || undefined,
-              price: typeof row.Price === 'string' ? parseFloat(row.Price) : row.Price,
-              inventoryQuantity: row.Stock ? (typeof row.Stock === 'string' ? parseInt(row.Stock) : row.Stock) : 0,
-            }]
-          });
+            name: row.Name.trim(),
+            nameAr: row.NameAr?.trim() || '',
+            description: row.Description?.trim() || '',
+            descriptionAr: row.DescriptionAr?.trim() || '',
+            price,
+            compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) ? compareAtPrice : undefined,
+            sku: productSku,
+            barcode: row.Barcode?.trim() || undefined,
+            weight: row.Weight?.trim() ? parseFloat(row.Weight.replace(/[^\d.-]/g, '')) || undefined : undefined,
+            dimensions: row.Dimensions?.trim() || undefined,
+            tags: tags.length > 0 ? tags : undefined,
+            brandId: brandId || undefined,
+            categoryIds: categoryId ? [categoryId] : undefined,
+            isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED' && row.Status !== 'draft' && row.Status !== 'archived',
+            featured: row.Featured === 'Yes' || row.Featured === 'true' || row.Featured === 'TRUE' || row.Featured === '1',
+            variants: [variantData]
+          }, true); // Pass upsert=true
           successCount++;
-        } catch (error) {
-          // Error logged to backend
+        } catch (error: any) {
+          // Convert technical errors to user-friendly messages
+          let userFriendlyError = 'حدث خطأ غير معروف';
+          
+          if (error?.status === 409 || error?.message?.includes('unique') || error?.message?.includes('SKU')) {
+            userFriendlyError = 'رمز المنتج (SKU) مستخدم بالفعل. سيتم إنشاء رمز جديد تلقائياً.';
+            // Retry with completely unique SKUs
+            try {
+              const uniqueSku = `PROD-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
+              const uniqueVariantSku = `VAR-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
+              const price = typeof row.Price === 'string' ? parseFloat(row.Price.replace(/[^\d.-]/g, '')) : row.Price;
+              const compareAtPrice = row.CompareAtPrice 
+                ? (typeof row.CompareAtPrice === 'string' 
+                    ? parseFloat(row.CompareAtPrice.replace(/[^\d.-]/g, '')) 
+                    : row.CompareAtPrice)
+                : undefined;
+              const stock = row.Stock 
+                ? (typeof row.Stock === 'string' ? parseInt(row.Stock.replace(/[^\d]/g, '')) || 0 : row.Stock)
+                : 0;
+              const tags = row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+              // Don't set variant SKU to avoid conflicts
+              const retryVariantData: any = {
+                name: 'Default',
+                price,
+                inventoryQuantity: stock,
+              };
+
+              await coreApi.createProduct({
+                name: row.Name.trim(),
+                nameAr: row.NameAr?.trim() || '',
+                description: row.Description?.trim() || '',
+                descriptionAr: row.DescriptionAr?.trim() || '',
+                price,
+                compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) ? compareAtPrice : undefined,
+                sku: uniqueSku,
+                barcode: row.Barcode?.trim() || undefined,
+                weight: row.Weight?.trim() ? parseFloat(row.Weight.replace(/[^\d.-]/g, '')) || undefined : undefined,
+                dimensions: row.Dimensions?.trim() || undefined,
+                tags: tags.length > 0 ? tags : undefined,
+                brandId: brandId || undefined,
+                categoryIds: categoryId ? [categoryId] : undefined,
+                isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED' && row.Status !== 'draft' && row.Status !== 'archived',
+                featured: row.Featured === 'Yes' || row.Featured === 'true' || row.Featured === 'TRUE' || row.Featured === '1',
+                variants: [retryVariantData]
+              }, true);
+              successCount++;
+              continue; // Skip adding to errors
+            } catch (retryError: any) {
+              userFriendlyError = 'فشل إنشاء المنتج حتى بعد المحاولة مرة أخرى';
+            }
+          } else if (error?.status === 400) {
+            userFriendlyError = 'بيانات غير صحيحة. يرجى التحقق من جميع الحقول المطلوبة.';
+          } else if (error?.status === 404) {
+            userFriendlyError = 'الفئة أو العلامة التجارية المحددة غير موجودة.';
+          } else if (error?.status === 500) {
+            userFriendlyError = 'حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقاً.';
+          } else if (error?.message) {
+            // Try to extract user-friendly message
+            const msg = error.message.toLowerCase();
+            if (msg.includes('price') || msg.includes('سعر')) {
+              userFriendlyError = 'السعر غير صحيح. يرجى التأكد من إدخال رقم صحيح.';
+            } else if (msg.includes('category') || msg.includes('فئة')) {
+              userFriendlyError = 'الفئة المحددة غير موجودة.';
+            } else if (msg.includes('brand') || msg.includes('علامة')) {
+              userFriendlyError = 'العلامة التجارية المحددة غير موجودة.';
+            } else {
+              userFriendlyError = 'حدث خطأ أثناء إنشاء المنتج.';
+            }
+          }
+          
+          errors.push(`الصف ${rowNum} (${row.Name}): ${userFriendlyError}`);
           errorCount++;
         }
       }
 
+      // Show user-friendly summary
+      let description = '';
+      if (successCount > 0 && errorCount === 0) {
+        description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح`;
+      } else if (successCount > 0 && errorCount > 0) {
+        description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح، وفشل استيراد ${errorCount} منتج${errorCount !== 1 ? 'ات' : ''}`;
+      } else {
+        description = `فشل استيراد جميع المنتجات (${errorCount} خطأ)`;
+      }
+
       toast({
-        title: t('dashboard.products.import'),
-        description: t('dashboard.products.importSuccess', { count: successCount, errors: errorCount > 0 ? `, ${t('dashboard.products.importError')} ${errorCount}` : '' }),
+        title: successCount > 0 ? 'تم الاستيراد' : 'فشل الاستيراد',
+        description,
+        variant: errorCount > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
       });
+
+      // Show detailed errors in console for debugging, but not in toast
+      if (errors.length > 0) {
+        console.group('تفاصيل أخطاء الاستيراد:');
+        errors.forEach(err => console.error(err));
+        console.groupEnd();
+      }
       
       loadData();
       e.target.value = '';
     } catch (error: unknown) {
       toast({ 
         title: 'تعذر استيراد المنتجات', 
-        description: 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
+        description: error instanceof Error ? error.message : 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
         variant: 'destructive' 
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -730,12 +1127,13 @@ export default function ProductsManager() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="name">اسم المنتج (English)</Label>
+                    <Label htmlFor="name">اسم المنتج (English) *</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       placeholder="Product Name"
+                      required
                     />
                   </div>
                   <div>
@@ -749,7 +1147,7 @@ export default function ProductsManager() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="productId">معرف المنتج (Product ID)</Label>
                     <Input
@@ -757,6 +1155,15 @@ export default function ProductsManager() {
                       value={formData.productId}
                       onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
                       placeholder="معرف المنتج (اختياري)"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="productCode">رمز المنتج (Product Code)</Label>
+                    <Input
+                      id="productCode"
+                      value={formData.productCode}
+                      onChange={(e) => setFormData({ ...formData, productCode: e.target.value })}
+                      placeholder="رمز المنتج من المورد (اختياري)"
                     />
                   </div>
                   <div>
@@ -854,14 +1261,16 @@ export default function ProductsManager() {
               <TabsContent value="pricing" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="price">السعر (ريال)</Label>
+                    <Label htmlFor="price">السعر (ريال) *</Label>
                     <Input
                       id="price"
                       type="number"
                       step="0.01"
+                      min="0"
                       value={formData.price}
                       onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                       placeholder="0.00"
+                      required
                     />
                   </div>
                   <div>
@@ -1124,7 +1533,10 @@ export default function ProductsManager() {
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   {t('dashboard.products.cancel')}
                 </Button>
-                <Button onClick={handleSaveProduct}>
+                <Button 
+                  onClick={handleSaveProduct}
+                  disabled={!formData.name?.trim() || !formData.price?.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 0}
+                >
                   {editingProduct ? t('dashboard.products.update') : t('dashboard.products.add')}
                 </Button>
               </div>

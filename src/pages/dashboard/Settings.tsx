@@ -77,18 +77,76 @@ const DEFAULT_SETTINGS: StoreSettings = {
   },
 };
 
+interface Currency {
+  id: string;
+  code: string;
+  name: string;
+  nameAr?: string;
+  symbol: string;
+  isActive: boolean;
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+
+  const loadCurrencies = useCallback(async () => {
+    try {
+      const response = await coreApi.get('/currencies', { requireAuth: true });
+      
+      // Validate response is an array
+      if (Array.isArray(response)) {
+        const validCurrencies = response.filter((c: any) => 
+          c && 
+          typeof c === 'object' && 
+          c.code && 
+          typeof c.code === 'string' &&
+          c.isActive === true
+        ) as Currency[];
+        setCurrencies(validCurrencies);
+      } else {
+        // If response is not an array, use defaults
+        setCurrencies([
+          { id: '1', code: 'SAR', name: 'Saudi Riyal', nameAr: 'ريال سعودي', symbol: 'ر.س', isActive: true },
+          { id: '2', code: 'AED', name: 'UAE Dirham', nameAr: 'درهم إماراتي', symbol: 'د.إ', isActive: true },
+          { id: '3', code: 'USD', name: 'US Dollar', nameAr: 'دولار أمريكي', symbol: '$', isActive: true },
+          { id: '4', code: 'EUR', name: 'Euro', nameAr: 'يورو', symbol: '€', isActive: true },
+        ]);
+      }
+    } catch (error) {
+      console.error('Failed to load currencies:', error);
+      // Set default currencies if API fails
+      setCurrencies([
+        { id: '1', code: 'SAR', name: 'Saudi Riyal', nameAr: 'ريال سعودي', symbol: 'ر.س', isActive: true },
+        { id: '2', code: 'AED', name: 'UAE Dirham', nameAr: 'درهم إماراتي', symbol: 'د.إ', isActive: true },
+        { id: '3', code: 'USD', name: 'US Dollar', nameAr: 'دولار أمريكي', symbol: '$', isActive: true },
+        { id: '4', code: 'EUR', name: 'Euro', nameAr: 'يورو', symbol: '€', isActive: true },
+      ]);
+    }
+  }, []);
 
   const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await coreApi.get('/site-config', { requireAuth: true });
-      if (data && data.settings) {
-        setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+      await loadCurrencies();
+      const [configData, currencySettings] = await Promise.all([
+        coreApi.get('/site-config', { requireAuth: true }),
+        coreApi.get('/currencies/settings', { requireAuth: true }).catch(() => null),
+      ]);
+      
+      if (configData && configData.settings) {
+        // If CurrencySettings has a baseCurrency, use it (it's the source of truth)
+        // Otherwise use the currency from site-config settings
+        const currency = currencySettings?.baseCurrency || configData.settings.currency || 'SAR';
+        
+        setSettings({ 
+          ...DEFAULT_SETTINGS, 
+          ...configData.settings,
+          currency, // Override with CurrencySettings if available
+        });
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
@@ -103,7 +161,7 @@ export default function Settings() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, loadCurrencies]);
 
   useEffect(() => {
     loadSettings();
@@ -117,10 +175,32 @@ export default function Settings() {
     setSaving(true);
     try {
       await coreApi.post('/site-config', { settings }, { requireAuth: true });
+      
+      // If currency was changed, also update CurrencySettings to keep them in sync
+      if (settings.currency) {
+        try {
+          // Check if currency exists in currencies list
+          const currencyExists = currencies.some(c => c.code === settings.currency);
+          if (currencyExists) {
+            // Update CurrencySettings to sync the base currency
+            await coreApi.put('/currencies/settings', {
+              baseCurrency: settings.currency,
+              autoUpdateRates: false, // Preserve existing setting
+            }, { requireAuth: true });
+          }
+        } catch (currencyError) {
+          // If currency settings update fails, log but don't fail the whole save
+          console.warn('Failed to sync currency to CurrencySettings:', currencyError);
+        }
+      }
+      
       toast({
         title: 'نجح',
         description: 'تم حفظ الإعدادات بنجاح',
       });
+      
+      // Reload settings to get the latest currency value
+      await loadSettings();
     } catch (error) {
       console.error('Failed to save settings:', error);
       toast({
@@ -305,18 +385,40 @@ export default function Settings() {
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="currency">العملة</Label>
-                  <Select value={settings.currency} onValueChange={(value) => updateSetting('currency', value)}>
-                    <SelectTrigger>
-                      <SelectValue />
+                  <Label htmlFor="currency" className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    العملة الافتراضية
+                  </Label>
+                  <Select value={settings.currency} onValueChange={(value) => {
+                    updateSetting('currency', value);
+                    toast({
+                      title: 'تم تحديث العملة',
+                      description: `تم تغيير العملة الافتراضية إلى ${value}`,
+                    });
+                  }}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="اختر العملة" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="SAR">ريال سعودي (SAR)</SelectItem>
-                      <SelectItem value="AED">درهم إماراتي (AED)</SelectItem>
-                      <SelectItem value="USD">دولار أمريكي (USD)</SelectItem>
-                      <SelectItem value="EUR">يورو (EUR)</SelectItem>
+                      {currencies.length > 0 ? (
+                        currencies.map((currency) => (
+                          <SelectItem key={currency.id} value={currency.code}>
+                            {currency.symbol} {currency.nameAr || currency.name} ({currency.code})
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <>
+                          <SelectItem value="SAR">ر.س ريال سعودي (SAR)</SelectItem>
+                          <SelectItem value="AED">د.إ درهم إماراتي (AED)</SelectItem>
+                          <SelectItem value="USD">$ دولار أمريكي (USD)</SelectItem>
+                          <SelectItem value="EUR">€ يورو (EUR)</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    العملة الافتراضية المستخدمة في السوق - سيتم تطبيق التغييرات بعد حفظ الإعدادات
+                  </p>
                 </div>
               </div>
 

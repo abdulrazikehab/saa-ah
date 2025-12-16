@@ -127,7 +127,7 @@ const OAuthCallback = () => {
         <h2 className="text-xl font-semibold text-gray-800 mb-2">
           {content.title}
         </h2>
-        <p className="text-gray-600 mb-6">{content.message}</p>
+        <p className="text-gray-600 mb-6">{typeof content.message === 'string' ? content.message : String(content.message || '')}</p>
         
         <div className="flex flex-col gap-3">
           {status === 'success' && (

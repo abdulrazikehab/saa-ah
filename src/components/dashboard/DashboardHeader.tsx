@@ -10,7 +10,8 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  Menu
+  Menu,
+  DollarSign
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +79,8 @@ export const DashboardHeader = ({
   const { toast } = useToast();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [currency, setCurrency] = useState<string>('SAR');
+  const [currencySymbol, setCurrencySymbol] = useState<string>('ر.س');
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -98,48 +101,91 @@ export const DashboardHeader = ({
           name: string;
           variants?: ProductVariant[];
         }
-        const [ordersRes, productsRes] = await Promise.all([
-          coreApi.get('/orders', { requireAuth: true }) as Promise<{ orders?: OrderItem[] }>,
-          coreApi.get('/products', { requireAuth: true }) as Promise<{ products?: ProductItem[] }>
-        ]);
+        
+        let ordersRes: { orders?: OrderItem[] } = { orders: [] };
+        let productsRes: { products?: ProductItem[] } = { products: [] };
+        
+        try {
+          const [ordersResponse, productsResponse] = await Promise.all([
+            coreApi.get('/orders', { requireAuth: true }),
+            coreApi.get('/products', { requireAuth: true })
+          ]);
+          
+          // Validate orders response
+          if (ordersResponse && typeof ordersResponse === 'object' && !('error' in ordersResponse)) {
+            if (Array.isArray(ordersResponse)) {
+              ordersRes = { orders: ordersResponse };
+            } else if (ordersResponse.orders && Array.isArray(ordersResponse.orders)) {
+              ordersRes = ordersResponse;
+            }
+          }
+          
+          // Validate products response
+          if (productsResponse && typeof productsResponse === 'object' && !('error' in productsResponse)) {
+            if (Array.isArray(productsResponse)) {
+              productsRes = { products: productsResponse };
+            } else if (productsResponse.products && Array.isArray(productsResponse.products)) {
+              productsRes = productsResponse;
+            }
+          }
+        } catch (apiError) {
+          console.error('Failed to fetch orders/products for notifications', apiError);
+        }
 
         const newNotifications: Notification[] = [];
 
         // Check for pending orders
-        const pendingOrders = (ordersRes.orders || []).filter((o) => o.status === 'PENDING');
+        const orders = ordersRes.orders || [];
+        const pendingOrders = orders.filter((o) => o && o.status === 'PENDING');
         pendingOrders.forEach((order) => {
-          newNotifications.push({
-            id: `order-${order.id}`,
-            type: 'order',
-            title: t('dashboard.header.newOrder'),
-            message: t('dashboard.header.newOrderMessage', { 
-              orderNumber: order.orderNumber, 
-              amount: order.totalAmount 
-            }),
-            time: new Date(order.createdAt).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
-            read: false
-          });
+          if (order && order.id) {
+            const title = t('dashboard.header.newOrder') || 'New Order';
+            const message = t('dashboard.header.newOrderMessage', { 
+              orderNumber: String(order.orderNumber || order.id), 
+              amount: Number(order.totalAmount) || 0 
+            }) || `Order ${order.orderNumber || order.id}`;
+            const time = order.createdAt 
+              ? new Date(order.createdAt).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })
+              : 'Now';
+            
+            newNotifications.push({
+              id: `order-${order.id}`,
+              type: 'order',
+              title: typeof title === 'string' ? title : String(title),
+              message: typeof message === 'string' ? message : String(message),
+              time: typeof time === 'string' ? time : String(time),
+              read: false
+            });
+          }
         });
 
         // Check for low stock
-        const lowStockProducts = (productsRes.products || []).filter((p) => 
-            p.variants?.some((v) => v.inventoryQuantity < 5 && v.trackInventory)
+        const products = productsRes.products || [];
+        const lowStockProducts = products.filter((p) => 
+            p && p.variants?.some((v) => v.inventoryQuantity < 5 && v.trackInventory)
         );
         
         lowStockProducts.forEach((product) => {
-             newNotifications.push({
-                id: `stock-${product.id}`,
-                type: 'stock',
-                title: t('dashboard.header.lowStockAlert'),
-                message: t('dashboard.header.lowStockMessage', { productName: product.name }),
-                time: t('dashboard.header.now'),
-                read: false
-             });
+          if (product && product.id) {
+            const title = t('dashboard.header.lowStockAlert') || 'Low Stock Alert';
+            const message = t('dashboard.header.lowStockMessage', { productName: String(product.name || '') }) || `Low stock: ${product.name}`;
+            const time = t('dashboard.header.now') || 'Now';
+            
+            newNotifications.push({
+              id: `stock-${product.id}`,
+              type: 'stock',
+              title: typeof title === 'string' ? title : String(title),
+              message: typeof message === 'string' ? message : String(message),
+              time: typeof time === 'string' ? time : String(time),
+              read: false
+            });
+          }
         });
 
         setNotifications(newNotifications);
       } catch (error) {
         console.error('Failed to fetch notifications', error);
+        setNotifications([]);
       }
     };
     
@@ -147,6 +193,68 @@ export const DashboardHeader = ({
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
   }, [t, i18n.language]);
+
+  // Load currency from settings
+  useEffect(() => {
+    const loadCurrency = async () => {
+      try {
+        const config = await coreApi.get('/site-config', { requireAuth: true });
+        if (config && typeof config === 'object' && config.settings?.currency) {
+          const currencyCode = String(config.settings.currency);
+          if (currencyCode && currencyCode.length <= 10) { // Basic validation
+            setCurrency(currencyCode);
+            
+            // Try to get currency symbol from currencies API
+            try {
+              const currencies = await coreApi.get('/currencies', { requireAuth: true });
+              if (Array.isArray(currencies)) {
+                const currencyData = currencies.find((c: any) => c?.code === currencyCode);
+                if (currencyData?.symbol && typeof currencyData.symbol === 'string') {
+                  setCurrencySymbol(currencyData.symbol);
+                } else {
+                  // Fallback symbols
+                  const fallbackSymbols: Record<string, string> = {
+                    'SAR': 'ر.س',
+                    'AED': 'د.إ',
+                    'USD': '$',
+                    'EUR': '€',
+                    'GBP': '£',
+                  };
+                  setCurrencySymbol(fallbackSymbols[currencyCode] || currencyCode);
+                }
+              } else {
+                // Fallback symbols if response is not an array
+                const fallbackSymbols: Record<string, string> = {
+                  'SAR': 'ر.س',
+                  'AED': 'د.إ',
+                  'USD': '$',
+                  'EUR': '€',
+                  'GBP': '£',
+                };
+                setCurrencySymbol(fallbackSymbols[currencyCode] || currencyCode);
+              }
+            } catch (err) {
+              // Fallback symbols if currencies API fails
+              const fallbackSymbols: Record<string, string> = {
+                'SAR': 'ر.س',
+                'AED': 'د.إ',
+                'USD': '$',
+                'EUR': '€',
+                'GBP': '£',
+              };
+              setCurrencySymbol(fallbackSymbols[currencyCode] || currencyCode);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load currency:', error);
+        // Set defaults on error
+        setCurrency('SAR');
+        setCurrencySymbol('ر.س');
+      }
+    };
+    loadCurrency();
+  }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -244,6 +352,13 @@ export const DashboardHeader = ({
 
         {/* Right Section - Actions */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* Currency Display */}
+          <div className="hidden md:flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50 border border-border">
+            <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium">{currencySymbol}</span>
+            <span className="text-xs text-muted-foreground">{currency}</span>
+          </div>
+          
           {/* Store Switcher */}
           <StoreSwitcher />
 
@@ -294,11 +409,11 @@ export const DashboardHeader = ({
                           <Bell className="h-4 w-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{notification.title}</p>
+                          <p className="text-sm font-medium">{String(notification.title || '')}</p>
                           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {notification.message}
+                            {String(notification.message || '')}
                           </p>
-                          <p className="text-xs text-muted-foreground mt-2">{notification.time}</p>
+                          <p className="text-xs text-muted-foreground mt-2">{String(notification.time || '')}</p>
                         </div>
                         {!notification.read && (
                           <div className="w-2 h-2 bg-cyan-500 rounded-full mt-2" />

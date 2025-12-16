@@ -55,8 +55,17 @@ export default function CurrencySettings() {
   const loadCurrencies = async () => {
     try {
       const response = await coreApi.get('/currencies');
-      setCurrencies(Array.isArray(response) ? response : []);
+      // Validate response is an array of valid currency objects
+      if (Array.isArray(response)) {
+        const validCurrencies = response.filter((c: any) =>
+          c && typeof c === 'object' && c.id && c.code && !('error' in c)
+        ) as Currency[];
+        setCurrencies(validCurrencies);
+      } else {
+        setCurrencies([]);
+      }
     } catch (error: any) {
+      setCurrencies([]);
       toast({
         title: 'تعذر تحميل العملات',
         description: 'حدث خطأ أثناء تحميل العملات. يرجى تحديث الصفحة.',
@@ -68,11 +77,12 @@ export default function CurrencySettings() {
   const loadSettings = async () => {
     try {
       const response = await coreApi.get('/currencies/settings');
-      if (response) {
+      // Validate response is a valid settings object
+      if (response && typeof response === 'object' && !('error' in response) && response.baseCurrency) {
         setSettings(response);
         setSettingsData({
-          baseCurrency: response.baseCurrency || 'SAR',
-          autoUpdateRates: response.autoUpdateRates || false,
+          baseCurrency: String(response.baseCurrency || 'SAR'),
+          autoUpdateRates: Boolean(response.autoUpdateRates || false),
         });
       }
     } catch (error: any) {
@@ -205,7 +215,7 @@ export default function CurrencySettings() {
         <Card>
           <CardHeader>
             <CardTitle>إعدادات العملة الأساسية</CardTitle>
-            <CardDescription>العملة الأساسية: {settings.baseCurrency}</CardDescription>
+            <CardDescription>العملة الأساسية: {String(settings.baseCurrency || '')}</CardDescription>
           </CardHeader>
         </Card>
       )}
@@ -232,18 +242,18 @@ export default function CurrencySettings() {
                 <TableRow key={currency.id}>
                   <TableCell>
                     <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                      {currency.code}
+                      {String(currency.code || '')}
                     </span>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{currency.name}</div>
-                      {currency.nameAr && (
+                      <div className="font-medium">{String(currency.name || '')}</div>
+                      {currency.nameAr && typeof currency.nameAr === 'string' && (
                         <div className="text-sm text-gray-500">{currency.nameAr}</div>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{currency.symbol}</TableCell>
+                  <TableCell>{String(currency.symbol || '')}</TableCell>
                   <TableCell>
                     {Number(currency.exchangeRate).toFixed(4)}
                     {currency.code === settings?.baseCurrency && (

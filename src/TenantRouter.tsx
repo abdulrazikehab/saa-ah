@@ -19,6 +19,11 @@ import NotFound from "@/pages/NotFound";
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
+// Digital Cards Marketplace Storefront
+import CardsHome from "@/pages/storefront/cards/CardsHome";
+import CardsCatalog from "@/pages/storefront/cards/CardsCatalog";
+import CardDetail from "@/pages/storefront/cards/CardDetail";
+import CardsLayout from "@/components/storefront/cards/CardsLayout";
 
 export const TenantRouter = () => {
   console.log('Rendering TenantRouter');
@@ -26,10 +31,21 @@ export const TenantRouter = () => {
   useDynamicFavicon();
   return (
     <Routes>
+      {/* Digital Cards Marketplace Routes */}
+      <Route element={<CardsLayout />}>
+        <Route path="/cards" element={<CardsCatalog />} />
+        <Route path="/cards/:id" element={<CardDetail />} />
+        <Route path="/account/cards" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
+        <Route path="/account/wallet" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
+        <Route path="/account/favorites" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
+      </Route>
+
+      {/* Standard Storefront Routes */}
       <Route element={<StorefrontLayout />}>
         <Route path="/" element={<Home />} />
         <Route path="/products" element={<Products />} />
         <Route path="/products/:id" element={<ProductDetail />} />
+        <Route path="/products/:tenantId/:productId" element={<ProductDetail />} />
         <Route path="/collections/:id" element={<Collection />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/categories/:id" element={<CategoryDetail />} />

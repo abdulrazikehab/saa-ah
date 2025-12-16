@@ -16,7 +16,10 @@ export interface StaffUser {
 
 export interface CreateStaffDto {
   email: string;
+  phone?: string;
+  role?: string;
   permissions: string[];
+  assignedCustomers?: string[];
 }
 
 export const staffService = {

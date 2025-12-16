@@ -1,0 +1,177 @@
+{
+  "id": "digital-cards",
+  "name": "Digital Cards",
+  "nameAr": "البطاقات الرقمية",
+  "description": "Complete digital cards marketplace with wallet, store, orders, and favorites",
+  "descriptionAr": "سوق بطاقات رقمية متكامل مع المحفظة والمتجر والطلبات والمفضلة",
+  "category": "cards",
+  "thumbnail": "/templates/digital-cards.png",
+  "colors": ["#0066CC", "#00CC66", "#FFB800"],
+  "features": ["محفظة", "متجر", "طلبات", "مفضلة", "تقارير"],
+  "pages": [
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "nameAr": "لوحة التحكم",
+      "slug": "/",
+      "sections": [
+        {
+          "id": "stats-cards",
+          "type": "stats",
+          "props": {
+            "title": "إحصائيات سريعة",
+            "cards": [
+              { "label": "عدد الطلبات", "value": "0", "icon": "shopping-cart", "color": "primary" },
+              { "label": "إجمالي قيمة الطلبات", "value": "0.00", "suffix": "دولار", "icon": "wallet", "color": "success" },
+              { "label": "رصيد المحفظة", "value": "0.00", "suffix": "دولار", "icon": "credit-card", "color": "warning" }
+            ]
+          }
+        },
+        {
+          "id": "quick-actions",
+          "type": "quick-actions",
+          "props": {
+            "title": "إجراءات سريعة",
+            "actions": [
+              { "label": "شحن الرصيد", "icon": "wallet", "link": "/charge-wallet" },
+              { "label": "إنشاء طلب", "icon": "shopping-cart", "link": "/store" },
+              { "label": "المفضلة", "icon": "heart", "link": "/favorites" },
+              { "label": "إضافة موظف", "icon": "user-plus", "link": "/employees" },
+              { "label": "إضافة تذكرة", "icon": "ticket", "link": "/tickets" }
+            ]
+          }
+        },
+        {
+          "id": "pending-transactions",
+          "type": "table",
+          "props": {
+            "title": "عمليات شحن الرصيد النقدي (المعلقة)",
+            "columns": ["التاريخ", "رقم العملية", "البنك", "اسم المحول", "القيمة"],
+            "emptyMessage": "لا توجد بيانات"
+          }
+        },
+        {
+          "id": "pending-complaints",
+          "type": "table",
+          "props": {
+            "title": "الشكاوى المعلقة",
+            "columns": ["تاريخ الإضافة", "عنوان التذكرة", "رقم الطلب", "الحالة", "التعليق"],
+            "emptyMessage": "لا توجد بيانات"
+          }
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "nameAr": "المتجر",
+      "slug": "/store",
+      "sections": [
+        {
+          "id": "brands-grid",
+          "type": "brands-grid",
+          "props": {
+            "title": "اختر العلامة التجارية",
+            "showCategories": true,
+            "showSearch": true
+          }
+        },
+        {
+          "id": "cart-sidebar",
+          "type": "cart-sidebar",
+          "props": {
+            "title": "سلة الشراء",
+            "showTotal": true,
+            "checkoutButton": "إتمام الطلب"
+          }
+        }
+      ]
+    },
+    {
+      "id": "favorites",
+      "name": "Favorites",
+      "nameAr": "البطاقات المفضلة",
+      "slug": "/favorites",
+      "sections": [
+        {
+          "id": "favorites-list",
+          "type": "favorites-list",
+          "props": {
+            "title": "البطاقات المفضلة",
+            "showSearch": true,
+            "showCart": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "orders",
+      "name": "Orders",
+      "nameAr": "طلباتي",
+      "slug": "/orders",
+      "sections": [
+        {
+          "id": "orders-table",
+          "type": "orders-table",
+          "props": {
+            "title": "طلباتي",
+            "columns": ["رقم الطلب", "تاريخ الطلب", "عدد البطاقات", "القيمة", "الحالة", "بواسطة"],
+            "showCreateButton": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "products",
+      "name": "Products",
+      "nameAr": "قائمة المنتجات",
+      "slug": "/products",
+      "sections": [
+        {
+          "id": "products-table",
+          "type": "products-table",
+          "props": {
+            "title": "قائمة المنتجات",
+            "columns": ["الرقم التعريفي", "المنتج", "علامة تجارية", "سعر الجملة", "نسبة الربح", "السعر قبل الضريبة", "العملة", "سعر البيع المقترح"],
+            "showSearch": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "charge-wallet",
+      "name": "Charge Wallet",
+      "nameAr": "شحن الرصيد",
+      "slug": "/charge-wallet",
+      "sections": [
+        {
+          "id": "wallet-charge-form",
+          "type": "wallet-charge-form",
+          "props": {
+            "title": "شحن الرصيد",
+            "paymentMethods": ["نقدي", "فيزا"],
+            "currencies": ["ريال سعودي", "درهم إماراتي", "دينار كويتي", "دولار", "ريال قطري"],
+            "showBankDetails": true,
+            "showReceiptUpload": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "balance-list",
+      "name": "Balance List",
+      "nameAr": "عمليات شحن الرصيد",
+      "slug": "/balance-list",
+      "sections": [
+        {
+          "id": "balance-table",
+          "type": "balance-table",
+          "props": {
+            "title": "عمليات شحن الرصيد",
+            "columns": ["الرقم التعريفي", "تاريخ العملية", "الوصف", "الإجراء", "الحالة", "القيمة"]
+          }
+        }
+      ]
+    }
+  ]
+}

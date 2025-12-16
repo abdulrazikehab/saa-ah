@@ -46,7 +46,7 @@ export default function CategoryDetail() {
       setCategory(categoryData);
       
       // Find subcategories and parent
-      const allCategories = Array.isArray(allCategoriesData) ? allCategoriesData : (allCategoriesData.categories || []);
+      const allCategories: Category[] = Array.isArray(allCategoriesData) ? allCategoriesData : ((allCategoriesData as { categories?: Category[] })?.categories || []);
       const childCategories = allCategories.filter((cat: Category) => cat.parentId === id);
       setSubcategories(childCategories);
       

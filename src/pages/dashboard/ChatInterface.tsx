@@ -108,18 +108,35 @@ export default function ChatInterface() {
     try {
       // The backend exposes a user list endpoint at /user/list
       const response = await coreApi.get('/user/list', { requireAuth: true });
-      const usersList = (response?.data || []).map((u: { id: string; name?: string; email: string; avatar?: string; role: string }) => ({
-        id: u.id,
-        name: u.name || u.email,
-        email: u.email,
-        avatar: u.avatar,
-        online: false, // You can implement online status tracking later
-        unread: 0,
-        role: u.role,
-      }));
+      
+      // Validate response structure
+      let usersData: any[] = [];
+      if (response && typeof response === 'object') {
+        if (Array.isArray(response)) {
+          usersData = response;
+        } else if (response.data && Array.isArray(response.data)) {
+          usersData = response.data;
+        } else if (response.users && Array.isArray(response.users)) {
+          usersData = response.users;
+        }
+      }
+      
+      // Validate and map users
+      const usersList = usersData
+        .filter((u: any) => u && typeof u === 'object' && u.id && u.email)
+        .map((u: { id: string; name?: string; email: string; avatar?: string; role: string }) => ({
+          id: String(u.id),
+          name: u.name || u.email,
+          email: String(u.email),
+          avatar: u.avatar || undefined,
+          online: false, // You can implement online status tracking later
+          unread: 0,
+          role: String(u.role || ''),
+        }));
       setContacts(usersList);
     } catch (error) {
       console.error('Failed to load users:', error);
+      setContacts([]); // Set empty array on error
     }
   }, []);
 

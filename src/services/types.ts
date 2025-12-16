@@ -49,6 +49,7 @@ export interface ProductImage {
 export interface Product {
   id: string;
   name: string;
+  nameAr?: string;
   description?: string;
   price: number;
   compareAtPrice?: number;
@@ -82,6 +83,7 @@ export interface CreateProductData {
   isAvailable?: boolean;
   isPublished?: boolean;
   categoryIds?: string[];
+  brandId?: string;
   variants?: CreateVariantData[];
   featured?: boolean;
   weight?: number;
@@ -95,6 +97,7 @@ export interface Category {
   name: string;
   description?: string;
   parentId?: string;
+  image?: string;
 }
 
 export interface CreateCategoryData {

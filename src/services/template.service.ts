@@ -4,6 +4,8 @@ import { Section } from '@/components/builder/PageBuilder';
 
 export interface TemplateContent {
   sections: Section[];
+  backgroundColor?: string;
+  isDarkMode?: boolean;
 }
 
 export interface Template {
@@ -12,6 +14,7 @@ export interface Template {
   category: string;
   description?: string;
   thumbnail?: string;
+  preview?: string;
   content: TemplateContent;
   isDefault: boolean;
   createdAt: Date;
@@ -35,11 +38,13 @@ export const templateService = {
   },
 
   async getTemplateById(id: string): Promise<Template> {
-    return apiClient.fetch(`${apiClient.coreUrl}/templates/${id}`);
+    // Properly encode the ID to handle special characters like + in base64 IDs
+    return apiClient.fetch(`${apiClient.coreUrl}/templates/${encodeURIComponent(id)}`);
   },
 
   async applyTemplate(pageId: string, templateId: string): Promise<unknown> {
-    return apiClient.fetch(`${apiClient.coreUrl}/templates/apply/${templateId}/to-page/${pageId}`, {
+    // Properly encode IDs to handle special characters like + in base64 IDs
+    return apiClient.fetch(`${apiClient.coreUrl}/templates/apply/${encodeURIComponent(templateId)}/to-page/${encodeURIComponent(pageId)}`, {
       method: 'POST',
       requireAuth: true,
     });

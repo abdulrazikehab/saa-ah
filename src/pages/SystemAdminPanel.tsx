@@ -5,7 +5,7 @@ import {
   Shield, Activity, Users, CreditCard, Database, Lock, 
   Globe, Sun, Moon, X, Menu, Search, Bell, LogOut, 
   Layers, Zap, CheckCircle, RefreshCcw, Gift, Handshake, 
-  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight
+  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight, Key
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { coreApi } from '@/lib/api';
@@ -18,6 +18,7 @@ import PlansManager from './master-dashboard/PlansManager';
 import FeatureControlManager from './master-dashboard/FeatureControlManager';
 import UserGiftsManager from './master-dashboard/UserGiftsManager';
 import UserManagement from './master-dashboard/UserManagement';
+import ApiKeyManager from './master-dashboard/ApiKeyManager';
 
 import AiSettingsManager from './master-dashboard/AiSettingsManager';
 import { APP_VERSION } from '../version';
@@ -258,7 +259,7 @@ export default function SystemAdminPanel() {
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
   const [userLogs, setUserLogs] = useState<AuditLog[]>([]);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'management' | 'overview' | 'tenants' | 'gateways' | 'partners' | 'plans' | 'features' | 'gifts' | 'database' | 'ai' | 'customers' | 'analytics' | 'users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'management' | 'overview' | 'tenants' | 'gateways' | 'partners' | 'plans' | 'features' | 'gifts' | 'database' | 'ai' | 'customers' | 'analytics' | 'users' | 'api-keys'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -698,6 +699,7 @@ export default function SystemAdminPanel() {
     { id: 'gifts', label: t.gifts, icon: Gift },
     { id: 'gateways', label: t.gateways, icon: CreditCard },
     { id: 'partners', label: t.partners, icon: Handshake },
+    { id: 'api-keys', label: language === 'ar' ? 'مفاتيح API' : 'API Keys', icon: Key },
     { id: 'database', label: t.database, icon: Database },
     { id: 'customers', label: t.customers, icon: Fingerprint },
     { id: 'analytics', label: language === 'ar' ? 'التحليلات' : 'Analytics', icon: Activity },
@@ -1163,6 +1165,7 @@ export default function SystemAdminPanel() {
             {activeTab === 'features' && <FeatureControlManager />}
             {activeTab === 'ai' && <AiSettingsManager />}
             {activeTab === 'gifts' && <UserGiftsManager />}
+            {activeTab === 'api-keys' && <ApiKeyManager />}
 
             {activeTab === 'customers' && (
               <div className="space-y-6">

@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/popover';
 import { useTranslation } from 'react-i18next';
 import { APP_VERSION, GIT_COMMIT } from '@/version';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency-utils';
 
 interface DashboardSidebarProps {
   className?: string;
@@ -90,6 +91,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [partnerStatus, setPartnerStatus] = useState<PartnerStatus>({});
   const [balance, setBalance] = useState<number>(0);
+  const [defaultCurrency, setDefaultCurrency] = useState<string>('SAR');
   const { hasUnreadUpdates, getUnreadUpdates, markAsWatched } = useTabUpdatesContext();
   const [openPopover, setOpenPopover] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -127,6 +129,10 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
       try {
         const res = await coreApi.get('/site-config', { requireAuth: true });
         setConfig(res.settings);
+        // Extract default currency from settings
+        if (res.settings?.currency) {
+          setDefaultCurrency(res.settings.currency);
+        }
       } catch {
         // Silently fail
       }
@@ -150,8 +156,17 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res = await coreApi.get('/transactions/balance', { requireAuth: true }) as { balance?: number };
-        setBalance(res.balance || 0);
+        const res = await coreApi.get('/transactions/balance', { requireAuth: true }) as { 
+          availableBalance?: number; 
+          balance?: number;
+          currency?: string;
+        };
+        // Support both old and new API response formats
+        setBalance(res.availableBalance || res.balance || 0);
+        // Store currency in state if needed
+        if (res.currency) {
+          // Currency is available in the response
+        }
       } catch {
         setBalance(0);
       }
@@ -302,13 +317,13 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
               <div className="flex flex-col">
                 <span className="text-xs text-muted-foreground">{t('dashboard.sidebar.yourBalance')}</span>
                 <span className="text-lg font-bold text-green-600">
-                  {balance.toLocaleString('ar-SA')} ر.س
+                  {formatCurrency(balance, defaultCurrency)}
                 </span>
               </div>
             )}
             {collapsed && (
               <span className="text-xs font-bold text-green-600">
-                {balance.toLocaleString('ar-SA')}
+                {formatCurrency(balance, defaultCurrency)}
               </span>
             )}
           </div>
@@ -452,7 +467,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                                                     })}
                                                   </span>
                                                 </div>
-                                                <p className="text-sm">{update.message}</p>
+                                                <p className="text-sm">{String(update.message || '')}</p>
                                               </div>
                                             </div>
                                           </div>

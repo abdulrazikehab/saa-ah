@@ -8,6 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -42,6 +46,7 @@ export default function CustomersManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTier, setFilterTier] = useState('all');
   const [showProgramSheet, setShowProgramSheet] = useState(false);
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [editingProgram, setEditingProgram] = useState<LoyaltyProgram | null>(null);
   const [programForm, setProgramForm] = useState({
     name: '',
@@ -49,6 +54,16 @@ export default function CustomersManager() {
     minPoints: 0,
     benefits: ''
   });
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    email: '',
+    phone: ''
+  });
+
+  const openCreateCustomer = () => {
+    setCustomerForm({ name: '', email: '', phone: '' });
+    setShowCustomerDialog(true);
+  };
 
   const openCreateProgram = () => {
     setEditingProgram(null);
@@ -69,6 +84,29 @@ export default function CustomersManager() {
 
   const handleProgramFormChange = (field: string, value: string | number) => {
     setProgramForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const submitCustomer = async () => {
+    try {
+      // Note: This endpoint may need to be implemented on the backend
+      // For now, we'll show a toast message
+      toast({ 
+        title: 'إضافة عميل', 
+        description: 'هذه الميزة قيد التطوير. سيتم إضافة العميل قريباً.', 
+        variant: 'default' 
+      });
+      setShowCustomerDialog(false);
+      // Uncomment when backend endpoint is available:
+      // await coreApi.post('/dashboard/customers', customerForm);
+      // loadCustomers();
+    } catch (error) {
+      console.error('Customer submit error', error);
+      toast({ 
+        title: 'تعذر إضافة العميل', 
+        description: 'حدث خطأ أثناء إضافة العميل. يرجى المحاولة مرة أخرى.', 
+        variant: 'destructive' 
+      });
+    }
   };
 
   const submitProgram = async () => {
@@ -214,7 +252,7 @@ export default function CustomersManager() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">العملاء</h1>
           <p className="text-sm text-gray-500 mt-1">إدارة العملاء وبرامج الولاء</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={openCreateCustomer}>
           <UserPlus className="h-4 w-4" />
           إضافة عميل
         </Button>
@@ -417,7 +455,7 @@ export default function CustomersManager() {
             <p className="text-gray-500">
               إدارة برامج الولاء والمكافآت للعملاء
             </p>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={openCreateProgram}>
               <UserPlus className="h-4 w-4" />
               إنشاء برنامج جديد
             </Button>
@@ -429,7 +467,7 @@ export default function CustomersManager() {
                 <Award className="h-16 w-16 mx-auto text-gray-400 mb-4" />
                 <h3 className="text-xl font-semibold mb-2">لا توجد برامج ولاء</h3>
                 <p className="text-gray-500 mb-4">ابدأ بإنشاء برنامج ولاء لعملائك</p>
-                <Button>
+                <Button onClick={openCreateProgram}>
                   <UserPlus className="h-4 w-4 ml-2" />
                   إنشاء برنامج جديد
                 </Button>
@@ -466,7 +504,7 @@ export default function CustomersManager() {
                           ))}
                         </ul>
                       </div>
-                      <Button variant="outline" className="w-full">
+                      <Button variant="outline" className="w-full" onClick={() => openEditProgram(program)}>
                         تعديل البرنامج
                       </Button>
                     </div>
@@ -477,6 +515,119 @@ export default function CustomersManager() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Loyalty Program Sheet */}
+      <Sheet open={showProgramSheet} onOpenChange={setShowProgramSheet}>
+        <SheetContent className="sm:max-w-[540px]">
+          <SheetHeader>
+            <SheetTitle>{editingProgram ? 'تعديل برنامج الولاء' : 'إنشاء برنامج ولاء جديد'}</SheetTitle>
+            <SheetDescription>
+              {editingProgram ? 'قم بتعديل معلومات برنامج الولاء' : 'أضف معلومات برنامج الولاء الجديد'}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="program-name">اسم البرنامج</Label>
+              <Input
+                id="program-name"
+                value={programForm.name}
+                onChange={(e) => handleProgramFormChange('name', e.target.value)}
+                placeholder="مثال: العضوية الذهبية"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="program-description">الوصف</Label>
+              <Textarea
+                id="program-description"
+                value={programForm.description}
+                onChange={(e) => handleProgramFormChange('description', e.target.value)}
+                placeholder="وصف برنامج الولاء..."
+                rows={3}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="program-min-points">الحد الأدنى من النقاط</Label>
+              <Input
+                id="program-min-points"
+                type="number"
+                value={programForm.minPoints}
+                onChange={(e) => handleProgramFormChange('minPoints', parseInt(e.target.value) || 0)}
+                placeholder="0"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="program-benefits">المزايا (مفصولة بفواصل)</Label>
+              <Textarea
+                id="program-benefits"
+                value={programForm.benefits}
+                onChange={(e) => handleProgramFormChange('benefits', e.target.value)}
+                placeholder="مثال: خصم 10%, شحن مجاني, نقاط ثلاثية"
+                rows={4}
+              />
+              <p className="text-xs text-gray-500">اكتب المزايا مفصولة بفواصل (،)</p>
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setShowProgramSheet(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={submitProgram}>
+              {editingProgram ? 'حفظ التعديلات' : 'إنشاء البرنامج'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Add Customer Dialog */}
+      <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>إضافة عميل جديد</DialogTitle>
+            <DialogDescription>
+              أدخل معلومات العميل الجديد. سيتم إرسال دعوة عبر البريد الإلكتروني.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="customer-name">الاسم</Label>
+              <Input
+                id="customer-name"
+                value={customerForm.name}
+                onChange={(e) => setCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="اسم العميل"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="customer-email">البريد الإلكتروني</Label>
+              <Input
+                id="customer-email"
+                type="email"
+                value={customerForm.email}
+                onChange={(e) => setCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="example@email.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="customer-phone">رقم الهاتف (اختياري)</Label>
+              <Input
+                id="customer-phone"
+                type="tel"
+                value={customerForm.phone}
+                onChange={(e) => setCustomerForm(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="+966500000000"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCustomerDialog(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={submitCustomer} disabled={!customerForm.name || !customerForm.email}>
+              إضافة العميل
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

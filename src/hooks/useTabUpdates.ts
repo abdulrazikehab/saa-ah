@@ -77,7 +77,7 @@ export function useTabUpdates() {
       };
     });
     setWatchedState((prev) => {
-      const newState = { ...prev, [tabPath]: now.toISOString() };
+      const newState = { ...prev, [tabPath]: now };
       saveWatchedState(newState);
       return newState;
     });

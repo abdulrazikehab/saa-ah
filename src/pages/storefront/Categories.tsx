@@ -37,7 +37,7 @@ export default function Categories() {
         coreApi.getBrands().catch(() => [])
       ]);
       
-      const rawCategories = Array.isArray(categoriesData) ? categoriesData : (categoriesData.categories || []);
+      const rawCategories: Category[] = Array.isArray(categoriesData) ? categoriesData : ((categoriesData as { categories?: Category[] })?.categories || []);
       
       // Build category tree - only show root categories (no parent)
       const categoryMap = new Map<string, Category>();

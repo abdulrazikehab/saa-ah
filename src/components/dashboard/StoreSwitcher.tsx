@@ -206,7 +206,7 @@ export function StoreSwitcher() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium truncate">{market.name}</span>
                       {market.isOwner && (
-                        <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" title="مالك" />
+                        <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" aria-label="مالك" />
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">

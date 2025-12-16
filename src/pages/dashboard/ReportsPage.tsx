@@ -33,6 +33,7 @@ import {
 import { coreApi, reportService } from '@/lib/api';
 import { ProductReportItem, CustomerReportItem, PaymentReportItem } from '@/services/report.service';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '@/lib/currency-utils';
 
 const COLORS = ['#06b6d4', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -490,9 +491,9 @@ export default function ReportsPage() {
                         <span className="font-medium">{payment.provider}</span>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold">{payment.volume.toFixed(2)} {t('common.currency')}</div>
+                        <div className="font-bold">{formatCurrency(payment.volume, payment.currency || 'SAR')}</div>
                         <div className="text-xs text-muted-foreground">
-                          {t('dashboard.reports.net')}: {payment.net.toFixed(2)} | {t('dashboard.reports.fees')}: {payment.fees.toFixed(2)}
+                          {t('dashboard.reports.net')}: {formatCurrency(payment.net, payment.currency || 'SAR')} | {t('dashboard.reports.fees')}: {formatCurrency(payment.fees, payment.currency || 'SAR')}
                         </div>
                       </div>
                     </div>

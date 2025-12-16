@@ -20,6 +20,17 @@ interface Template {
 
 const templates = [
   {
+    id: 'digital-cards',
+    name: 'Digital Cards',
+    nameAr: 'البطاقات الرقمية',
+    description: 'Complete digital cards marketplace with wallet, store, orders, and favorites',
+    descriptionAr: 'سوق بطاقات رقمية متكامل مع المحفظة والمتجر والطلبات والمفضلة',
+    image: '/templates/digital-cards.png',
+    colors: ['#0066CC', '#00CC66', '#FFB800'],
+    features: ['محفظة', 'متجر', 'طلبات', 'مفضلة'],
+    popular: true,
+  },
+  {
     id: 'modern',
     name: 'Modern',
     nameAr: 'عصري',
@@ -42,17 +53,6 @@ const templates = [
     popular: false,
   },
   {
-    id: 'bold',
-    name: 'Bold',
-    nameAr: 'جريء',
-    description: 'Vibrant colors and large images for impact',
-    descriptionAr: 'ألوان نابضة بالحياة وصور كبيرة للتأثير',
-    image: '/templates/bold.png',
-    colors: ['#EC4899', '#8B5CF6', '#F59E0B'],
-    features: ['ألوان جريئة', 'تأثير بصري', 'جذاب'],
-    popular: false,
-  },
-  {
     id: 'elegant',
     name: 'Elegant',
     nameAr: 'أنيق',
@@ -61,7 +61,7 @@ const templates = [
     image: '/templates/elegant.png',
     colors: ['#000000', '#D4AF37', '#FFFFFF'],
     features: ['فاخر', 'راقي', 'أنيق'],
-    popular: true,
+    popular: false,
   },
   {
     id: 'tech',
@@ -72,17 +72,6 @@ const templates = [
     image: '/templates/tech.png',
     colors: ['#0EA5E9', '#6366F1', '#14B8A6'],
     features: ['تقني', 'حديث', 'مبتكر'],
-    popular: false,
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    nameAr: 'بسيط',
-    description: 'Ultra-minimal design with maximum white space',
-    descriptionAr: 'تصميم بسيط للغاية مع مساحة بيضاء قصوى',
-    image: '/templates/minimal.png',
-    colors: ['#F3F4F6', '#111827', '#6B7280'],
-    features: ['بسيط', 'واضح', 'مريح'],
     popular: false,
   },
 ];

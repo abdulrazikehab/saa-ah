@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Trash2,
@@ -24,10 +24,24 @@ import { useCart } from '@/contexts/CartContext';
 export default function Cart() {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const { cart, loading, updateQuantity, removeItem } = useCart();
+  const { cart, loading, updateQuantity, removeItem, refreshCart } = useCart();
   const [couponCode, setCouponCode] = useState('');
 
-  console.log('Cart Page: Current cart state:', cart);
+  console.log('🛒 Cart Page: Component rendered');
+  console.log('🛒 Cart Page: Current cart state:', cart);
+  console.log('🛒 Cart Page: Cart type:', typeof cart);
+  console.log('🛒 Cart Page: Cart is null?', cart === null);
+  console.log('🛒 Cart Page: Cart keys:', cart && typeof cart === 'object' ? Object.keys(cart) : 'N/A');
+  
+  const cartItemsArray = (cart as any)?.cartItems || (cart as any)?.items || [];
+  console.log('🛒 Cart Page: Cart items array:', cartItemsArray);
+  console.log('🛒 Cart Page: Cart items length:', cartItemsArray.length);
+  console.log('🛒 Cart Page: Cart items is array?', Array.isArray(cartItemsArray));
+  
+  // Force re-render check
+  useEffect(() => {
+    console.log('🛒 Cart Page: Cart changed, items:', cartItemsArray.length);
+  }, [cart]);
 
   const applyCoupon = () => {
     if (!couponCode) return;
@@ -35,6 +49,26 @@ export default function Cart() {
       title: 'كود الخصم',
       description: 'تم تطبيق كود الخصم بنجاح',
     });
+  };
+
+  // Debug function to manually test cart API
+  const debugCart = async () => {
+    console.log('🔍 DEBUG: Manual cart fetch test');
+    try {
+      await refreshCart();
+      console.log('🔍 DEBUG: Cart refreshed manually');
+      toast({
+        title: 'Debug',
+        description: 'Cart refreshed. Check console for details.',
+      });
+    } catch (error) {
+      console.error('🔍 DEBUG: Error refreshing cart:', error);
+      toast({
+        title: 'Debug Error',
+        description: 'Failed to refresh cart. Check console.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (loading) {
@@ -47,8 +81,49 @@ export default function Cart() {
     );
   }
 
-  const isEmpty = !cart?.cartItems?.length;
-  const subtotal = cart?.cartItems?.reduce((sum: number, item: any) => {
+  // Get cart items - ensure it's always an array
+  const cartItems = Array.isArray((cart as any)?.cartItems) 
+    ? (cart as any).cartItems 
+    : Array.isArray((cart as any)?.items) 
+      ? (cart as any).items 
+      : [];
+  
+  // Filter out invalid items and ensure all items have product data
+  const validCartItems = cartItems.filter((item: any) => {
+    if (!item || !item.id) {
+      console.warn('🛒 Cart Page: Invalid cart item (missing id):', item);
+      return false;
+    }
+    // Only show items with valid product data
+    if (!item.product) {
+      console.warn('🛒 Cart Page: Cart item missing product data:', item.id, item.productId);
+      // Try to refresh cart to reload product data
+      if (item.productId) {
+        console.log('🛒 Cart Page: Attempting to refresh cart to reload product data');
+        setTimeout(() => refreshCart(), 1000);
+      }
+      return false;
+    }
+    return true;
+  });
+  
+  // Debug: Log everything about the cart
+  console.log('🛒 Cart Page: ========== CART DEBUG ==========');
+  console.log('🛒 Cart Page: cart object:', cart);
+  console.log('🛒 Cart Page: cart type:', typeof cart);
+  console.log('🛒 Cart Page: cart is null?', cart === null);
+  console.log('🛒 Cart Page: cart keys:', cart && typeof cart === 'object' ? Object.keys(cart) : 'N/A');
+  console.log('🛒 Cart Page: cart.cartItems:', (cart as any)?.cartItems);
+  console.log('🛒 Cart Page: cart.items:', (cart as any)?.items);
+  console.log('🛒 Cart Page: cartItems array (raw):', cartItems);
+  console.log('🛒 Cart Page: cartItems.length (raw):', cartItems.length);
+  console.log('🛒 Cart Page: validCartItems array:', validCartItems);
+  console.log('🛒 Cart Page: validCartItems.length:', validCartItems.length);
+  console.log('🛒 Cart Page: cartItems is array?', Array.isArray(cartItems));
+  console.log('🛒 Cart Page: =================================');
+  
+  const isEmpty = !validCartItems || validCartItems.length === 0;
+  const subtotal = validCartItems.reduce((sum: number, item: any) => {
     const price = item.productVariant?.price ?? item.product?.price ?? 0;
     return sum + Number(price) * item.quantity;
   }, 0) ?? 0;
@@ -65,7 +140,7 @@ export default function Cart() {
           </h1>
           {!isEmpty && (
             <p className="text-gray-600 dark:text-gray-400 text-lg">
-              لديك {cart.cartItems.length} {cart.cartItems.length === 1 ? 'منتج' : 'منتجات'} في سلتك
+              لديك {validCartItems.length} {validCartItems.length === 1 ? 'منتج' : 'منتجات'} في سلتك
             </p>
           )}
         </div>
@@ -77,49 +152,111 @@ export default function Cart() {
             <p className="text-gray-600 dark:text-gray-400 mb-8 text-lg max-w-md mx-auto">
               ابدأ التسوق الآن واكتشف منتجاتنا المميزة
             </p>
-            <Link to="/products">
-              <Button size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-8">
-                تصفح المنتجات
-                <ArrowRight className="mr-2 h-5 w-5" />
-              </Button>
-            </Link>
+                <div className="flex gap-4 justify-center">
+                  <Link to="/products">
+                    <Button size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-8">
+                      تصفح المنتجات
+                      <ArrowRight className="mr-2 h-5 w-5" />
+                    </Button>
+                  </Link>
+                  <Button 
+                    size="lg" 
+                    variant="outline" 
+                    onClick={async () => {
+                      console.log('🔍 DEBUG: Manual cart refresh triggered');
+                      await refreshCart();
+                      toast({
+                        title: 'Debug',
+                        description: 'Cart refreshed. Check console for details.',
+                      });
+                    }}
+                    className="px-8"
+                  >
+                    🔍 Debug Cart
+                  </Button>
+                </div>
           </Card>
         ) : (
           <div className="grid lg:grid-cols-3 gap-8">
             {/* Cart Items */}
             <div className="lg:col-span-2 space-y-4">
-              {cart.cartItems.map((item: any) => (
-                <Card key={item.id} className="border-0 shadow-md hover:shadow-lg transition-shadow">
-                  <div className="p-6">
-                    <div className="flex gap-6">
-                      {/* Product Image */}
-                      <div className="relative w-32 h-32 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0">
-                        {item.product?.images?.[0] ? (
-                          <img
-                            src={item.product.images[0]}
-                            alt={item.product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <ShoppingBag className="h-12 w-12 text-gray-400" />
-                          </div>
-                        )}
-                      </div>
+                  {validCartItems.map((item: any) => {
+                    // Ensure product exists
+                    if (!item.product) {
+                      console.error('❌ Cart item missing product:', item);
+                      return null;
+                    }
+                    
+                    const productName = item.product?.nameAr || item.product?.name || 'منتج غير معروف';
+                    
+                    // Product images can be objects with 'url' property or strings
+                    let productImage: string | null = null;
+                    if (item.product?.images && item.product.images.length > 0) {
+                      const firstImage = item.product.images[0];
+                      if (typeof firstImage === 'string') {
+                        productImage = firstImage;
+                      } else if (firstImage?.url) {
+                        productImage = firstImage.url;
+                      } else if (firstImage?.imageUrl) {
+                        productImage = firstImage.imageUrl;
+                      } else if (typeof firstImage === 'object' && firstImage !== null) {
+                        // Try to find any URL-like property
+                        const urlKeys = ['url', 'imageUrl', 'src', 'image', 'path'];
+                        for (const key of urlKeys) {
+                          if (firstImage[key] && typeof firstImage[key] === 'string') {
+                            productImage = firstImage[key];
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    
+                    // Fallback: try to get image from product directly
+                    if (!productImage && item.product?.image) {
+                      productImage = typeof item.product.image === 'string' 
+                        ? item.product.image 
+                        : item.product.image?.url || item.product.image?.imageUrl;
+                    }
+                    
+                    const productPrice = Number(item.productVariant?.price ?? item.product?.price ?? 0);
+                    const quantity = Number(item.quantity ?? 0);
+                    
+                    return (
+                      <Card key={item.id} className="border-0 shadow-md hover:shadow-lg transition-shadow">
+                        <div className="p-6">
+                          <div className="flex gap-6">
+                            {/* Product Image */}
+                            <div className="relative w-32 h-32 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0">
+                              {productImage ? (
+                                <img
+                                  src={productImage}
+                                  alt={productName}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    console.error('Failed to load product image:', productImage, 'for product:', item.productId);
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <ShoppingBag className="h-12 w-12 text-gray-400" />
+                                </div>
+                              )}
+                            </div>
 
-                      {/* Product Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg mb-1 text-gray-900 dark:text-white">
-                              {item.product?.name}
-                            </h3>
-                            {item.product?.sku && (
-                              <p className="text-sm text-gray-500 font-mono">
-                                SKU: {item.product.sku}
-                              </p>
-                            )}
-                          </div>
+                          {/* Product Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-4 mb-3">
+                              <div className="flex-1">
+                                <h3 className="font-bold text-lg mb-1 text-gray-900 dark:text-white" title={productName}>
+                                  {productName}
+                                </h3>
+                                {item.product?.sku && (
+                                  <p className="text-sm text-gray-500 font-mono">
+                                    SKU: {item.product.sku}
+                                  </p>
+                                )}
+                              </div>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -137,19 +274,19 @@ export default function Cart() {
                               variant="outline"
                               size="icon"
                               className="h-10 w-10 border-2"
-                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              disabled={item.quantity <= 1}
+                              onClick={() => updateQuantity(item.id, quantity - 1)}
+                              disabled={quantity <= 1}
                             >
                               <Minus className="h-4 w-4" />
                             </Button>
                             <span className="w-12 text-center font-bold text-lg">
-                              {item.quantity}
+                              {quantity}
                             </span>
                             <Button
                               variant="outline"
                               size="icon"
                               className="h-10 w-10 border-2"
-                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              onClick={() => updateQuantity(item.id, quantity + 1)}
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
@@ -158,10 +295,10 @@ export default function Cart() {
                           {/* Price */}
                           <div className="text-left">
                             <p className="font-bold text-2xl text-indigo-600">
-                              {(Number(item.productVariant?.price ?? item.product?.price ?? 0) * item.quantity).toFixed(2)} ر.س
+                              {(productPrice * quantity).toFixed(2)} ر.س
                             </p>
                             <p className="text-sm text-gray-500">
-                              {Number(item.productVariant?.price ?? item.product?.price ?? 0).toFixed(2)} ر.س × {item.quantity}
+                              {productPrice.toFixed(2)} ر.س × {quantity}
                             </p>
                           </div>
                         </div>
@@ -169,7 +306,8 @@ export default function Cart() {
                     </div>
                   </div>
                 </Card>
-              ))}
+              );
+            }).filter(Boolean)}
 
               {/* Continue Shopping */}
               <Link to="/products">

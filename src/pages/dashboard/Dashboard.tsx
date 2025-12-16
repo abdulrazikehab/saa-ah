@@ -144,19 +144,46 @@ export default function Dashboard() {
         coreApi.getOrders()
       ]);
 
-      setStats({
-        ...statsData,
-        visits: statsData.visits || 0,
-        saved: statsData.saved || 0
-      });
+      // Validate statsData is not an error object
+      let validStats: Stats | null = null;
+      if (statsData && typeof statsData === 'object' && !('error' in statsData) && !('statusCode' in statsData)) {
+        validStats = {
+          orderCount: Number(statsData.orderCount) || 0,
+          revenue: Number(statsData.revenue) || 0,
+          productCount: Number(statsData.productCount) || 0,
+          customerCount: Number(statsData.customerCount) || 0,
+          visits: Number(statsData.visits) || 0,
+          saved: Number(statsData.saved) || 0
+        };
+      } else {
+        validStats = {
+          orderCount: 0,
+          revenue: 0,
+          productCount: 0,
+          customerCount: 0,
+          visits: 0,
+          saved: 0
+        };
+      }
       
-      const orders = Array.isArray(ordersData) ? ordersData : ((ordersData as any)?.orders || []);
+      setStats(validStats);
+      
+      // Validate ordersData
+      let orders: Order[] = [];
+      if (ordersData && typeof ordersData === 'object') {
+        if (Array.isArray(ordersData)) {
+          orders = ordersData.filter((o: any) => o && typeof o === 'object' && !('error' in o));
+        } else if (ordersData.orders && Array.isArray(ordersData.orders)) {
+          orders = ordersData.orders.filter((o: any) => o && typeof o === 'object' && !('error' in o));
+        }
+      }
+      
       setRecentOrders(orders.slice(0, 5));
 
       const chartData = generateChartData(orders);
       setSalesData(chartData);
 
-      const notifs = generateNotifications(orders, statsData);
+      const notifs = generateNotifications(orders, validStats);
       setNotifications(notifs);
 
     } catch (error) {
@@ -193,12 +220,14 @@ export default function Dashboard() {
     }
 
     orders.forEach(order => {
-      const orderDate = new Date(order.createdAt);
-      const key = `${orderDate.getDate()}/${orderDate.getMonth() + 1}`;
-      if (dataMap.has(key)) {
-        const data = dataMap.get(key);
-        data.revenue += order.total;
-        data.orders += 1;
+      if (order && order.createdAt && order.total !== undefined) {
+        const orderDate = new Date(order.createdAt);
+        const key = `${orderDate.getDate()}/${orderDate.getMonth() + 1}`;
+        if (dataMap.has(key)) {
+          const data = dataMap.get(key);
+          data.revenue += Number(order.total) || 0;
+          data.orders += 1;
+        }
       }
     });
 
@@ -497,11 +526,11 @@ export default function Dashboard() {
                         {notif.type === 'payment' && <DollarSign className="h-4 w-4 text-secondary" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold">{notif.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{notif.message}</p>
+                        <p className="text-sm font-semibold">{String(notif.title || '')}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{String(notif.message || '')}</p>
                         <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          {notif.time}
+                          {String(notif.time || '')}
                         </div>
                       </div>
                       {!notif.read && (
@@ -551,23 +580,23 @@ export default function Dashboard() {
                       </div>
                       <div className="min-w-0">
                         <p className="font-semibold text-sm">
-                          #{order.orderNumber || order.id.slice(0, 8)}
+                          #{String(order.orderNumber || order.id?.slice(0, 8) || '')}
                         </p>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {order.customer?.name || t('dashboard.sidebar.customers')}
+                          {String(order.customer?.name || t('dashboard.sidebar.customers') || '')}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 flex-shrink-0">
                       <div className="text-left hidden sm:block">
                         <p className="font-bold text-sm">
-                          {order.total?.toFixed(2) || '0.00'} {t('common.currency')}
+                          {Number(order.total || 0).toFixed(2)} {t('common.currency')}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(order.createdAt).toLocaleDateString('ar-SA', { 
+                          {order.createdAt ? new Date(order.createdAt).toLocaleDateString('ar-SA', { 
                             month: 'short', 
                             day: 'numeric' 
-                          })}
+                          }) : '-'}
                         </p>
                       </div>
                       {getStatusBadge(order.status)}

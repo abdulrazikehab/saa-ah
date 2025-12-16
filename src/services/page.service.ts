@@ -20,9 +20,17 @@ export const pageService = {
   },
 
   getPageBySlug: async (slug: string): Promise<Page> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/pages/slug/${encodeURIComponent(slug)}`, {
-      requireAuth: false, // Public endpoint for viewing pages on subdomains
-    });
+    try {
+      return await apiClient.fetch(`${apiClient.coreUrl}/pages/slug/${encodeURIComponent(slug)}`, {
+        requireAuth: false, // Public endpoint for viewing pages on subdomains
+      });
+    } catch (error: any) {
+      // If 404, return null instead of throwing (page doesn't exist)
+      if (error?.status === 404) {
+        return null as any;
+      }
+      throw error;
+    }
   },
 
   createPage: async (data: CreatePageData): Promise<Page> => {

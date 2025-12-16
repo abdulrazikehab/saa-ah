@@ -38,14 +38,18 @@ export default function Home() {
 
   const loadData = async () => {
     try {
-      // Try to fetch 'home' page first
+      // Try to fetch 'home' page first (silently fail if not found)
       try {
         const home = await coreApi.getPageBySlug('home');
         if (home && home.isPublished) {
           setHomePage(home);
         }
-      } catch (e) {
-        console.log('No custom home page found, using default layout');
+      } catch (e: any) {
+        // Silently ignore errors for home page - it's optional
+        // getPageBySlug now returns null for 404, so this catch is for other errors
+        if (e?.status && e.status !== 404) {
+          console.warn('Error loading home page:', e);
+        }
       }
 
       const [productsData, pagesData, categoriesData, brandsData] = await Promise.all([
@@ -55,22 +59,60 @@ export default function Home() {
         coreApi.getBrands().catch(() => [])
       ]);
       
-      const publishedPages = Array.isArray(pagesData) ? (pagesData as Page[]).filter((p) => p.isPublished) : [];
+      // Validate pagesData
+      const publishedPages = Array.isArray(pagesData) 
+        ? (pagesData as Page[]).filter((p) => p && typeof p === 'object' && !('error' in p) && p.isPublished)
+        : [];
       
-      const rawProducts = Array.isArray(productsData) ? productsData : ((productsData as { products: Product[] }).products || []);
-      const validProducts = (rawProducts as Product[]).map((p) => ({
+      // Validate productsData
+      let rawProducts: Product[] = [];
+      if (productsData && typeof productsData === 'object' && !('error' in productsData) && !('statusCode' in productsData)) {
+        if (Array.isArray(productsData)) {
+          rawProducts = productsData.filter((p: any) => 
+            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
+          );
+        } else if (productsData.products && Array.isArray(productsData.products)) {
+          rawProducts = productsData.products.filter((p: any) => 
+            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
+          );
+        }
+      }
+      
+      const validProducts = rawProducts.map((p) => ({
         ...p,
         price: Number(p.price) || 0,
         compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined
       }));
       
-      const rawCategories = Array.isArray(categoriesData) ? categoriesData : (categoriesData.categories || []);
+      // Validate categoriesData
+      let rawCategories: Category[] = [];
+      if (categoriesData && typeof categoriesData === 'object' && !('error' in categoriesData) && !('statusCode' in categoriesData)) {
+        if (Array.isArray(categoriesData)) {
+          rawCategories = categoriesData.filter((c: any) => 
+            c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+          );
+        } else if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
+          rawCategories = categoriesData.categories.filter((c: any) => 
+            c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+          );
+        }
+      }
       const rootCategories = rawCategories.filter((cat: Category) => !cat.parentId);
+      
+      // Validate brandsData
+      let validBrands: Brand[] = [];
+      if (brandsData && typeof brandsData === 'object' && !('error' in brandsData) && !('statusCode' in brandsData)) {
+        if (Array.isArray(brandsData)) {
+          validBrands = brandsData.filter((b: any) => 
+            b && typeof b === 'object' && b.id && !('error' in b) && !('statusCode' in b)
+          );
+        }
+      }
       
       setFeaturedProducts(validProducts);
       setPages(publishedPages);
       setCategories(rootCategories.slice(0, 6));
-      setBrands(Array.isArray(brandsData) ? brandsData.slice(0, 8) : []);
+      setBrands(validBrands.slice(0, 8));
     } catch (error) {
       console.error('Failed to load data:', error);
       setFeaturedProducts([]);

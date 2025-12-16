@@ -25,22 +25,17 @@ export const ProductCard = ({ product, viewMode = 'grid' }: ProductCardProps) =>
     
     if (isAdding) return;
     
-    // If product has variants, user should go to product detail page to select variant
-    if (product.variants && product.variants.length > 0) {
-      toast({
-        title: 'تنبيه',
-        description: 'الرجاء الانتقال لصفحة المنتج لاختيار الخيارات',
-        variant: 'default',
-      });
-      return;
-    }
-    
     setIsAdding(true);
     try {
-      await addToCart(product.id, 1);
+      // If product has variants, use the first variant automatically
+      const variantId = product.variants && product.variants.length > 0 
+        ? product.variants[0].id 
+        : undefined;
+      
+      await addToCart(product.id, 1, variantId);
       toast({
         title: 'تمت الإضافة!',
-        description: `تمت إضافة ${product.name} إلى السلة`,
+        description: `تمت إضافة ${String(product.name || '')} إلى السلة`,
       });
     } catch (error) {
       console.error('Failed to add to cart:', error);
@@ -83,16 +78,16 @@ export const ProductCard = ({ product, viewMode = 'grid' }: ProductCardProps) =>
               )}
               <img
                 src={imageUrl}
-                alt={product.name}
+                alt={String(product.name || '')}
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
               />
             </div>
             <div className="flex-1 flex flex-col justify-between">
               <div>
                 <h3 className="font-bold text-2xl mb-3 group-hover:text-primary transition-colors">
-                  {product.name}
+                  {String(product.name || '')}
                 </h3>
-                {product.description && (
+                {product.description && typeof product.description === 'string' && (
                   <p className="text-gray-600 dark:text-gray-400 line-clamp-2 mb-4">
                     {product.description}
                   </p>
@@ -176,14 +171,14 @@ export const ProductCard = ({ product, viewMode = 'grid' }: ProductCardProps) =>
 
           <img
             src={imageUrl}
-            alt={product.name}
+            alt={String(product.name || '')}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
         </div>
         
         <div className="p-5 flex flex-col flex-1">
           <h3 className="font-bold text-lg mb-2 line-clamp-2 group-hover:text-primary transition-colors min-h-[3.5rem]">
-            {product.name}
+            {String(product.name || '')}
           </h3>
           
           <div className="mt-auto">

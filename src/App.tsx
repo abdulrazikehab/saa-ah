@@ -82,7 +82,16 @@ import Chat from "./pages/dashboard/Chat";
 import Reports from "./pages/dashboard/Reports";
 import { StorefrontLayout } from "./components/storefront/StorefrontLayout";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
+import { BuyerDashboardLayout } from "./components/buyer-dashboard/BuyerDashboardLayout";
 import { TenantRouter } from "./TenantRouter";
+// Buyer Dashboard Pages
+import BuyerDashboard from "./pages/buyer-dashboard/BuyerDashboard";
+import BuyerProducts from "./pages/buyer-dashboard/BuyerProducts";
+import BuyerOrders from "./pages/buyer-dashboard/BuyerOrders";
+import BuyerWallet from "./pages/buyer-dashboard/BuyerWallet";
+import BuyerFavorites from "./pages/buyer-dashboard/BuyerFavorites";
+import BuyerSupport from "./pages/buyer-dashboard/BuyerSupport";
+import BuyerProfile from "./pages/buyer-dashboard/BuyerProfile";
 import SystemAdminPanel from "./pages/SystemAdminPanel";
 import './i18n'; // Initialize i18n
 import './styles/theme.css'; // Import theme CSS
@@ -261,6 +270,7 @@ const App = () => {
                   <Route path="/store" element={<Home />} />
                   <Route path="/products" element={<Products />} />
                   <Route path="/products/:id" element={<ProductDetail />} />
+                  <Route path="/products/:tenantId/:productId" element={<ProductDetail />} />
                   <Route path="/collections/:id" element={<Collection />} />
                   <Route path="/categories" element={<Categories />} />
                   <Route path="/categories/:id" element={<CategoryDetail />} />
@@ -331,6 +341,23 @@ const App = () => {
                   </Route>
                   {/* Redirect legacy settings route */}
                   <Route path="/dashboard/store-settings" element={<Settings />} />
+                </Route>
+
+                {/* Buyer Dashboard Routes (Protected, With Buyer Dashboard Layout) */}
+                <Route element={<CustomerProtectedRoute><BuyerDashboardLayout /></CustomerProtectedRoute>}>
+                  <Route path="/buyer" element={<BuyerDashboard />} />
+                  <Route path="/buyer/products" element={<BuyerProducts />} />
+                  <Route path="/buyer/products/:id" element={<BuyerProducts />} />
+                  <Route path="/buyer/orders" element={<BuyerOrders />} />
+                  <Route path="/buyer/orders/:id" element={<BuyerOrders />} />
+                  <Route path="/buyer/wallet" element={<BuyerWallet />} />
+                  <Route path="/buyer/payments" element={<BuyerWallet />} />
+                  <Route path="/buyer/invoices" element={<BuyerWallet />} />
+                  <Route path="/buyer/favorites" element={<BuyerFavorites />} />
+                  <Route path="/buyer/downloads" element={<BuyerProducts />} />
+                  <Route path="/buyer/support" element={<BuyerSupport />} />
+                  <Route path="/buyer/profile" element={<BuyerProfile />} />
+                  <Route path="/buyer/settings" element={<BuyerProfile />} />
                 </Route>
                 
                 {/* Fallback */}

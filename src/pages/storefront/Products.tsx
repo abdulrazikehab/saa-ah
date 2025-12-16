@@ -77,7 +77,8 @@ export default function Products() {
     const matchesSearch = product.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
     const matchesCategory = selectedCategories.length === 0 || 
-      (product.categories && product.categories.some((cat: any) => selectedCategories.includes(cat.id || cat.category?.id)));
+      ((product as any).categories && (product as any).categories.some((cat: any) => selectedCategories.includes(cat.id || cat.category?.id))) ||
+      (product.categoryId && selectedCategories.includes(product.categoryId));
     return matchesSearch && matchesPrice && matchesCategory;
 });
 

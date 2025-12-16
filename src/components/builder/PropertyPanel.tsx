@@ -118,9 +118,27 @@ export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps
       const fetchCategories = async () => {
         try {
           const data = await coreApi.getCategories();
-          setCategories(data || []);
+          // Validate data is not an error object
+          if (data && typeof data === 'object') {
+            if (Array.isArray(data)) {
+              const validCategories = data.filter((c: any) => 
+                c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+              );
+              setCategories(validCategories);
+            } else if (data.categories && Array.isArray(data.categories)) {
+              const validCategories = data.categories.filter((c: any) => 
+                c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+              );
+              setCategories(validCategories);
+            } else {
+              setCategories([]);
+            }
+          } else {
+            setCategories([]);
+          }
         } catch (error) {
           console.error('Failed to fetch categories:', error);
+          setCategories([]);
         }
       };
       fetchCategories();
@@ -1456,10 +1474,10 @@ export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps
               {t('properties.editCodeDesc', 'Edit the section properties directly in JSON format.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 border dark:border-gray-700 rounded-lg overflow-hidden mt-4 relative min-h-[400px]" style={{ backgroundColor: '#1e1e1e' }}>
-            <div style={{ color: '#d4d4d4', height: '100%' }}>
+          <div className="flex-1 border dark:border-gray-700 rounded-lg overflow-hidden mt-4 relative" style={{ backgroundColor: '#1e1e1e', height: 'calc(80vh - 250px)', minHeight: '400px' }}>
+            <div style={{ color: '#d4d4d4', height: '100%', width: '100%' }}>
               <Editor
-                height="calc(80vh - 200px)"
+                height="100%"
                 defaultLanguage="json"
                 value={codeEditorValue}
                 onChange={(value) => setCodeEditorValue(value || '')}
@@ -1470,6 +1488,10 @@ export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps
                   setTimeout(() => {
                     editor.layout();
                   }, 100);
+                  // Additional layout refresh after a short delay to ensure dialog is fully rendered
+                  setTimeout(() => {
+                    editor.layout();
+                  }, 300);
                 }}
                 loading={<div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-300"><Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading Editor...</div>}
                 options={{

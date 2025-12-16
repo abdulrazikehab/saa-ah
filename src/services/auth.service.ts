@@ -143,5 +143,25 @@ export const authService = {
     apiClient.fetch(`${apiClient.authUrl}/auth/markets/limit`, {
       requireAuth: true,
     }),
+
+  // Reset password
+  resetPasswordComplete: (data: { email: string; code: string; newPassword: string }): Promise<{ success: boolean; message: string }> =>
+    apiClient.fetch(`${apiClient.authUrl}/auth/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Generic methods for custom endpoints
+  get: async (url: string) => {
+    return apiClient.fetch(`${apiClient.authUrl}${url}`, { requireAuth: true });
+  },
+
+  put: async (url: string, data?: any) => {
+    return apiClient.fetch(`${apiClient.authUrl}${url}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+      requireAuth: true,
+    });
+  },
 };
 

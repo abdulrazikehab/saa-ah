@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, LogIn, Mail, Lock, Eye, EyeOff, X } from 'lucide-react';
 import { apiClient } from '@/services/core/api-client';
+import { getErrorMessage, isErrorObject } from '@/lib/error-utils';
 
 interface CustomerLoginProps {
   onClose: () => void;
@@ -23,14 +24,40 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        variant: 'destructive',
+        title: 'خطأ',
+        description: 'يرجى إدخال البريد الإلكتروني وكلمة المرور',
+      });
+      return;
+    }
+    
     setLoading(true);
     
     try {
-      const response = await apiClient.post(`${apiClient.authUrl}/customers/login`, { email, password });
+      const response = await apiClient.post(
+        `${apiClient.authUrl}/customers/login`, 
+        { email, password },
+        { requireAuth: false } // Explicitly set to false for login endpoint
+      );
+      
+      // CRITICAL: Validate response is not an error object
+      if (isErrorObject(response)) {
+        throw new Error(getErrorMessage(response));
+      }
+      
+      // Validate response structure
+      if (!response || typeof response !== 'object' || !('token' in response)) {
+        throw new Error('Invalid response from server');
+      }
       
       // Store customer token
-      localStorage.setItem('customerToken', response.token);
-      localStorage.setItem('customerData', JSON.stringify(response.customer));
+      localStorage.setItem('customerToken', String(response.token || ''));
+      if (response.customer) {
+        localStorage.setItem('customerData', JSON.stringify(response.customer));
+      }
       
       toast({
         title: 'تم تسجيل الدخول بنجاح',
@@ -40,11 +67,13 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
       onLoginSuccess?.();
       onClose();
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
+      console.error('Login error:', error);
+      const errorMessage = getErrorMessage(error) || 'البريد الإلكتروني أو كلمة المرور غير صحيحة. إذا لم يكن لديك حساب، يرجى إنشاء حساب جديد.';
+      
       toast({
         variant: 'destructive',
         title: 'خطأ في تسجيل الدخول',
-        description: err.response?.data?.message || 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
+        description: errorMessage,
       });
     } finally {
       setLoading(false);

@@ -47,9 +47,22 @@ export default function PageBuilderPage() {
       try {
         const domainData = await coreApi.getDomain();
         if (domainData) {
-          // Detect production domain from current hostname
-          const prodDomain = window.location.hostname.includes('saeaa.net') ? 'saeaa.net' : 'saeaa.com';
-          setDomain(domainData.customDomain || `${domainData.subdomain}.${prodDomain}`);
+          const hostname = window.location.hostname;
+          // If we have a custom domain, use it
+          if (domainData.customDomain) {
+            setDomain(domainData.customDomain);
+          } else {
+            // If on main domain (saeaa.com), use main domain (not subdomain)
+            if (hostname === 'saeaa.com' || hostname === 'www.saeaa.com') {
+              setDomain('saeaa.com');
+            } else if (hostname === 'saeaa.net' || hostname === 'www.saeaa.net') {
+              setDomain('saeaa.net');
+            } else {
+              // Otherwise use subdomain format
+              const prodDomain = hostname.includes('saeaa.net') ? 'saeaa.net' : 'saeaa.com';
+              setDomain(`${domainData.subdomain}.${prodDomain}`);
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to fetch domain:', error);
@@ -99,17 +112,21 @@ export default function PageBuilderPage() {
     }
   }, [id, toast]);
 
-  // Update code editor when sections change
+  // Initialize code editor value when dialog opens or data changes
   useEffect(() => {
     if (showCodeEditor) {
       const pageData = {
-        sections,
-        backgroundColor,
-        isDarkMode
+        sections: sections || [],
+        backgroundColor: backgroundColor || '#ffffff',
+        isDarkMode: isDarkMode || false
       };
-      setCodeEditorValue(JSON.stringify(pageData, null, 2));
+      const jsonString = JSON.stringify(pageData, null, 2);
+      // Only update if value is different to avoid unnecessary re-renders
+      if (codeEditorValue !== jsonString) {
+        setCodeEditorValue(jsonString);
+      }
     }
-  }, [sections, backgroundColor, isDarkMode, showCodeEditor]);
+  }, [showCodeEditor, sections, backgroundColor, isDarkMode]);
 
   const handleCodeEditorChange = (value: string | undefined) => {
     if (value) {
@@ -144,9 +161,22 @@ export default function PageBuilderPage() {
   const loadTemplate = useCallback(async (templateId: string) => {
     try {
       const template = await templateService.getTemplateById(templateId);
-      // Type assertion for template content
-      const templateContent = template.content as { sections?: Section[] };
+      // Type assertion for template content - it may include sections, backgroundColor, and isDarkMode
+      const templateContent = template.content as { 
+        sections?: Section[];
+        backgroundColor?: string;
+        isDarkMode?: boolean;
+      };
       setSections(templateContent?.sections || []);
+      
+      // Extract backgroundColor and isDarkMode if they exist in the template
+      if (templateContent?.backgroundColor) {
+        setBackgroundColor(templateContent.backgroundColor);
+      }
+      if (typeof templateContent?.isDarkMode === 'boolean') {
+        setIsDarkMode(templateContent.isDarkMode);
+      }
+      
       setTemplateName(template.name);
       toast({
         title: 'Template Loaded',
@@ -173,6 +203,16 @@ export default function PageBuilderPage() {
   }, [id, searchParams, loadPage, loadTemplate]);
 
   const handleSaveDraft = async (updatedSections: Section[]) => {
+    // Validate title before saving
+    if (!title || title.trim().length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Page title is required. Please enter a title before saving.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const content = { 
@@ -185,14 +225,14 @@ export default function PageBuilderPage() {
 
       if (id) {
         await coreApi.updatePage(id, {
-          title,
+          title: title.trim(),
           slug: finalSlug,
           draftContent: content
         });
         toast({ title: 'Draft Saved', description: 'Changes saved to draft' });
       } else {
         await coreApi.createPage({
-          title,
+          title: title.trim(),
           slug: finalSlug,
           content: content, // Initial content
           draftContent: content,
@@ -209,6 +249,16 @@ export default function PageBuilderPage() {
   };
 
   const handlePublish = async (updatedSections: Section[]) => {
+    // Validate title before publishing
+    if (!title || title.trim().length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Page title is required. Please enter a title before publishing.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const content = { 
@@ -221,7 +271,7 @@ export default function PageBuilderPage() {
 
       if (id) {
         await coreApi.updatePage(id, {
-          title,
+          title: title.trim(),
           slug: finalSlug,
           content: content,
           draftContent: content,
@@ -230,7 +280,7 @@ export default function PageBuilderPage() {
         toast({ title: 'Published', description: 'Page published successfully' });
       } else {
         await coreApi.createPage({
-          title,
+          title: title.trim(),
           slug: finalSlug,
           content: content,
           draftContent: content,
@@ -341,15 +391,16 @@ export default function PageBuilderPage() {
           onPublish={handlePublish}
           onHistory={id ? loadHistory : undefined}
           onCodeEditor={() => {
+            // Ensure we have current data before opening editor
             const pageData = {
-              sections,
-              backgroundColor,
-              isDarkMode
+              sections: sections || [],
+              backgroundColor: backgroundColor || '#ffffff',
+              isDarkMode: isDarkMode || false
             };
-            setCodeEditorValue(JSON.stringify(pageData, null, 2));
-            setShowCodeEditor(true);
-            // Reset mounted state to trigger fresh load
+            const jsonString = JSON.stringify(pageData, null, 2);
+            setCodeEditorValue(jsonString);
             setEditorMounted(false);
+            setShowCodeEditor(true);
           }}
           domain={domain}
           slug={slug}
@@ -410,20 +461,30 @@ export default function PageBuilderPage() {
               Edit the page structure directly in JSON format. Be careful - invalid JSON will not be applied.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 border dark:border-gray-700 rounded-lg overflow-hidden mt-4 relative min-h-[400px]" style={{ backgroundColor: '#1e1e1e' }}>
-            <div style={{ color: '#d4d4d4', height: '100%' }}>
+          <div className="flex-1 border dark:border-gray-700 rounded-lg overflow-hidden mt-4 relative" style={{ backgroundColor: '#1e1e1e', height: 'calc(80vh - 250px)', minHeight: '400px' }}>
+            <div style={{ color: '#d4d4d4', height: '100%', width: '100%' }}>
               <Editor
-                height="calc(80vh - 200px)"
+                key={showCodeEditor ? 'code-editor-open' : 'code-editor-closed'}
+                height="100%"
                 defaultLanguage="json"
-                value={codeEditorValue}
+                value={codeEditorValue || JSON.stringify({ sections: sections || [], backgroundColor: backgroundColor || '#ffffff', isDarkMode: isDarkMode || false }, null, 2)}
                 onChange={handleCodeEditorChange}
                 theme="vs-dark"
                 onMount={(editor) => {
                   setEditorMounted(true);
+                  // Set the value explicitly after mount to ensure it displays
+                  const currentValue = codeEditorValue || JSON.stringify({ sections: sections || [], backgroundColor: backgroundColor || '#ffffff', isDarkMode: isDarkMode || false }, null, 2);
+                  if (editor.getValue() !== currentValue) {
+                    editor.setValue(currentValue);
+                  }
                   // Force layout refresh after dialog animation
                   setTimeout(() => {
                     editor.layout();
                   }, 100);
+                  // Additional layout refresh after a short delay to ensure dialog is fully rendered
+                  setTimeout(() => {
+                    editor.layout();
+                  }, 300);
                 }}
                 loading={<div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-300"><Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading Editor...</div>}
                 options={{

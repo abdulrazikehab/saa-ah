@@ -406,7 +406,7 @@ export default function UserGiftsManager() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-white font-medium">{gift.giftValue}</span>
-                      {gift.message && (
+                      {gift.message && typeof gift.message === 'string' && (
                         <p className="text-xs text-gray-400 mt-1 max-w-[200px] truncate">{gift.message}</p>
                       )}
                     </td>

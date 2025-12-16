@@ -17,7 +17,9 @@ import { toast } from '@/hooks/use-toast';
 import { Product, ProductVariant, ProductImage } from '@/services/types';
 
 export default function ProductDetail() {
-  const { id } = useParams();
+  const { id, productId } = useParams();
+  // Handle both /products/:id and /products/:tenantId/:productId patterns
+  const actualProductId = productId || id;
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
@@ -30,12 +32,12 @@ export default function ProductDetail() {
   useEffect(() => {
     loadProduct();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [actualProductId]);
 
   const loadProduct = async () => {
     try {
       setLoading(true);
-      const data = await coreApi.getProduct(id!);
+      const data = await coreApi.getProduct(actualProductId!);
       console.log('Loaded product data:', data);
       console.log('Product variants from API:', data.variants);
       
@@ -73,24 +75,14 @@ export default function ProductDetail() {
   const handleAddToCart = async () => {
     if (!product) return;
     
-    console.log('Product:', product);
-    console.log('Product variants:', product.variants);
-    console.log('Selected variant:', selectedVariant);
-    
-    // If product has variants but none is selected, show error
-    if (product.variants && product.variants.length > 0 && !selectedVariant) {
-      toast({
-        title: 'اختر خيار المنتج',
-        description: 'يرجى اختيار أحد خيارات المنتج قبل الإضافة للسلة',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
     try {
-      // Pass the selected variant ID if available
-      const variantId = selectedVariant?.id;
-      console.log('Adding to cart with variantId:', variantId);
+      // If product has variants but none is selected, use the first variant automatically
+      let variantId = selectedVariant?.id;
+      if (product.variants && product.variants.length > 0 && !variantId) {
+        variantId = product.variants[0].id;
+        // Optionally set the selected variant in state for UI consistency
+        setSelectedVariant(product.variants[0]);
+      }
       
       await addToCart(product.id, quantity, variantId);
       toast({

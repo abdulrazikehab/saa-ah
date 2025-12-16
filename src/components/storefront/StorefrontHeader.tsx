@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { CustomerLogin } from './CustomerLogin';
 import { CustomerSignup } from './CustomerSignup';
 import { coreApi } from '@/lib/api';
+import { useTranslation } from 'react-i18next';
 
 import { useCart } from '@/contexts/CartContext';
 
@@ -16,6 +17,7 @@ interface StorefrontHeaderProps {
 
 export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: StorefrontHeaderProps) {
   const { cart } = useCart();
+  const { i18n } = useTranslation();
   const cartItemCount = cart?.items?.reduce((total, item) => total + (item.quantity || 1), 0) || propCount;
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
@@ -23,7 +25,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [language, setLanguage] = useState<'ar' | 'en'>('ar');
+  const [language, setLanguage] = useState<'ar' | 'en'>(i18n.language as 'ar' | 'en' || 'ar');
   const [customerData, setCustomerData] = useState<any>(null);
   const [siteConfig, setSiteConfig] = useState<any>(null);
   const [categories, setCategories] = useState<any[]>([]);
@@ -89,9 +91,27 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
     const loadCategories = async () => {
       try {
         const data = await coreApi.get('/categories');
-        setCategories(Array.isArray(data) ? data : (data.categories || []));
+        // Validate data is not an error object
+        if (data && typeof data === 'object' && !('error' in data) && !('statusCode' in data)) {
+          if (Array.isArray(data)) {
+            const validCategories = data.filter((c: any) => 
+              c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+            );
+            setCategories(validCategories);
+          } else if (data.categories && Array.isArray(data.categories)) {
+            const validCategories = data.categories.filter((c: any) => 
+              c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+            );
+            setCategories(validCategories);
+          } else {
+            setCategories([]);
+          }
+        } else {
+          setCategories([]);
+        }
       } catch (error) {
         console.error('Failed to load categories:', error);
+        setCategories([]);
       }
     };
     loadCategories();
@@ -120,8 +140,25 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
     window.location.reload();
   };
 
+  // Sync language with i18n
+  useEffect(() => {
+    setLanguage(i18n.language as 'ar' | 'en');
+  }, [i18n.language]);
+
   const toggleLanguage = () => {
-    setLanguage(prev => prev === 'ar' ? 'en' : 'ar');
+    const newLang = language === 'ar' ? 'en' : 'ar';
+    i18n.changeLanguage(newLang);
+    localStorage.setItem('language', newLang);
+    setLanguage(newLang);
+    
+    // Update document direction
+    const dir = newLang === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.dir = dir;
+    document.documentElement.setAttribute('dir', dir);
+    if (document.body) {
+      document.body.dir = dir;
+      document.body.setAttribute('dir', dir);
+    }
   };
 
   const storeName = language === 'ar' 
@@ -235,8 +272,8 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                               />
                             )}
                             <div>
-                              <div className="font-medium">{category.name}</div>
-                              {category.description && (
+                              <div className="font-medium">{String(category.name || '')}</div>
+                              {category.description && typeof category.description === 'string' && (
                                 <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
                                   {category.description}
                                 </div>
@@ -258,7 +295,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center gap-6">
               {headerLinks.map((link: any, index: number) => {
-                const label = language === 'ar' ? (link.labelAr || link.label) : link.label;
+                const label = String(language === 'ar' ? (link?.labelAr || link?.label || '') : (link?.label || ''));
                 
                 if (link.type === 'dropdown') {
                   return (
@@ -270,11 +307,11 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                       <div className="absolute top-full left-0 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform translate-y-2 group-hover:translate-y-0">
                         <div className="py-1">
                           {link.children?.map((child: any, childIndex: number) => {
-                            const childLabel = language === 'ar' ? (child.labelAr || child.label) : child.label;
+                            const childLabel = String(language === 'ar' ? (child?.labelAr || child?.label || '') : (child?.label || ''));
                             return (
                               <Link
                                 key={childIndex}
-                                to={child.url}
+                                to={String(child?.url || '#')}
                                 className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-primary dark:hover:text-primary"
                               >
                                 {childLabel}
@@ -290,7 +327,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                 return (
                   <Link
                     key={index}
-                    to={link.url}
+                    to={String(link?.url || '#')}
                     className="text-gray-700 dark:text-gray-300 hover:text-primary dark:hover:text-primary font-medium transition-colors relative group"
                   >
                     {label}
@@ -305,24 +342,26 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                   : button.variant === 'secondary'
                   ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600'
                   : 'border-2 border-primary text-primary hover:bg-primary hover:text-white';
+                const buttonLabel = String(button?.label || '');
+                const buttonUrl = String(button?.url || '#');
                 
-                return button.url.startsWith('http') ? (
+                return buttonUrl.startsWith('http') ? (
                   <a
                     key={`btn-${index}`}
-                    href={button.url}
+                    href={buttonUrl}
                     target={button.openInNewTab ? '_blank' : '_self'}
                     rel={button.openInNewTab ? 'noopener noreferrer' : undefined}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${buttonClasses}`}
                   >
-                    {button.label}
+                    {buttonLabel}
                   </a>
                 ) : (
                   <Link
                     key={`btn-${index}`}
-                    to={button.url}
+                    to={buttonUrl}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${buttonClasses}`}
                   >
-                    {button.label}
+                    {buttonLabel}
                   </Link>
                 );
               })}
@@ -358,7 +397,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                   <button className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
                     <User className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     <span className="hidden md:inline text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {customerData.firstName}
+                      {String(customerData?.firstName || '')}
                     </span>
                   </button>
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
@@ -437,7 +476,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
           <div className="lg:hidden border-t dark:border-gray-700 bg-white dark:bg-gray-900 animate-in slide-in-from-top">
             <nav className="container mx-auto px-4 py-4 flex flex-col gap-2">
               {headerLinks.map((link: any, index: number) => {
-                const label = language === 'ar' ? (link.labelAr || link.label) : link.label;
+                const label = String(language === 'ar' ? (link?.labelAr || link?.label || '') : (link?.label || ''));
 
                 if (link.type === 'dropdown') {
                   return (
@@ -448,11 +487,11 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                       </div>
                       <div className="pl-4 border-l-2 border-gray-100 dark:border-gray-800 ml-4 space-y-1">
                         {link.children?.map((child: any, childIndex: number) => {
-                          const childLabel = language === 'ar' ? (child.labelAr || child.label) : child.label;
+                          const childLabel = String(language === 'ar' ? (child?.labelAr || child?.label || '') : (child?.label || ''));
                           return (
                             <Link
                               key={childIndex}
-                              to={child.url}
+                              to={String(child?.url || '#')}
                               className="block px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary"
                               onClick={() => setShowMobileMenu(false)}
                             >
@@ -468,7 +507,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                 return (
                   <Link
                     key={index}
-                    to={link.url}
+                    to={String(link?.url || '#')}
                     className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                     onClick={() => setShowMobileMenu(false)}
                   >
@@ -483,26 +522,28 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                   : button.variant === 'secondary'
                   ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-300 dark:hover:bg-gray-600'
                   : 'border-2 border-primary text-primary hover:bg-primary hover:text-white';
+                const buttonLabel = String(button?.label || '');
+                const buttonUrl = String(button?.url || '#');
                 
-                return button.url.startsWith('http') ? (
+                return buttonUrl.startsWith('http') ? (
                   <a
                     key={`mobile-btn-${index}`}
-                    href={button.url}
+                    href={buttonUrl}
                     target={button.openInNewTab ? '_blank' : '_self'}
                     rel={button.openInNewTab ? 'noopener noreferrer' : undefined}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors text-center ${buttonClasses}`}
                     onClick={() => setShowMobileMenu(false)}
                   >
-                    {button.label}
+                    {buttonLabel}
                   </a>
                 ) : (
                   <Link
                     key={`mobile-btn-${index}`}
-                    to={button.url}
+                    to={buttonUrl}
                     className={`px-4 py-2 rounded-lg font-medium transition-colors text-center ${buttonClasses}`}
                     onClick={() => setShowMobileMenu(false)}
                   >
-                    {button.label}
+                    {buttonLabel}
                   </Link>
                 );
               })}

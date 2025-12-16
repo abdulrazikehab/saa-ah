@@ -16,6 +16,12 @@ export interface Transaction {
   processedAt?: string;
   settledAt?: string;
   createdAt: string;
+  // Card details
+  cardNumber?: string;
+  cardBin?: string;
+  cardLast4?: string;
+  // Print tracking
+  printCount?: number;
 }
 
 export interface BalanceSummary {
@@ -82,6 +88,11 @@ export const transactionService = {
 
   getSubscription: (tenantId: string): Promise<SubscriptionInfo> =>
     apiClient.get(`/transactions/subscription?tenantId=${tenantId}`, {
+      requireAuth: true,
+    }),
+
+  reprintTransaction: (tenantId: string, transactionId: string): Promise<{ success: boolean; printCount: number }> =>
+    apiClient.post(`/transactions/${transactionId}/reprint?tenantId=${tenantId}`, {}, {
       requireAuth: true,
     }),
 };

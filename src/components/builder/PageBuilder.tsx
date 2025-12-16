@@ -145,6 +145,22 @@ export function PageBuilder({
       setShowTemplateGallery(false);
       setSelectedSectionId(null);
       
+      // Extract backgroundColor and isDarkMode from template content if they exist
+      const templateContent = template.content as { 
+        sections: Section[];
+        backgroundColor?: string;
+        isDarkMode?: boolean;
+      };
+      
+      if (templateContent?.backgroundColor) {
+        handleBackgroundColorChange(templateContent.backgroundColor);
+      }
+      if (typeof templateContent?.isDarkMode === 'boolean' && templateContent.isDarkMode !== isDarkMode) {
+        // Only update if different from current state
+        setIsDarkMode(templateContent.isDarkMode);
+        onDarkModeChange?.(templateContent.isDarkMode);
+      }
+      
       // Immediately save the template to parent component
       onSave?.(newSections);
       
@@ -611,6 +627,14 @@ function getDefaultProps(type: string, t: TFunction): Record<string, unknown> {
         twitter: '',
         instagram: '',
       },
+    },
+    'categories-hierarchy': {
+      title: t('builder.defaults.categoriesHierarchy.title', 'الفئات والمنتجات'),
+      subtitle: t('builder.defaults.categoriesHierarchy.subtitle', 'تصفح الفئات والفئات الفرعية والمنتجات'),
+      productsPerCategory: 12,
+      productsColumns: 4,
+      productsLayout: 'grid',
+      showAddToCart: true,
     },
   };
 

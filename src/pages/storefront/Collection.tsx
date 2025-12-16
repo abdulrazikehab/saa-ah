@@ -21,7 +21,7 @@ export default function Collection() {
 
   async function loadCollection(collectionId: string) {
     try {
-      const collectionData = await coreApi.getCollection(collectionId);
+      const collectionData = await coreApi.get(`/collections/${collectionId}`);
       setCollection(collectionData);
       
       // Assuming collection data includes products or we need to fetch them separately
@@ -43,7 +43,7 @@ export default function Collection() {
 
   async function addToCart(productId: string) {
     try {
-      await coreApi.addToCart(productId, 1);
+      await coreApi.addToCart({ productId, quantity: 1 });
       toast({
         title: 'Added to cart',
         description: 'Product has been added to your cart.',

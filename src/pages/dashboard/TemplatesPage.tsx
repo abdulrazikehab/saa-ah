@@ -71,7 +71,8 @@ export default function TemplatesPage() {
 
   const handleUseTemplate = (template: Template) => {
     // Navigate to page builder with template ID as query param
-    navigate(`/dashboard/pages/new?templateId=${template.id}`);
+    // Encode template.id to handle special characters like + in base64 IDs
+    navigate(`/dashboard/pages/new?templateId=${encodeURIComponent(template.id)}`);
   };
 
   return (

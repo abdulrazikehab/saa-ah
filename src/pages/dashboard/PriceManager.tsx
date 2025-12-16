@@ -178,14 +178,20 @@ export default function PriceManager() {
         updateData.costPerItem = parseFloat(editingPrice.costPerItem);
       }
 
+      // Validate price before updating
+      if (isNaN(updateData.price) || updateData.price < 0) {
+        toast({
+          title: 'خطأ في السعر',
+          description: 'السعر يجب أن يكون رقماً صحيحاً أكبر من أو يساوي صفر',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       await coreApi.updateProduct(productId, updateData);
       
-      // Update local state
-      setProducts(prev => prev.map(p => 
-        p.id === productId 
-          ? { ...p, price: updateData.price, compareAtPrice: updateData.compareAtPrice, costPerItem: updateData.costPerItem }
-          : p
-      ));
+      // Reload data to get fresh state from server
+      await loadData();
 
       toast({
         title: 'نجح',

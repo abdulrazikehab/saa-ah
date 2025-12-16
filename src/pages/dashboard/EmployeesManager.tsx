@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Users, UserPlus, Search, Shield, Trash2, Edit, Check } from 'lucide-react';
+import { Users, UserPlus, Search, Shield, Trash2, Edit, Check, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { staffService, StaffUser } from '@/services/staff.service';
+import { coreApi } from '@/lib/api';
 
 const AVAILABLE_PERMISSIONS = [
   { id: 'manage_products', label: 'إدارة المنتجات' },
@@ -20,6 +22,14 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_analytics', label: 'عرض التقارير' },
 ];
 
+interface Customer {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+}
+
 export default function EmployeesManager() {
   const { toast } = useToast();
   const [staff, setStaff] = useState<StaffUser[]>([]);
@@ -27,7 +37,12 @@ export default function EmployeesManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [newStaffPhone, setNewStaffPhone] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState<string>('');
   const [newStaffPermissions, setNewStaffPermissions] = useState<string[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadStaff = useCallback(async () => {
@@ -51,6 +66,117 @@ export default function EmployeesManager() {
     loadStaff();
   }, [loadStaff]);
 
+  useEffect(() => {
+    if (isAddDialogOpen) {
+      loadCustomers();
+    }
+  }, [isAddDialogOpen]);
+
+  const loadCustomers = async () => {
+    try {
+      setLoadingCustomers(true);
+      
+      // Try to get customers from dashboard endpoint first
+      let customersData: any[] = [];
+      try {
+        const response = await coreApi.get('/dashboard/customers', { requireAuth: true });
+        console.log('🛒 EmployeesManager: Dashboard customers response:', response);
+        
+        // Backend returns { customers: [...], total: number, page: number, limit: number }
+        if (Array.isArray(response)) {
+          customersData = response;
+        } else if (response && typeof response === 'object') {
+          // Handle different response formats
+          if (Array.isArray(response.customers)) {
+            customersData = response.customers;
+          } else if (Array.isArray(response.data)) {
+            customersData = response.data;
+          } else if (response.data && Array.isArray(response.data.customers)) {
+            customersData = response.data.customers;
+          }
+        }
+      } catch (dashboardError) {
+        console.warn('🛒 EmployeesManager: Dashboard endpoint failed, trying auth service directly:', dashboardError);
+        
+        // Fallback: Try to get customers directly from auth service
+        try {
+          const authBaseUrl = import.meta.env.VITE_AUTH_API_URL || 'http://localhost:3001';
+          const token = localStorage.getItem('accessToken') || document.cookie.split('accessToken=')[1]?.split(';')[0] || '';
+          
+          const authResponse = await fetch(`${authBaseUrl}/customers?page=1&limit=1000`, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+          });
+          
+          if (authResponse.ok) {
+            const authData = await authResponse.json();
+            console.log('🛒 EmployeesManager: Auth service customers response:', authData);
+            
+            if (Array.isArray(authData)) {
+              customersData = authData;
+            } else if (authData.data && Array.isArray(authData.data)) {
+              customersData = authData.data;
+            } else if (authData.customers && Array.isArray(authData.customers)) {
+              customersData = authData.customers;
+            }
+          } else {
+            console.error('🛒 EmployeesManager: Auth service returned error:', authResponse.status, authResponse.statusText);
+          }
+        } catch (authError) {
+          console.error('🛒 EmployeesManager: Auth service fallback also failed:', authError);
+        }
+      }
+      
+      console.log('🛒 EmployeesManager: Extracted customers data:', customersData);
+      
+      // Get unique customers by email and map to Customer interface
+      const uniqueCustomers = customersData.reduce((acc: Customer[], customer: any) => {
+        if (!customer || !customer.email) {
+          console.warn('🛒 EmployeesManager: Skipping invalid customer:', customer);
+          return acc;
+        }
+        
+        const email = customer.email.toLowerCase().trim();
+        if (!acc.find(c => c.email.toLowerCase() === email)) {
+          acc.push({
+            id: customer.id || customer.email || `customer-${acc.length}`,
+            email: customer.email,
+            firstName: customer.firstName || customer.name || customer.customerName || '',
+            lastName: customer.lastName || '',
+            phone: customer.phone || customer.customerPhone || '',
+          });
+        }
+        return acc;
+      }, []);
+      
+      console.log('🛒 EmployeesManager: Unique customers:', uniqueCustomers);
+      setCustomers(uniqueCustomers);
+      
+      if (uniqueCustomers.length === 0) {
+        console.warn('🛒 EmployeesManager: No customers found. Make sure customers are created in the market.');
+        toast({
+          title: 'لا يوجد عملاء',
+          description: 'لم يتم العثور على عملاء. تأكد من إنشاء العملاء في المتجر أولاً.',
+          variant: 'default',
+        });
+      }
+    } catch (error) {
+      console.error('🛒 EmployeesManager: Failed to load customers:', error);
+      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ أثناء تحميل قائمة العملاء';
+      toast({
+        title: 'تعذر تحميل العملاء',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      setCustomers([]);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
+
   const handleAddStaff = async () => {
     if (!newStaffEmail) {
       toast({
@@ -61,11 +187,23 @@ export default function EmployeesManager() {
       return;
     }
 
+    if (newStaffRole === 'STORE_MANAGER' && selectedCustomers.length === 0) {
+      toast({
+        title: 'العملاء مطلوبون',
+        description: 'يرجى اختيار العملاء للمدير المتجر',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await staffService.createStaff({
         email: newStaffEmail,
+        phone: newStaffPhone,
+        role: newStaffRole,
         permissions: newStaffPermissions,
+        assignedCustomers: selectedCustomers,
       });
       
       toast({
@@ -75,7 +213,10 @@ export default function EmployeesManager() {
       
       setIsAddDialogOpen(false);
       setNewStaffEmail('');
+      setNewStaffPhone('');
+      setNewStaffRole('');
       setNewStaffPermissions([]);
+      setSelectedCustomers([]);
       loadStaff();
     } catch (error) {
       console.error('Failed to create staff:', error);
@@ -150,14 +291,99 @@ export default function EmployeesManager() {
             
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="email">البريد الإلكتروني</Label>
+                <Label htmlFor="email">البريد الإلكتروني *</Label>
                 <Input 
                   id="email" 
                   placeholder="employee@example.com" 
                   value={newStaffEmail}
                   onChange={(e) => setNewStaffEmail(e.target.value)}
+                  required
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">رقم الهاتف</Label>
+                <Input 
+                  id="phone" 
+                  placeholder="+966 5XX XXX XXX" 
+                  value={newStaffPhone}
+                  onChange={(e) => setNewStaffPhone(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">الدور</Label>
+                <Select 
+                  value={newStaffRole || "__none__"} 
+                  onValueChange={(value) => setNewStaffRole(value === "__none__" ? '' : value)}
+                >
+                  <SelectTrigger id="role">
+                    <SelectValue placeholder="اختر الدور" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">بدون دور محدد</SelectItem>
+                    <SelectItem value="STORE_MANAGER">مدير متجرك</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newStaffRole === 'STORE_MANAGER' && (
+                <div className="space-y-2">
+                  <Label>اختر العملاء *</Label>
+                  {loadingCustomers ? (
+                    <div className="text-sm text-gray-500 p-3 border rounded-lg flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                      جاري تحميل العملاء...
+                    </div>
+                  ) : customers.length === 0 ? (
+                    <div className="text-sm text-gray-500 p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                      <p className="mb-2">لا يوجد عملاء مسجلين في المتجر</p>
+                      <p className="text-xs">سيتم عرض العملاء هنا عند وجود طلبات أو عملاء مسجلين</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-60 overflow-y-auto border rounded-lg p-4 space-y-2 bg-gray-50 dark:bg-gray-900">
+                      <p className="text-xs text-gray-500 mb-2">تم العثور على {customers.length} عميل</p>
+                      {customers.map((customer) => (
+                        <div key={customer.id} className="flex items-center space-x-2 space-x-reverse p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
+                          <Checkbox 
+                            id={`customer-${customer.id}`}
+                            checked={selectedCustomers.includes(customer.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedCustomers([...selectedCustomers, customer.id]);
+                              } else {
+                                setSelectedCustomers(selectedCustomers.filter(id => id !== customer.id));
+                              }
+                            }}
+                          />
+                          <label 
+                            htmlFor={`customer-${customer.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                          >
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{customer.firstName || customer.email}</span>
+                                {customer.lastName && (
+                                  <span className="text-gray-600 dark:text-gray-400">{customer.lastName}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <span>{customer.email}</span>
+                                {customer.phone && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{customer.phone}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="space-y-2">
                 <Label>الصلاحيات</Label>
@@ -241,15 +467,28 @@ export default function EmployeesManager() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {user.staffPermissions.length > 0 ? (
-                          user.staffPermissions.map((p, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {AVAILABLE_PERMISSIONS.find(ap => ap.id === p.permission)?.label || p.permission}
-                            </Badge>
-                          ))
-                        ) : (
-                          <span className="text-muted-foreground text-sm">لا توجد صلاحيات</span>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap gap-1">
+                          {user.staffPermissions.length > 0 ? (
+                            user.staffPermissions.map((p, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">
+                                {AVAILABLE_PERMISSIONS.find(ap => ap.id === p.permission)?.label || p.permission}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted-foreground text-sm">لا توجد صلاحيات</span>
+                          )}
+                        </div>
+                        {(user as any).role === 'STORE_MANAGER' && (
+                          <Badge variant="outline" className="text-xs mt-1">
+                            مدير متجرك
+                          </Badge>
+                        )}
+                        {(user as any).phone && (
+                          <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                            <Phone className="h-3 w-3" />
+                            {(user as any).phone}
+                          </div>
                         )}
                       </div>
                     </TableCell>

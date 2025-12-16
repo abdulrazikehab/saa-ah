@@ -44,9 +44,18 @@ export default function UnitSettings() {
 
   const loadUnits = async () => {
     try {
-      const response = await coreApi.get('/units');
-      setUnits(Array.isArray(response) ? response : []);
+      const response = await coreApi.get('/units', { requireAuth: true });
+      // Validate response is an array of valid unit objects
+      if (Array.isArray(response)) {
+        const validUnits = response.filter((u: any) =>
+          u && typeof u === 'object' && u.id && !('error' in u)
+        );
+        setUnits(validUnits);
+      } else {
+        setUnits([]);
+      }
     } catch (error: any) {
+      setUnits([]);
       toast({
         title: 'تعذر تحميل الوحدات',
         description: 'حدث خطأ أثناء تحميل الوحدات. يرجى تحديث الصفحة.',
@@ -61,10 +70,12 @@ export default function UnitSettings() {
 
     try {
       if (editingUnit) {
-        await coreApi.put(`/units/${editingUnit.id}`, {
+        // Encode the ID to handle special characters like + and /
+        const encodedId = encodeURIComponent(editingUnit.id);
+        await coreApi.put(`/units/${encodedId}`, {
           ...formData,
           cost: parseFloat(formData.cost.toString()),
-        });
+        }, { requireAuth: true });
         toast({
           title: 'نجح',
           description: 'تم تحديث الوحدة بنجاح',
@@ -73,7 +84,7 @@ export default function UnitSettings() {
         await coreApi.post('/units', {
           ...formData,
           cost: parseFloat(formData.cost.toString()),
-        });
+        }, { requireAuth: true });
         toast({
           title: 'نجح',
           description: 'تم إضافة الوحدة بنجاح',
@@ -83,9 +94,10 @@ export default function UnitSettings() {
       resetForm();
       loadUnits();
     } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء حفظ الوحدة. يرجى المحاولة مرة أخرى.';
       toast({
         title: 'تعذر حفظ الوحدة',
-        description: 'حدث خطأ أثناء حفظ الوحدة. يرجى المحاولة مرة أخرى.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -110,16 +122,19 @@ export default function UnitSettings() {
     if (!confirm('هل أنت متأكد من حذف هذه الوحدة؟')) return;
 
     try {
-      await coreApi.delete(`/units/${id}`);
+      // Encode the ID to handle special characters like + and /
+      const encodedId = encodeURIComponent(id);
+      await coreApi.delete(`/units/${encodedId}`, { requireAuth: true });
       toast({
         title: 'نجح',
         description: 'تم حذف الوحدة بنجاح',
       });
       loadUnits();
     } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'حدث خطأ أثناء حذف الوحدة. يرجى المحاولة مرة أخرى.';
       toast({
         title: 'تعذر حذف الوحدة',
-        description: 'حدث خطأ أثناء حذف الوحدة. يرجى المحاولة مرة أخرى.',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -172,18 +187,18 @@ export default function UnitSettings() {
                 <TableRow key={unit.id}>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{unit.name}</div>
-                      {unit.nameAr && (
+                      <div className="font-medium">{String(unit.name || '')}</div>
+                      {unit.nameAr && typeof unit.nameAr === 'string' && (
                         <div className="text-sm text-gray-500">{unit.nameAr}</div>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                      {unit.code}
+                      {String(unit.code || '')}
                     </span>
                   </TableCell>
-                  <TableCell>{unit.symbol || '-'}</TableCell>
+                  <TableCell>{String(unit.symbol || '-')}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <Package className="h-4 w-4" />

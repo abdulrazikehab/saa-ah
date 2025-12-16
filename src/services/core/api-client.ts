@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { isErrorObject } from '@/lib/error-utils';
 
 // Determine base URLs based on environment
 const getBaseUrl = (defaultPort: string) => {
@@ -74,7 +75,8 @@ async function refreshAccessToken(): Promise<string | null> {
 
   try {
     // Send refresh token in body only if not in cookie (fallback)
-    const body = getCookie('refreshToken') ? {} : JSON.stringify({ refreshToken });
+    const hasRefreshCookie = !!getCookie('refreshToken');
+    const body = hasRefreshCookie ? undefined : JSON.stringify({ refreshToken });
     // Build refresh URL - handle both cases:
     // Production: https://saeaa.net/auth/refresh
     // Development: http://localhost:3001/auth/refresh
@@ -88,7 +90,7 @@ async function refreshAccessToken(): Promise<string | null> {
         'Content-Type': 'application/json',
       },
       credentials: 'include', // Include cookies
-      body,
+      ...(body ? { body } : {}),
     });
 
     if (!response.ok) {
@@ -114,6 +116,8 @@ async function refreshAccessToken(): Promise<string | null> {
 
 async function fetchApi(url: string, options: ApiOptions = {}) {
   const { requireAuth = false, sessionId, adminApiKey, _retry = false, ...fetchOptions } = options;
+
+  console.log('🌐 fetchApi called:', { url, method: fetchOptions.method || 'GET', sessionId, requireAuth });
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -148,6 +152,8 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), fetchOptions.timeout || 60000);
 
+    console.log('🌐 fetchApi: Making request to', url, 'with headers:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : undefined });
+    
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
@@ -156,6 +162,8 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     });
     
     clearTimeout(timeoutId);
+    
+    console.log('🌐 fetchApi: Response received:', { status: response.status, statusText: response.statusText, url });
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -201,6 +209,13 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       if (typeof errorMessage === 'object') {
         errorMessage = JSON.stringify(errorMessage);
       }
+      
+      // Don't show toast for expected 404s on public endpoints
+      if (response.status === 404 && !requireAuth) {
+        // Silently handle 404s for public endpoints (like optional pages)
+        throw new ApiError(response.status, errorMessage, data);
+      }
+      
       throw new ApiError(response.status, errorMessage, data);
     }
 
@@ -209,12 +224,65 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       return null;
     }
 
-    const responseData = await response.json();
+    // Capture session ID from response header if present
+    const responseSessionId = response.headers.get('X-Session-ID');
+    console.log('🌐 fetchApi: Response headers X-Session-ID:', responseSessionId);
+    console.log('🌐 fetchApi: Request sessionId:', sessionId);
+    
+    if (responseSessionId) {
+      // Always update localStorage with the sessionId from server
+      const currentStored = localStorage.getItem('guestSessionId');
+      if (currentStored !== responseSessionId) {
+        console.log('🌐 fetchApi: Updating localStorage sessionId:', { old: currentStored, new: responseSessionId });
+        localStorage.setItem('guestSessionId', responseSessionId);
+      }
+    }
 
-    // Automatic unwrapping of TransformInterceptor format
-    // Backend returns { success: true, data: T, message: string }
-    if (responseData && typeof responseData === 'object' && 'success' in responseData && 'data' in responseData) {
-      return responseData.data;
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch (jsonError) {
+      // If JSON parsing fails, return null
+      return null;
+    }
+
+    // Check if response is an error object (NestJS error format)
+    if (responseData && typeof responseData === 'object') {
+      // CRITICAL: If it's an error object, ALWAYS throw - never return it
+      if (isErrorObject(responseData)) {
+        const errorMessage = typeof responseData.message === 'string' 
+          ? responseData.message 
+          : (typeof responseData.message === 'object' ? JSON.stringify(responseData.message) : 'An error occurred');
+        const statusCode = responseData.statusCode || 500;
+        throw new ApiError(statusCode, errorMessage, responseData);
+      }
+      
+      // Automatic unwrapping of TransformInterceptor format
+      // Backend returns { success: true, data: T, message: string }
+      if ('success' in responseData && 'data' in responseData) {
+        const unwrappedData = responseData.data;
+        // CRITICAL: Double-check unwrapped data is not an error object
+        if (unwrappedData && isErrorObject(unwrappedData)) {
+          const errorMessage = typeof unwrappedData.message === 'string' 
+            ? unwrappedData.message 
+            : (typeof unwrappedData.message === 'object' ? JSON.stringify(unwrappedData.message) : 'An error occurred');
+          throw new ApiError(unwrappedData.statusCode || 500, errorMessage, unwrappedData);
+        }
+        // Validate unwrapped data is not an array containing error objects
+        if (Array.isArray(unwrappedData)) {
+          const filtered = unwrappedData.filter(item => !isErrorObject(item));
+          return filtered.length === unwrappedData.length ? unwrappedData : filtered;
+        }
+        return unwrappedData;
+      }
+    }
+
+    // Final safety check: if responseData itself is an error object, throw
+    if (isErrorObject(responseData)) {
+      const errorMessage = typeof responseData.message === 'string' 
+        ? responseData.message 
+        : (typeof responseData.message === 'object' ? JSON.stringify(responseData.message) : 'An error occurred');
+      throw new ApiError(responseData.statusCode || 500, errorMessage, responseData);
     }
 
     return responseData;

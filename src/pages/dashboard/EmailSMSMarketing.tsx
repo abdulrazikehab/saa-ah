@@ -41,15 +41,24 @@ export default function EmailSMSMarketing() {
   const [isAddCampaignOpen, setIsAddCampaignOpen] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    type: 'EMAIL' | 'SMS';
+    subject: string;
+    message: string;
+    segment: 'ALL' | 'LOYAL' | 'INACTIVE' | 'CUSTOM';
+    schedule: 'IMMEDIATE' | 'SCHEDULED' | 'RECURRING';
+    scheduledDate: string;
+    recurringDays: string[];
+  }>({
     name: '',
-    type: 'EMAIL' as const,
+    type: 'EMAIL',
     subject: '',
     message: '',
-    segment: 'ALL' as const,
-    schedule: 'IMMEDIATE' as const,
+    segment: 'ALL',
+    schedule: 'IMMEDIATE',
     scheduledDate: '',
-    recurringDays: [] as string[],
+    recurringDays: [],
   });
 
   const loadCampaigns = useCallback(async () => {

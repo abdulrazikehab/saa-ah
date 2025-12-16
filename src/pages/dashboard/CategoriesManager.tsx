@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { ImageUpload } from '@/components/ui/image-upload';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -75,10 +76,15 @@ export default function CategoriesManager() {
   const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; parentId?: string} | null>(null);
   const [formData, setFormData] = useState({
     name: '',
+    nameAr: '',
     description: '',
+    descriptionAr: '',
     slug: '',
     image: '',
+    icon: '',
     parentId: '',
+    isActive: true,
+    sortOrder: 0,
   });
 
   // Active tab
@@ -157,19 +163,29 @@ export default function CategoriesManager() {
       setEditingCategory(category);
       setFormData({
         name: category.name || '',
+        nameAr: category.nameAr || '',
         description: category.description || '',
+        descriptionAr: category.descriptionAr || '',
         slug: category.slug || '',
         image: category.image || '',
+        icon: category.icon || '',
         parentId: category.parentId || '',
+        isActive: category.isActive !== undefined ? category.isActive : true,
+        sortOrder: category.sortOrder || 0,
       });
     } else {
       setEditingCategory(null);
       setFormData({
         name: '',
+        nameAr: '',
         description: '',
+        descriptionAr: '',
         slug: '',
         image: '',
+        icon: '',
         parentId: '',
+        isActive: true,
+        sortOrder: 0,
       });
     }
     setDialogOpen(true);
@@ -180,15 +196,16 @@ export default function CategoriesManager() {
     try {
       const categoryData: any = {
         name: formData.name,
-        description: formData.description,
-        slug: formData.slug,
-        image: formData.image,
+        nameAr: formData.nameAr || undefined,
+        description: formData.description || undefined,
+        descriptionAr: formData.descriptionAr || undefined,
+        slug: formData.slug || undefined,
+        image: formData.image || undefined,
+        icon: formData.icon || undefined,
+        parentId: formData.parentId || undefined,
+        isActive: formData.isActive,
+        sortOrder: formData.sortOrder || 0,
       };
-      
-      // Add parentId if selected
-      if (formData.parentId) {
-        categoryData.parentId = formData.parentId;
-      }
 
       if (editingCategory) {
         await coreApi.updateCategory(editingCategory.id, categoryData);
@@ -272,37 +289,88 @@ export default function CategoriesManager() {
     if (!file) return;
 
     try {
+      setLoading(true);
       const data = await file.arrayBuffer();
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = utils.sheet_to_json<{ Name: string; Description?: string; Slug?: string }>(worksheet);
+      const jsonData = utils.sheet_to_json<{ 
+        Name: string; 
+        NameAr?: string;
+        Description?: string; 
+        DescriptionAr?: string;
+        Slug?: string;
+        Parent?: string;
+        Image?: string;
+      }>(worksheet, { defval: '' });
 
       let successCount = 0;
       let errorCount = 0;
+      const errors: string[] = [];
 
-      for (const row of jsonData) {
-        if (!row.Name) continue;
-        
+      // Helper function to generate slug from name
+      const generateSlug = (name: string): string => {
+        return name
+          .toLowerCase()
+          .trim()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/[\s_-]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+      };
+
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        const rowNum = i + 2; // Excel row number (1-indexed + header)
+
+        if (!row.Name || !row.Name.trim()) {
+          errors.push(`Row ${rowNum}: Name is required`);
+          errorCount++;
+          continue;
+        }
+
         try {
+          // Find parent category if specified
+          let parentId: string | undefined;
+          if (row.Parent && row.Parent.trim()) {
+            const parent = categories.find(c => 
+              c.name?.toLowerCase() === row.Parent?.toLowerCase() ||
+              c.nameAr?.toLowerCase() === row.Parent?.toLowerCase() ||
+              c.slug?.toLowerCase() === row.Parent?.toLowerCase()
+            );
+            parentId = parent?.id;
+            if (!parentId) {
+              errors.push(`Row ${rowNum}: Parent category "${row.Parent}" not found`);
+            }
+          }
+
+          // Generate slug if not provided
+          const slug = row.Slug?.trim() || generateSlug(row.Name);
+
           await coreApi.createCategory({
-            name: row.Name,
-            description: row.Description || '',
-            slug: row.Slug || '',
+            name: row.Name.trim(),
+            nameAr: row.NameAr?.trim() || undefined,
+            description: row.Description?.trim() || '',
+            descriptionAr: row.DescriptionAr?.trim() || undefined,
+            slug,
+            parentId: parentId || undefined,
           });
           successCount++;
-        } catch (error) {
-          // Error logged to backend
+        } catch (error: any) {
+          const errorMsg = error?.message || 'Unknown error';
+          errors.push(`Row ${rowNum} (${row.Name}): ${errorMsg}`);
           errorCount++;
         }
       }
 
-      const errorText = errorCount > 0 ? `, ${t('categories.productCategories.importError')} ${errorCount}` : '';
+      const errorText = errors.length > 0 
+        ? `\n\nErrors:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n... and ${errors.length - 10} more errors` : ''}`
+        : '';
+
       toast({
-        title: t('common.success'),
-        description: t('categories.productCategories.importSuccess', { 
-          count: successCount,
-          errors: errorText
-        }),
+        title: successCount > 0 ? t('common.success') : t('common.error'),
+        description: `${t('categories.productCategories.importSuccess', { count: successCount })}${
+          errorCount > 0 ? `, ${t('categories.productCategories.importError')} ${errorCount}` : ''
+        }${errorText}`,
+        variant: errorCount > successCount ? 'destructive' : 'default',
       });
       
       loadCategories();
@@ -313,6 +381,8 @@ export default function CategoriesManager() {
         description: error?.message || t('categories.productCategories.importError'), 
         variant: 'destructive' 
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -821,14 +891,24 @@ export default function CategoriesManager() {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">{t('categories.productCategories.categoryName')} *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">{t('categories.productCategories.categoryName')} *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="nameAr">اسم الفئة (عربي)</Label>
+                  <Input
+                    id="nameAr"
+                    value={formData.nameAr}
+                    onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="slug">{t('categories.productCategories.slug')}</Label>
@@ -842,28 +922,66 @@ export default function CategoriesManager() {
                   {t('categories.productCategories.slugHint')}
                 </p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="description">{t('categories.productCategories.description')}</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="description">{t('categories.productCategories.description')}</Label>
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="descriptionAr">الوصف (عربي)</Label>
+                  <Textarea
+                    id="descriptionAr"
+                    value={formData.descriptionAr}
+                    onChange={(e) => setFormData({ ...formData, descriptionAr: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="icon">الأيقونة (Icon/Emoji)</Label>
+                  <Input
+                    id="icon"
+                    value={formData.icon}
+                    onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                    placeholder="📱 أو category-icon"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    يمكنك استخدام إيموجي أو اسم أيقونة
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="sortOrder">ترتيب العرض</Label>
+                  <Input
+                    id="sortOrder"
+                    type="number"
+                    min="0"
+                    value={formData.sortOrder}
+                    onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    الرقم الأقل يظهر أولاً
+                  </p>
+                </div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="parentId">
                   {t('categories.productCategories.parentCategory', 'الفئة الرئيسية (اختياري)')}
                 </Label>
                 <Select
-                  value={formData.parentId}
-                  onValueChange={(value) => setFormData({ ...formData, parentId: value })}
+                  value={formData.parentId || "__none__"}
+                  onValueChange={(value) => setFormData({ ...formData, parentId: value === "__none__" ? '' : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t('categories.productCategories.selectParentCategory', 'اختر فئة رئيسية (اختياري)')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t('categories.productCategories.noParent', 'لا توجد فئة رئيسية')}</SelectItem>
+                    <SelectItem value="__none__">{t('categories.productCategories.noParent', 'لا توجد فئة رئيسية')}</SelectItem>
                     {categories
                       .filter(cat => !editingCategory || cat.id !== editingCategory.id) // Don't allow selecting self as parent
                       .map((category) => (
@@ -887,6 +1005,19 @@ export default function CategoriesManager() {
                 <p className="text-xs text-muted-foreground">
                   {t('categories.productCategories.logoHint')}
                 </p>
+              </div>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="space-y-0.5">
+                  <Label htmlFor="isActive">حالة الفئة</Label>
+                  <p className="text-sm text-gray-500">
+                    تفعيل أو تعطيل الفئة
+                  </p>
+                </div>
+                <Switch
+                  id="isActive"
+                  checked={formData.isActive}
+                  onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                />
               </div>
             </div>
             <DialogFooter>

@@ -83,10 +83,12 @@ export default function ResetPassword() {
     return 'قوية';
   };
 
+  const getLogoUrl = () => '/branding/saeaa-logo.png';
+  
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      await authApi.resetPassword(values.email, values.code, values.password);
+      await authApi.resetPasswordComplete({ email: values.email, code: values.code, newPassword: values.password });
       toast({
         title: 'تم تغيير كلمة المرور بنجاح',
         description: 'يمكنك الآن تسجيل الدخول باستخدام كلمة المرور الجديدة.',

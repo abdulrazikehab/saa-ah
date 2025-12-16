@@ -21,17 +21,23 @@ import {
   Download,
   CheckCircle2,
   XCircle,
-  Clock
+  Clock,
+  Printer,
+  CreditCard
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { useToast } from '@/hooks/use-toast';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency-utils';
 
 export default function WalletTransactions() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<BalanceSummary | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [printingId, setPrintingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.tenantId) {
@@ -58,23 +64,46 @@ export default function WalletTransactions() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
-      case 'PROCESSING': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
-      case 'FAILED': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+  // Handle reprint transaction receipt
+  const handleReprint = async (transaction: Transaction) => {
+    try {
+      setPrintingId(transaction.id);
+      
+      // Call API to increment print count and get receipt
+      await coreApi.reprintTransaction(user!.tenantId!, transaction.id);
+      
+      // Update local state to increment print count
+      setTransactions(prev => prev.map(t => 
+        t.id === transaction.id 
+          ? { ...t, printCount: (t.printCount || 0) + 1 }
+          : t
+      ));
+      
+      toast({
+        title: 'تمت الطباعة',
+        description: `تم طباعة إيصال الطلب ${transaction.orderNumber}`,
+      });
+    } catch (error) {
+      toast({
+        title: 'فشل الطباعة',
+        description: 'حدث خطأ أثناء طباعة الإيصال',
+        variant: 'destructive',
+      });
+    } finally {
+      setPrintingId(null);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': return <CheckCircle2 className="h-4 w-4" />;
-      case 'PENDING': return <Clock className="h-4 w-4" />;
-      case 'FAILED': return <XCircle className="h-4 w-4" />;
-      default: return <Clock className="h-4 w-4" />;
+  // Format card number with BIN
+  const formatCardDisplay = (cardNumber?: string, cardBin?: string, cardLast4?: string) => {
+    if (cardNumber) {
+      // Mask middle digits: 4242****1234
+      return cardNumber.replace(/(\d{4})(\d+)(\d{4})/, '$1****$3');
     }
+    if (cardBin && cardLast4) {
+      return `${cardBin}****${cardLast4}`;
+    }
+    return '----';
   };
 
   if (loading) {
@@ -121,7 +150,9 @@ export default function WalletTransactions() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{balance?.availableBalance.toFixed(2)} {balance?.currency}</div>
+            <div className="text-2xl font-bold">
+              {balance ? formatCurrency(balance.availableBalance, balance.currency || 'SAR') : '0.00 ر.س'}
+            </div>
             <p className="text-xs text-muted-foreground">جاهز للسحب</p>
           </CardContent>
         </Card>
@@ -131,7 +162,9 @@ export default function WalletTransactions() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{balance?.pendingAmount.toFixed(2)} {balance?.currency}</div>
+            <div className="text-2xl font-bold">
+              {balance ? formatCurrency(balance.pendingAmount, balance.currency || 'SAR') : '0.00 ر.س'}
+            </div>
             <p className="text-xs text-muted-foreground">قيد المعالجة</p>
           </CardContent>
         </Card>
@@ -141,7 +174,9 @@ export default function WalletTransactions() {
             <ArrowUpRight className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{balance?.totalRevenue.toFixed(2)} {balance?.currency}</div>
+            <div className="text-2xl font-bold">
+              {balance ? formatCurrency(balance.totalRevenue, balance.currency || 'SAR') : '0.00 ر.س'}
+            </div>
             <p className="text-xs text-muted-foreground">قبل خصم العمولات</p>
           </CardContent>
         </Card>
@@ -151,7 +186,9 @@ export default function WalletTransactions() {
             <ArrowDownRight className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{balance?.totalPlatformFees.toFixed(2)} {balance?.currency}</div>
+            <div className="text-2xl font-bold">
+              {balance ? formatCurrency(balance.totalPlatformFees, balance.currency || 'SAR') : '0.00 ر.س'}
+            </div>
             <p className="text-xs text-muted-foreground">رسوم الخدمات</p>
           </CardContent>
         </Card>
@@ -171,9 +208,12 @@ export default function WalletTransactions() {
                 <TableRow>
                   <TableHead>رقم الطلب</TableHead>
                   <TableHead>التاريخ</TableHead>
-                  <TableHead>الحالة</TableHead>
+                  <TableHead>رقم البطاقة</TableHead>
+                  <TableHead>BIN</TableHead>
                   <TableHead>المبلغ</TableHead>
                   <TableHead>الصافي</TableHead>
+                  <TableHead className="text-center">عدد الطباعة</TableHead>
+                  <TableHead className="text-center">إعادة طباعة</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -187,20 +227,46 @@ export default function WalletTransactions() {
                       {format(new Date(transaction.createdAt), 'dd MMM yyyy', { locale: ar })}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className={`gap-1 ${getStatusColor(transaction.status)}`}>
-                        {getStatusIcon(transaction.status)}
-                        {transaction.status}
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-mono text-sm">
+                          {formatCardDisplay(transaction.cardNumber, transaction.cardBin, transaction.cardLast4)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
+                        {transaction.cardBin || '------'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {formatCurrency(transaction.amount, transaction.currency || 'SAR')}
+                    </TableCell>
+                    <TableCell className="text-green-600 font-medium">
+                      {formatCurrency(transaction.merchantEarnings, transaction.currency || 'SAR')}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="font-mono">
+                        {transaction.printCount || 0}
                       </Badge>
                     </TableCell>
-                    <TableCell>{transaction.amount.toFixed(2)} {transaction.currency}</TableCell>
-                    <TableCell className="text-green-600 font-medium">
-                      {transaction.merchantEarnings.toFixed(2)} {transaction.currency}
+                    <TableCell className="text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReprint(transaction)}
+                        disabled={printingId === transaction.id}
+                        className="gap-1"
+                      >
+                        <Printer className={`h-4 w-4 ${printingId === transaction.id ? 'animate-pulse' : ''}`} />
+                        {printingId === transaction.id ? 'جاري...' : 'طباعة'}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {transactions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       لا توجد معاملات حتى الآن
                     </TableCell>
                   </TableRow>

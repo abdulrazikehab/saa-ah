@@ -22,6 +22,7 @@ export interface PaymentReportItem {
   volume: number;
   fees: number;
   net: number;
+  currency?: string; // Currency code for the payment
 }
 
 export const reportService = {
