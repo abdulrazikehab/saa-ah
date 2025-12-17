@@ -8,7 +8,11 @@ export const authService = {
 
   login: async (data: LoginData): Promise<{ id: string; email: string; role: string; tenantId: string; avatar?: string | null; accessToken: string; refreshToken: string }> => {
     const fingerprint = await getDeviceFingerprint();
-    return apiClient.fetch(`${apiClient.authUrl}/auth/login`, {
+    // authUrl already includes /auth from nginx proxy, so just use /login
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/login` 
+      : `${apiClient.authUrl}/auth/login`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ ...data, fingerprint }),
     });
@@ -16,7 +20,11 @@ export const authService = {
 
   signup: async (data: RegisterData): Promise<{ id: string; email: string; recoveryId?: string; emailVerified?: boolean; verificationCodeSent?: boolean }> => {
     const fingerprint = await getDeviceFingerprint();
-    return apiClient.fetch(`${apiClient.authUrl}/auth/signup`, {
+    // authUrl already includes /auth from nginx proxy, so just use /signup
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/signup` 
+      : `${apiClient.authUrl}/auth/signup`;
+    return apiClient.fetch(url, {
       method: 'POST',
       credentials: 'include', // Include cookies
       body: JSON.stringify({ ...data, fingerprint }),
@@ -24,7 +32,10 @@ export const authService = {
   },
 
   verifyEmail: async (email: string, code: string): Promise<{ valid: boolean; message: string; tokens?: { accessToken: string; refreshToken: string } }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/verify-email`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/verify-email` 
+      : `${apiClient.authUrl}/auth/verify-email`;
+    return apiClient.fetch(url, {
       method: 'POST',
       credentials: 'include',
       body: JSON.stringify({ email, code }),
@@ -32,7 +43,10 @@ export const authService = {
   },
 
   resendVerificationCode: async (email: string): Promise<{ message: string; previewUrl?: string; code?: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/resend-verification`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/resend-verification` 
+      : `${apiClient.authUrl}/auth/resend-verification`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
@@ -40,7 +54,10 @@ export const authService = {
 
   // Login with recovery ID (for users who forgot their email)
   loginWithRecoveryId: async (recoveryId: string, password: string): Promise<{ id: string; email: string; role: string; tenantId: string; avatar?: string | null; accessToken: string; refreshToken: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/login-recovery`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/login-recovery` 
+      : `${apiClient.authUrl}/auth/login-recovery`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ recoveryId, password }),
     });
@@ -48,7 +65,10 @@ export const authService = {
 
   // Get masked email using recovery ID
   recoverEmail: async (recoveryId: string): Promise<{ success: boolean; maskedEmail: string; message: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/recover-email`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/recover-email` 
+      : `${apiClient.authUrl}/auth/recover-email`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ recoveryId }),
     });
@@ -56,7 +76,10 @@ export const authService = {
 
   // Request password reset email
   forgotPassword: async (email: string): Promise<{ success: boolean; message: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/forgot-password`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/forgot-password` 
+      : `${apiClient.authUrl}/auth/forgot-password`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
@@ -64,14 +87,20 @@ export const authService = {
 
   // Verify password reset token
   verifyResetToken: async (token: string): Promise<{ valid: boolean; message: string; email?: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/verify-reset-token?token=${encodeURIComponent(token)}`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/verify-reset-token?token=${encodeURIComponent(token)}` 
+      : `${apiClient.authUrl}/auth/verify-reset-token?token=${encodeURIComponent(token)}`;
+    return apiClient.fetch(url, {
       method: 'GET',
     });
   },
 
   // Verify password reset OTP code (legacy support)
   verifyResetCode: async (email: string, code: string): Promise<{ valid: boolean; message: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/verify-reset-code`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/verify-reset-code` 
+      : `${apiClient.authUrl}/auth/verify-reset-code`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ email, code }),
     });
@@ -79,61 +108,95 @@ export const authService = {
 
   // Request password reset email using recovery ID
   sendResetByRecoveryId: async (recoveryId: string): Promise<{ success: boolean; message: string }> => {
-    return apiClient.fetch(`${apiClient.authUrl}/auth/send-reset-by-recovery`, {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/send-reset-by-recovery` 
+      : `${apiClient.authUrl}/auth/send-reset-by-recovery`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ recoveryId }),
     });
   },
 
-  refreshToken: (): Promise<{ accessToken: string; refreshToken: string }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/refresh`, {
+  refreshToken: (): Promise<{ accessToken: string; refreshToken: string }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/refresh` 
+      : `${apiClient.authUrl}/auth/refresh`;
+    return apiClient.fetch(url, {
       method: 'POST',
       credentials: 'include', // Include cookies
       body: JSON.stringify({}), // Token will come from cookie
-    }),
+    });
+  },
 
-  logout: (): Promise<{ message: string }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/logout`, {
+  logout: (): Promise<{ message: string }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/logout` 
+      : `${apiClient.authUrl}/auth/logout`;
+    return apiClient.fetch(url, {
       method: 'POST',
       requireAuth: true,
       credentials: 'include',
-    }),
-
-  me: (): Promise<{ user: UserProfile }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/me`, {
-      requireAuth: true,
-    }),
-
-  googleLogin: () => {
-    window.location.href = `${apiClient.authUrl}/auth/oauth/google`;
+    });
   },
 
-  getProfile: (): Promise<UserProfile> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/profile`, {
+  me: (): Promise<{ user: UserProfile }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/me` 
+      : `${apiClient.authUrl}/auth/me`;
+    return apiClient.fetch(url, {
       requireAuth: true,
-    }),
+    });
+  },
 
-  updateProfile: (data: Partial<UserProfile>): Promise<UserProfile> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/profile`, {
+  googleLogin: () => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/oauth/google` 
+      : `${apiClient.authUrl}/auth/oauth/google`;
+    window.location.href = url;
+  },
+
+  getProfile: (): Promise<UserProfile> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/profile` 
+      : `${apiClient.authUrl}/auth/profile`;
+    return apiClient.fetch(url, {
+      requireAuth: true,
+    });
+  },
+
+  updateProfile: (data: Partial<UserProfile>): Promise<UserProfile> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/profile` 
+      : `${apiClient.authUrl}/auth/profile`;
+    return apiClient.fetch(url, {
       method: 'PUT',
       body: JSON.stringify(data),
       requireAuth: true,
-    }),
+    });
+  },
 
   // KYC
-  submitKyc: (data: KycData): Promise<{ verificationId: string; status: string }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/kyc/submit`, {
+  submitKyc: (data: KycData): Promise<{ verificationId: string; status: string }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/kyc/submit` 
+      : `${apiClient.authUrl}/auth/kyc/submit`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
       requireAuth: true,
-    }),
+    });
+  },
 
-  updateKycStatus: (verificationId: string, status: string, notes: string): Promise<void> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/kyc/${verificationId}/status`, {
+  updateKycStatus: (verificationId: string, status: string, notes: string): Promise<void> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/kyc/${verificationId}/status` 
+      : `${apiClient.authUrl}/auth/kyc/${verificationId}/status`;
+    return apiClient.fetch(url, {
       method: 'PUT',
       body: JSON.stringify({ status, notes }),
       requireAuth: true,
-    }),
+    });
+  },
 
   // Store/Market Management
   getUserMarkets: (): Promise<Array<{
@@ -145,10 +208,14 @@ export const authService = {
     createdAt: string;
     isOwner: boolean;
     isActive: boolean;
-  }>> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/markets`, {
+  }>> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/markets` 
+      : `${apiClient.authUrl}/auth/markets`;
+    return apiClient.fetch(url, {
       requireAuth: true,
-    }),
+    });
+  },
 
   switchStore: (tenantId: string): Promise<{ 
     success: boolean; 
@@ -157,29 +224,45 @@ export const authService = {
     refreshToken?: string;
     tenantName?: string;
     tenantSubdomain?: string;
-  }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/markets/switch`, {
+  }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/markets/switch` 
+      : `${apiClient.authUrl}/auth/markets/switch`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify({ tenantId }),
       requireAuth: true,
-    }),
+    });
+  },
 
-  canCreateMarket: (): Promise<{ allowed: boolean; currentCount: number; limit: number }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/markets/can-create`, {
+  canCreateMarket: (): Promise<{ allowed: boolean; currentCount: number; limit: number }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/markets/can-create` 
+      : `${apiClient.authUrl}/auth/markets/can-create`;
+    return apiClient.fetch(url, {
       requireAuth: true,
-    }),
+    });
+  },
 
-  getMarketLimit: (): Promise<{ limit: number; currentCount: number }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/markets/limit`, {
+  getMarketLimit: (): Promise<{ limit: number; currentCount: number }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/markets/limit` 
+      : `${apiClient.authUrl}/auth/markets/limit`;
+    return apiClient.fetch(url, {
       requireAuth: true,
-    }),
+    });
+  },
 
   // Reset password (supports both token-based and code-based)
-  resetPasswordComplete: (data: { email?: string; code?: string; token?: string; newPassword: string }): Promise<{ success: boolean; message: string }> =>
-    apiClient.fetch(`${apiClient.authUrl}/auth/reset-password`, {
+  resetPasswordComplete: (data: { email?: string; code?: string; token?: string; newPassword: string }): Promise<{ success: boolean; message: string }> => {
+    const url = apiClient.authUrl.endsWith('/auth') 
+      ? `${apiClient.authUrl}/reset-password` 
+      : `${apiClient.authUrl}/auth/reset-password`;
+    return apiClient.fetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    });
+  },
 
   // Generic methods for custom endpoints
   get: async (url: string, options?: { requireAuth?: boolean; adminApiKey?: string }) => {
