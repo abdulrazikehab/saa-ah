@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, Edit2, Save, X, DollarSign, TrendingUp, Package, Loader2, Download, Upload, RefreshCw } from 'lucide-react';
+import { Search, Filter, Edit2, Save, X, DollarSign, TrendingUp, TrendingDown, Package, Loader2, Download, Upload, RefreshCw, Plus, Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -58,6 +58,7 @@ export default function PriceManager() {
   const [bulkUpdateDialogOpen, setBulkUpdateDialogOpen] = useState(false);
   const [bulkUpdateType, setBulkUpdateType] = useState<'percentage' | 'fixed' | 'replace'>('percentage');
   const [bulkUpdateValue, setBulkUpdateValue] = useState('');
+  const [bulkUpdateDirection, setBulkUpdateDirection] = useState<'increase' | 'decrease'>('increase');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -188,7 +189,9 @@ export default function PriceManager() {
         return;
       }
 
-      await coreApi.updateProduct(productId, updateData);
+      // Properly encode product ID to handle special characters
+      const encodedId = encodeURIComponent(productId);
+      await coreApi.updateProduct(encodedId, updateData);
       
       // Reload data to get fresh state from server
       await loadData();
@@ -232,10 +235,15 @@ export default function PriceManager() {
         let newPrice = product.price;
         
         if (bulkUpdateType === 'percentage') {
-          newPrice = product.price * (1 + value / 100);
+          // Apply percentage based on direction
+          const multiplier = bulkUpdateDirection === 'increase' ? (1 + value / 100) : (1 - value / 100);
+          newPrice = product.price * multiplier;
         } else if (bulkUpdateType === 'fixed') {
-          newPrice = product.price + value;
+          // Apply fixed amount based on direction
+          const adjustment = bulkUpdateDirection === 'increase' ? value : -value;
+          newPrice = product.price + adjustment;
         } else if (bulkUpdateType === 'replace') {
+          // Replace ignores direction
           newPrice = value;
         }
 
@@ -252,13 +260,15 @@ export default function PriceManager() {
       for (let i = 0; i < updates.length; i += batchSize) {
         const batch = updates.slice(i, i + batchSize);
         await Promise.all(
-          batch.map(update => 
-            coreApi.updateProduct(update.productId, {
+          batch.map(update => {
+            // Properly encode product ID to handle special characters
+            const encodedId = encodeURIComponent(update.productId);
+            return coreApi.updateProduct(encodedId, {
               price: update.price,
               compareAtPrice: update.compareAtPrice,
               costPerItem: update.costPerItem,
-            })
-          )
+            });
+          })
         );
       }
 
@@ -272,6 +282,7 @@ export default function PriceManager() {
 
       setBulkUpdateDialogOpen(false);
       setBulkUpdateValue('');
+      setBulkUpdateDirection('increase');
       setSelectedProducts(new Set());
     } catch (error) {
       console.error('Failed to bulk update:', error);
@@ -628,11 +639,37 @@ export default function PriceManager() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
-                  <SelectItem value="fixed">مبلغ ثابت (+/-)</SelectItem>
+                  <SelectItem value="fixed">مبلغ ثابت (ر.س)</SelectItem>
                   <SelectItem value="replace">استبدال بالسعر الجديد</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {bulkUpdateType !== 'replace' && (
+              <div className="grid gap-2">
+                <Label>اتجاه التحديث</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={bulkUpdateDirection === 'increase' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setBulkUpdateDirection('increase')}
+                  >
+                    <Plus className="h-4 w-4 ml-2" />
+                    زيادة
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={bulkUpdateDirection === 'decrease' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setBulkUpdateDirection('decrease')}
+                  >
+                    <Minus className="h-4 w-4 ml-2" />
+                    تخفيض
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <Label>
@@ -646,24 +683,39 @@ export default function PriceManager() {
               <Input
                 type="number"
                 step="0.01"
+                min="0"
                 value={bulkUpdateValue}
-                onChange={(e) => setBulkUpdateValue(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  // Only allow positive numbers (direction is handled by toggle)
+                  if (val === '' || (!isNaN(parseFloat(val)) && parseFloat(val) >= 0)) {
+                    setBulkUpdateValue(val);
+                  }
+                }}
                 placeholder={
                   bulkUpdateType === 'percentage' 
-                    ? 'مثال: 10 لزيادة 10% أو -5 لتخفيض 5%'
+                    ? 'مثال: 10'
                     : bulkUpdateType === 'fixed'
-                    ? 'مثال: 50 لزيادة 50 ر.س أو -20 لتخفيض 20 ر.س'
+                    ? 'مثال: 50'
                     : 'مثال: 100'
                 }
               />
               {bulkUpdateType === 'percentage' && bulkUpdateValue && (
                 <p className="text-xs text-muted-foreground">
-                  مثال: منتج بسعر 100 ر.س → {((100 * (1 + parseFloat(bulkUpdateValue) / 100)) || 0).toFixed(2)} ر.س
+                  مثال: منتج بسعر 100 ر.س → {
+                    bulkUpdateDirection === 'increase'
+                      ? ((100 * (1 + parseFloat(bulkUpdateValue) / 100)) || 0).toFixed(2)
+                      : ((100 * (1 - parseFloat(bulkUpdateValue) / 100)) || 0).toFixed(2)
+                  } ر.س
                 </p>
               )}
               {bulkUpdateType === 'fixed' && bulkUpdateValue && (
                 <p className="text-xs text-muted-foreground">
-                  مثال: منتج بسعر 100 ر.س → {(100 + (parseFloat(bulkUpdateValue) || 0)).toFixed(2)} ر.س
+                  مثال: منتج بسعر 100 ر.س → {
+                    bulkUpdateDirection === 'increase'
+                      ? (100 + (parseFloat(bulkUpdateValue) || 0)).toFixed(2)
+                      : (100 - (parseFloat(bulkUpdateValue) || 0)).toFixed(2)
+                  } ر.س
                 </p>
               )}
             </div>

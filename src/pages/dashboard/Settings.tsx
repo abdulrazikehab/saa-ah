@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { coreApi } from '@/lib/api';
 import { Loader2, Save, Store, Globe, Mail, Phone, MapPin, Clock, CreditCard, DollarSign, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -88,6 +89,7 @@ interface Currency {
 
 export default function Settings() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -150,14 +152,36 @@ export default function Settings() {
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load settings:', error);
-      toast({
-        title: 'تنبيه',
-        description: 'لم يتم العثور على إعدادات سابقة، تم تحميل الإعدادات الافتراضية',
-        variant: 'default',
-      });
-      setSettings(DEFAULT_SETTINGS);
+      const errorMessage = error?.message || error?.data?.message || '';
+      const errorMessageLower = errorMessage.toLowerCase();
+      
+      // Check if the error indicates that the tenant doesn't exist
+      const isTenantNotFound = 
+        errorMessageLower.includes('does not exist') ||
+        errorMessageLower.includes('set up your market') ||
+        errorMessageLower.includes('set up a market') ||
+        (error?.status === 400 && errorMessageLower.includes('tenant'));
+      
+      if (isTenantNotFound) {
+        toast({
+          title: 'يجب إعداد المتجر أولاً',
+          description: 'يجب إنشاء متجر قبل الوصول إلى الإعدادات. سيتم توجيهك إلى صفحة الإعداد.',
+          variant: 'destructive',
+        });
+        // Redirect to setup page after a short delay
+        setTimeout(() => {
+          navigate('/setup', { replace: true });
+        }, 1500);
+      } else {
+        toast({
+          title: 'تنبيه',
+          description: 'لم يتم العثور على إعدادات سابقة، تم تحميل الإعدادات الافتراضية',
+          variant: 'default',
+        });
+        setSettings(DEFAULT_SETTINGS);
+      }
     } finally {
       setLoading(false);
     }
@@ -174,7 +198,17 @@ export default function Settings() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await coreApi.post('/site-config', { settings }, { requireAuth: true });
+      // Validate settings before sending
+      if (!settings || typeof settings !== 'object') {
+        throw new Error('Invalid settings data');
+      }
+
+      // Clean settings - remove undefined values and ensure proper structure
+      const cleanedSettings = Object.fromEntries(
+        Object.entries(settings).filter(([_, value]) => value !== undefined)
+      );
+
+      await coreApi.post('/site-config', { settings: cleanedSettings }, { requireAuth: true });
       
       // If currency was changed, also update CurrencySettings to keep them in sync
       if (settings.currency) {
@@ -201,13 +235,35 @@ export default function Settings() {
       
       // Reload settings to get the latest currency value
       await loadSettings();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save settings:', error);
-      toast({
-        title: 'تعذر حفظ الإعدادات',
-        description: 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.',
-        variant: 'destructive',
-      });
+      const errorMessage = error?.message || error?.data?.message || 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.';
+      
+      // Check if the error indicates that the tenant doesn't exist
+      const errorMessageLower = errorMessage.toLowerCase();
+      const isTenantNotFound = 
+        errorMessageLower.includes('does not exist') ||
+        errorMessageLower.includes('set up your market') ||
+        errorMessageLower.includes('set up a market') ||
+        (error?.status === 400 && errorMessageLower.includes('tenant'));
+      
+      if (isTenantNotFound) {
+        toast({
+          title: 'يجب إعداد المتجر أولاً',
+          description: 'يجب إنشاء متجر قبل حفظ الإعدادات. سيتم توجيهك إلى صفحة الإعداد.',
+          variant: 'destructive',
+        });
+        // Redirect to setup page after a short delay
+        setTimeout(() => {
+          navigate('/setup', { replace: true });
+        }, 1500);
+      } else {
+        toast({
+          title: 'تعذر حفظ الإعدادات',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setSaving(false);
     }

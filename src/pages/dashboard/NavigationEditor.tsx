@@ -240,16 +240,23 @@ export default function NavigationEditor() {
     if (!config) return;
     setSaving(true);
     try {
-      await coreApi.post('/site-config', config, { requireAuth: true });
+      // Validate and clean config before sending
+      const cleanedConfig = {
+        header: config.header || { links: [] },
+        footer: config.footer || { links: [], socialMedia: {} },
+      };
+
+      await coreApi.post('/site-config', cleanedConfig, { requireAuth: true });
       toast({
         title: 'نجح',
         description: 'تم حفظ إعدادات التنقل بنجاح',
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save navigation config:', error);
+      const errorMessage = error?.message || error?.data?.message || 'حدث خطأ أثناء حفظ إعدادات التنقل. يرجى المحاولة مرة أخرى.';
       toast({
         title: 'تعذر حفظ إعدادات التنقل',
-        description: 'حدث خطأ أثناء حفظ إعدادات التنقل. يرجى المحاولة مرة أخرى.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {

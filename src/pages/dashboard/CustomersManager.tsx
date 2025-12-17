@@ -195,20 +195,33 @@ export default function CustomersManager() {
   });
 
   const handleExport = () => {
+    const headers = [
+      'ID',
+      'Name',
+      'Email',
+      'Phone',
+      'TotalOrders',
+      'TotalSpent',
+      'LoyaltyPoints',
+      'LoyaltyTier',
+      'CreatedAt',
+      'LastOrderDate'
+    ];
+
     const exportData = customers.map(c => ({
       ID: c.id,
       Name: c.name,
       Email: c.email,
-      Phone: c.phone,
-      TotalOrders: c.totalOrders,
-      TotalSpent: c.totalSpent,
-      LoyaltyPoints: c.loyaltyPoints,
-      LoyaltyTier: c.loyaltyTier,
-      CreatedAt: c.createdAt,
-      LastOrderDate: c.lastOrderDate
+      Phone: c.phone || '',
+      TotalOrders: c.totalOrders || 0,
+      TotalSpent: c.totalSpent || 0,
+      LoyaltyPoints: c.loyaltyPoints || 0,
+      LoyaltyTier: c.loyaltyTier || '',
+      CreatedAt: c.createdAt || '',
+      LastOrderDate: c.lastOrderDate || ''
     }));
 
-    const ws = utils.json_to_sheet(exportData);
+    const ws = utils.json_to_sheet(exportData, { header: headers });
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "Customers");
     writeFile(wb, "customers_export.xlsx");

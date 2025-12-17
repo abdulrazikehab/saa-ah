@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight, Download } from 'lucide-react';
 import { coreApi } from '@/lib/api';
 import { apiClient } from '@/services/core/api-client';
 
@@ -68,6 +68,29 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
         description: 'تم نسخ رمز الاسترداد إلى الحافظة',
       });
       setTimeout(() => setCopiedRecovery(false), 2000);
+    }
+  };
+
+  const downloadRecoveryId = () => {
+    if (recoveryId) {
+      const content = `Recovery ID | رمز الاسترداد\n\n${recoveryId}\n\nPlease keep this ID in a safe place. You can use it to recover your account if you forget your email or it gets compromised.\n\nيرجى الاحتفاظ بهذا الرمز في مكان آمن. يمكنك استخدامه لاسترداد حسابك إذا نسيت بريدك الإلكتروني أو تعرض للاختراق.\n\nGenerated: ${new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'long' })}`;
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `recovery-id-${recoveryId.substring(0, 8)}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: 'تم التنزيل!',
+        description: 'تم تنزيل رمز الاسترداد',
+      });
+      
+      // Mark as copied since user has downloaded it
+      setCopiedRecovery(true);
     }
   };
 
@@ -160,28 +183,39 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
               </div>
             </div>
             
-            <div className="flex gap-3">
-              <Button
-                onClick={copyRecoveryId}
-                variant="outline"
-                className="flex-1 h-12"
-              >
-                {copiedRecovery ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 ml-2 text-green-500" />
-                    تم النسخ
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 ml-2" />
-                    نسخ الرمز
-                  </>
-                )}
-              </Button>
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <Button
+                  onClick={copyRecoveryId}
+                  variant="outline"
+                  className="flex-1 h-12"
+                >
+                  {copiedRecovery ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 ml-2 text-green-500" />
+                      تم النسخ
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 ml-2" />
+                      نسخ الرمز
+                    </>
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={downloadRecoveryId}
+                  variant="outline"
+                  className="flex-1 h-12"
+                >
+                  <Download className="w-4 h-4 ml-2" />
+                  تحميل الرمز
+                </Button>
+              </div>
               
               <Button
                 onClick={handleClose}
-                className="flex-1 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                className="w-full h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
                 disabled={!copiedRecovery}
               >
                 متابعة
@@ -191,7 +225,7 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
             
             {!copiedRecovery && (
               <p className="text-xs text-center text-gray-500">
-                يرجى نسخ الرمز قبل المتابعة
+                يرجى نسخ أو تحميل الرمز قبل المتابعة
               </p>
             )}
           </div>

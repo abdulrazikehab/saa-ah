@@ -77,13 +77,23 @@ export default function Login() {
     try {
       await login(identifier, password);
       setFaceState('happy');
-      toast({
-        title: t('common.success'),
-        description: 'مرحباً بك في لوحة التحكم',
-      });
+      
+      // Check if user has a tenant after login
+      // Wait a bit for user state to update
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
+        const userStr = localStorage.getItem('user');
+        const userData = userStr ? JSON.parse(userStr) : null;
+        const hasTenant = userData?.tenantId && userData.tenantId !== 'default' && userData.tenantId !== null;
+        
+        toast({
+          title: t('common.success'),
+          description: hasTenant ? 'مرحباً بك في لوحة التحكم' : 'مرحباً بك! يرجى إعداد متجرك أولاً',
+        });
+        
+        setTimeout(() => {
+          navigate(hasTenant ? '/dashboard' : '/setup');
+        }, 500);
+      }, 100);
     } catch (error: unknown) {
       setFaceState('sad');
       toast({
@@ -111,12 +121,16 @@ export default function Login() {
       }
       
       setFaceState('happy');
+      // Check if user has a tenant, if not redirect to setup
+      const hasTenant = result.tenantId && result.tenantId !== 'default';
       toast({
         title: 'تم تسجيل الدخول بنجاح',
-        description: `مرحباً بك! بريدك الإلكتروني: ${result.email}`,
+        description: hasTenant 
+          ? `مرحباً بك! بريدك الإلكتروني: ${result.email}`
+          : `مرحباً بك! يرجى إعداد متجرك أولاً. بريدك الإلكتروني: ${result.email}`,
       });
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate(hasTenant ? '/dashboard' : '/setup');
       }, 1500);
     } catch (error: unknown) {
       setFaceState('sad');
@@ -228,8 +242,8 @@ export default function Login() {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-background">
-        <div className="w-full max-w-md">
+      <div className="flex-1 flex items-center justify-center p-6 bg-background relative">
+        <div className="w-full max-w-md space-y-6">
           {/* Mobile Logo with Bilingual Branding */}
           <Link to="/" className="lg:hidden flex flex-col items-center gap-3 mb-8 group">
             <div className="flex items-center gap-3">
@@ -244,34 +258,34 @@ export default function Login() {
             <p className="text-muted-foreground text-xs text-center">{BRAND_TAGLINE_AR} | {BRAND_TAGLINE_EN}</p>
           </Link>
 
-          <Card className="shadow-xl border-border/50">
-            <CardHeader className="space-y-1 text-center pb-6">
+          <Card className="shadow-2xl border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardHeader className="space-y-2 text-center pb-6">
               {/* Interactive Face */}
-              <div className="flex justify-center mb-4">
+              <div className="flex justify-center mb-2">
                 <InteractiveFace 
                   state={faceState} 
                   className="transform hover:scale-105 transition-transform" 
                 />
               </div>
               
-              <CardTitle className="text-2xl font-heading font-bold">
+              <CardTitle className="text-3xl font-heading font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
                 {showRecoveryMode ? 'استرداد الحساب' : 'تسجيل الدخول'}
               </CardTitle>
-              <CardDescription className="text-base">
+              <CardDescription className="text-base text-muted-foreground">
                 {showRecoveryMode 
                   ? 'أدخل رمز الاسترداد السري وكلمة المرور' 
                   : 'سجل دخولك لإدارة متجرك الإلكتروني'}
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               {!showRecoveryMode ? (
                 <>
                   {/* Google Sign-In */}
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full h-11 border-2 hover:bg-muted/50 transition-colors"
+                    className="w-full h-12 border-2 hover:bg-muted/50 hover:border-primary/50 transition-all shadow-sm"
                     onClick={handleGoogleSignIn}
                   >
                     <svg className="ml-2 h-5 w-5" viewBox="0 0 24 24">
@@ -280,7 +294,7 @@ export default function Login() {
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                     </svg>
-                    <span className="text-foreground">Google</span>
+                    <span className="text-foreground font-medium">Google</span>
                   </Button>
 
                   <div className="relative">
@@ -293,13 +307,13 @@ export default function Login() {
                   </div>
 
                   {/* Login Form */}
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                  <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="space-y-2">
-                      <Label htmlFor="identifier" className="text-sm font-medium">
+                      <Label htmlFor="identifier" className="text-sm font-semibold">
                         {t('auth.login.emailOrUsername', 'البريد الإلكتروني أو اسم المستخدم')}
                       </Label>
                       <div className="relative">
-                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                         <Input
                           id="identifier"
                           type="text"
@@ -309,17 +323,17 @@ export default function Login() {
                           onFocus={() => setIsFocused(true)}
                           onBlur={() => setIsFocused(false)}
                           required
-                          className="h-11 pr-10 border-border focus:border-primary focus:ring-primary"
+                          className="h-12 pr-10 border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                         />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="password" className="text-sm font-medium">
+                      <Label htmlFor="password" className="text-sm font-semibold">
                         {t('auth.login.password')}
                       </Label>
                       <div className="relative">
-                        <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                         <Input
                           id="password"
                           type={showPassword ? 'text' : 'password'}
@@ -334,12 +348,12 @@ export default function Login() {
                             setPasswordFieldActive(false);
                           }}
                           required
-                          className="h-11 px-10 border-border focus:border-primary focus:ring-primary"
+                          className="h-12 pl-10 pr-10 border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
                         >
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
@@ -347,17 +361,17 @@ export default function Login() {
                     </div>
 
                     {/* Remember & Forgot */}
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer">
+                    <div className="flex items-center justify-between pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer group">
                         <input
                           type="checkbox"
-                          className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                          className="w-4 h-4 rounded border-2 border-border text-primary focus:ring-2 focus:ring-primary/20 transition-all group-hover:border-primary"
                         />
-                        <span className="text-sm text-muted-foreground">تذكرني</span>
+                        <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">تذكرني</span>
                       </label>
                       <Link
-                        to="/forgot-password"
-                        className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors"
+                        to="/auth/forgot-password"
+                        className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors hover:underline"
                       >
                         نسيت كلمة المرور؟
                       </Link>
@@ -365,7 +379,7 @@ export default function Login() {
 
                     <Button 
                       type="submit" 
-                      className="w-full h-11 gradient-primary font-medium shadow-md hover:shadow-lg transition-all mt-6"
+                      className="w-full h-12 gradient-primary font-semibold text-base shadow-lg hover:shadow-xl transition-all mt-6"
                       disabled={loading}
                     >
                       {loading ? (
@@ -384,11 +398,11 @@ export default function Login() {
                   </form>
 
                   {/* Recovery ID Link */}
-                  <div className="text-center pt-2">
+                  <div className="text-center pt-3">
                     <button
                       type="button"
                       onClick={() => setShowRecoveryMode(true)}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2 mx-auto"
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2 mx-auto hover:underline"
                     >
                       <Key className="w-4 h-4" />
                       نسيت بريدك الإلكتروني؟ استخدم رمز الاسترداد
@@ -524,13 +538,13 @@ export default function Login() {
               )}
             </CardContent>
 
-            <CardFooter className="flex flex-col gap-4 pt-2">
+            <CardFooter className="flex flex-col gap-3 pt-4">
               <Separator />
               <p className="text-sm text-center text-muted-foreground">
                 ليس لديك حساب؟{' '}
                 <Link 
                   to="/register" 
-                  className="text-primary hover:text-primary/80 font-semibold hover:underline"
+                  className="text-primary hover:text-primary/80 font-semibold hover:underline transition-colors"
                 >
                   إنشاء حساب جديد
                 </Link>
@@ -538,18 +552,7 @@ export default function Login() {
             </CardFooter>
           </Card>
 
-          {/* Footer Links */}
-          <div className="mt-6 text-center space-y-2">
-            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-              <Link to="/privacy" className="hover:text-primary transition-colors">{t('landing.footer.links.privacy')}</Link>
-              <span>•</span>
-              <Link to="/terms" className="hover:text-primary transition-colors">{t('landing.footer.links.terms')}</Link>
-              <span>•</span>
-              <Link to="/help" className="hover:text-primary transition-colors">{t('landing.footer.links.helpCenter')}</Link>
-            </div>
-          </div>
         </div>
-        <VersionFooter className="absolute bottom-0 left-0 right-0 py-2 bg-background" />
       </div>
     </div>
   );

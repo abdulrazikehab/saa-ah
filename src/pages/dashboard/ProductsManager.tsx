@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { UploadProgress } from '@/components/ui/upload-progress';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -105,6 +107,8 @@ export default function ProductsManager() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -670,104 +674,221 @@ export default function ProductsManager() {
     return matchesSearch && matchesStatus && matchesCategory && matchesTab;
   });
 
-  // Export products to Excel
-  const handleExportProducts = () => {
-    const headers = [
-      'ID',
-      'ProductID',
-      'ProductCode',
-      'OdooProductID',
-      'SKU', 
-      'Name', 
-      'NameAr', 
-      'Description', 
-      'DescriptionAr', 
-      'Price', 
-      'CompareAtPrice',
-      'Cost',
-      'Stock', 
-      'LowStockThreshold',
-      'Category', 
-      'Brand',
-      'BrandCode',
-      'Unit',
-      'UnitCode',
-      'Suppliers',
-      'Barcode',
-      'Weight',
-      'Dimensions',
-      'Tags',
-      'Status', 
-      'Featured',
-      'IsAvailable',
-      'IsPublished',
-      'SEOTitle',
-      'SEODescription',
-      'CreatedAt',
-      'UpdatedAt'
-    ];
-    
-    const exportData = products.map(p => {
-      // Get unit info
-      const unit = units.find(u => u.id === (p as any).unitId || (p as any).unit?.id);
-      const unitName = unit ? (unit.nameAr || unit.name || '') : '';
-      const unitCode = unit ? (unit.code || '') : '';
+  // Export products to Excel with all order-related fields
+  const handleExportProducts = async () => {
+    try {
+      // Fetch orders to get sales data
+      const ordersData = await coreApi.getOrders();
+      const ordersList = Array.isArray(ordersData) ? ordersData : ((ordersData as any)?.orders || []);
       
-      // Get suppliers
-      const productSuppliers = (p as any).suppliers || [];
-      const supplierNames = productSuppliers
-        .map((ps: any) => {
-          const supplier = suppliers.find(s => s.id === (ps.supplierId || ps.supplier?.id));
-          return supplier ? (supplier.nameAr || supplier.name || '') : '';
-        })
-        .filter(Boolean)
-        .join('; ');
+      // Create a map of product ID to order items
+      const productOrderMap = new Map<string, any[]>();
       
-      return {
-        ID: p.id || '',
-        ProductID: (p as any).productId || '',
-        ProductCode: (p as any).productCode || '',
-        OdooProductID: (p as any).odooProductId || '',
-        SKU: p.sku || '',
-        Name: p.name || '',
-        NameAr: p.nameAr || '',
-        Description: p.description || '',
-        DescriptionAr: p.descriptionAr || '',
-        Price: p.price || 0,
-        CompareAtPrice: p.compareAtPrice || '',
-        Cost: p.cost || (p as any).costPerItem || '',
-        Stock: p.stock || 0,
-        LowStockThreshold: p.lowStockThreshold || '',
-        Category: p.category?.name || (p as any).categories?.[0]?.category?.name || (p as any).categories?.[0]?.name || '',
-        Brand: (p as any).brand?.name || '',
-        BrandCode: (p as any).brand?.code || '',
-        Unit: unitName,
-        UnitCode: unitCode,
-        Suppliers: supplierNames,
-        Barcode: p.barcode || '',
-        Weight: p.weight || '',
-        Dimensions: p.dimensions || '',
-        Tags: p.tags?.join(', ') || '',
-        Status: p.status || 'ACTIVE',
-        Featured: p.featured ? 'Yes' : 'No',
-        IsAvailable: (p as any).isAvailable !== false ? 'Yes' : 'No',
-        IsPublished: (p as any).isPublished !== false ? 'Yes' : 'No',
-        SEOTitle: (p as any).seoTitle || p.metaTitle || '',
-        SEODescription: (p as any).seoDescription || p.metaDescription || '',
-        CreatedAt: (p as any).createdAt || '',
-        UpdatedAt: (p as any).updatedAt || '',
-      };
-    });
+      ordersList.forEach((order: any) => {
+        const orderItems = order.items || order.orderItems || [];
+        orderItems.forEach((item: any) => {
+          // Try multiple ways to get product ID
+          const productId = item.productId || item.product?.id || item.productId;
+          if (productId) {
+            if (!productOrderMap.has(productId)) {
+              productOrderMap.set(productId, []);
+            }
+            productOrderMap.get(productId)!.push({
+              ...item,
+              order: order
+            });
+          }
+        });
+      });
 
-    const ws = utils.json_to_sheet(exportData, { header: headers });
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Products");
-    writeFile(wb, "products_export.xlsx");
-    
-    toast({
-      title: 'نجح',
+      const headers = [
+        'created_at',
+        'order_number',
+        'order_status',
+        'user_name',
+        'customer_name',
+        'customer_phone',
+        'brand_name',
+        'vendor_name',
+        'product_id',
+        'product_name',
+        'coins_number',
+        'unit_price',
+        'cost_price',
+        'qty',
+        'cost_sold',
+        'total',
+        'profit',
+        'net_profit',
+        'payment_method',
+        'payment_type',
+        'payment_brand',
+        'reference_number',
+        'bank_commission',
+        'additional_value_fees',
+        'sale_date',
+        'quantity_sold',
+        'total_sales',
+        'store'
+      ];
+      
+      const exportData: any[] = [];
+      
+      // Process each product
+      products.forEach(p => {
+        // Get order items by both internal ID and productId
+        const orderItemsByInternalId = productOrderMap.get(p.id) || [];
+        const orderItemsByProductId = (p as any).productId 
+          ? (productOrderMap.get((p as any).productId) || [])
+          : [];
+        // Combine and deduplicate by order item ID
+        const allOrderItems = [...orderItemsByInternalId, ...orderItemsByProductId];
+        const uniqueOrderItems = Array.from(
+          new Map(allOrderItems.map(item => [item.id || `${item.order?.id}-${item.productId}`, item])).values()
+        );
+        const orderItems = uniqueOrderItems;
+        const unit = units.find(u => u.id === (p as any).unitId || (p as any).unit?.id);
+        const unitCode = unit ? (unit.code || '') : '';
+        
+        // Extract coins_number from product name or unit
+        let coinsNumber = '';
+        if (unitCode) {
+          const extractedQty = extractQuantityFromName(
+            p.name || p.nameAr || '',
+            unitCode,
+            unit?.name || '',
+            unit?.nameAr
+          );
+          coinsNumber = extractedQty ? extractedQty.toString() : '';
+        }
+        
+        // Get brand name
+        const brandName = (p as any).brand?.name || (p as any).brand?.nameAr || '';
+        
+        // Get vendor/supplier name
+        const productSuppliers = (p as any).suppliers || [];
+        const vendorName = productSuppliers.length > 0
+          ? (productSuppliers[0]?.supplier?.nameAr || productSuppliers[0]?.supplier?.name || '')
+          : '';
+        
+        // Calculate product totals
+        const quantitySold = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        const totalSales = orderItems.reduce((sum, item) => sum + (Number(item.price || 0) * (item.quantity || 0)), 0);
+        const costPrice = Number(p.cost || (p as any).costPerItem || 0);
+        const unitPrice = Number(p.price || 0);
+        
+        if (orderItems.length > 0) {
+          // Create a row for each order item
+          orderItems.forEach((orderItem: any) => {
+            const order = orderItem.order;
+            const qty = orderItem.quantity || 0;
+            const itemPrice = Number(orderItem.price || unitPrice);
+            const itemTotal = itemPrice * qty;
+            const itemCostSold = costPrice * qty;
+            const itemProfit = itemTotal - itemCostSold;
+            
+            // Calculate net profit (profit minus fees/commissions)
+            const bankCommission = 0; // TODO: Get from payment transaction if available
+            const additionalFees = 0; // TODO: Get from order if available
+            const netProfit = itemProfit - bankCommission - additionalFees;
+            
+            // Get payment info
+            const paymentMethod = order.paymentMethod || order.paymentMethodId || '';
+            const paymentType = order.paymentStatus || '';
+            const paymentBrand = order.paymentMethod || '';
+            const referenceNumber = order.transactionId || order.id || '';
+            
+            // Get customer info
+            const customerName = order.customer?.name || order.customerName || '';
+            const customerPhone = order.customer?.phone || order.customerPhone || '';
+            const userName = order.user?.name || order.customer?.email || '';
+            
+            // Get store/tenant info
+            const store = order.tenantId || user?.tenantId || '';
+            
+            exportData.push({
+              created_at: order.createdAt || orderItem.createdAt || '',
+              order_number: order.orderNumber || '',
+              order_status: order.status || '',
+              user_name: userName,
+              customer_name: customerName,
+              customer_phone: customerPhone,
+              brand_name: brandName,
+              vendor_name: vendorName,
+              product_id: (p as any).productId || p.id || '',
+              product_name: p.nameAr || p.name || '',
+              coins_number: coinsNumber,
+              unit_price: unitPrice,
+              cost_price: costPrice,
+              qty: qty,
+              cost_sold: itemCostSold,
+              total: itemTotal,
+              profit: itemProfit,
+              net_profit: netProfit,
+              payment_method: paymentMethod,
+              payment_type: paymentType,
+              payment_brand: paymentBrand,
+              reference_number: referenceNumber,
+              bank_commission: bankCommission,
+              additional_value_fees: additionalFees,
+              sale_date: order.createdAt || order.paidAt || '',
+              quantity_sold: qty,
+              total_sales: itemTotal,
+              store: store
+            });
+          });
+        } else {
+          // If product has no sales, still include it with empty order fields
+          exportData.push({
+            created_at: (p as any).createdAt || '',
+            order_number: '',
+            order_status: '',
+            user_name: '',
+            customer_name: '',
+            customer_phone: '',
+            brand_name: brandName,
+            vendor_name: vendorName,
+            product_id: (p as any).productId || p.id || '',
+            product_name: p.nameAr || p.name || '',
+            coins_number: coinsNumber,
+            unit_price: unitPrice,
+            cost_price: costPrice,
+            qty: 0,
+            cost_sold: 0,
+            total: 0,
+            profit: 0,
+            net_profit: 0,
+            payment_method: '',
+            payment_type: '',
+            payment_brand: '',
+            reference_number: '',
+            bank_commission: 0,
+            additional_value_fees: 0,
+            sale_date: '',
+            quantity_sold: quantitySold,
+            total_sales: totalSales,
+            store: user?.tenantId || ''
+          });
+        }
+      });
+
+      const ws = utils.json_to_sheet(exportData, { header: headers });
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Products");
+      writeFile(wb, "products_export.xlsx");
+      
+      toast({
+        title: 'نجح',
         description: t('dashboard.products.exportSuccess'),
-    });
+      });
+    } catch (error) {
+      console.error('Failed to export products:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل تصدير المنتجات. يرجى المحاولة مرة أخرى.',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Import products from Excel
@@ -775,8 +896,20 @@ export default function ProductsManager() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check if user has a valid tenant/market
+    if (!user?.tenantId || user.tenantId === 'default' || user.tenantId === 'system') {
+      toast({
+        title: 'خطأ في الإعدادات',
+        description: 'يجب إعداد متجر أولاً قبل استيراد المنتجات. يرجى الانتقال إلى إعدادات المتجر.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
-      setLoading(true);
+      setIsImporting(true);
+      setImportProgress({ current: 0, total: 0, currentItem: 'Reading file...' });
+      
       const data = await file.arrayBuffer();
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -800,13 +933,24 @@ export default function ProductsManager() {
         Tags?: string;
       }>(worksheet, { defval: '' });
 
+      const totalItems = jsonData.length;
+      setImportProgress({ current: 0, total: totalItems, currentItem: `Processing ${totalItems} products...` });
+
       let successCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
+      let importStopped = false; // Flag to track if import was stopped early
 
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
         const rowNum = i + 2; // Excel row number (1-indexed + header)
+        
+        // Update progress
+        setImportProgress({ 
+          current: i + 1, 
+          total: totalItems, 
+          currentItem: `Importing: ${row.Name || `Row ${rowNum}`}...` 
+        });
         
         if (!row.Name) {
           errors.push(`Row ${rowNum}: Name is required`);
@@ -911,6 +1055,30 @@ export default function ProductsManager() {
           // Convert technical errors to user-friendly messages
           let userFriendlyError = 'حدث خطأ غير معروف';
           
+          // Handle 403 Forbidden - tenant/market not set up
+          // STOP IMMEDIATELY on any 403 error - don't continue processing
+          if (error?.status === 403) {
+            const errorMsg = error?.message || error?.data?.message || 'يجب إعداد متجر أولاً. يرجى الانتقال إلى إعدادات المتجر وإنشاء متجرك.';
+            userFriendlyError = errorMsg;
+            errorCount++;
+            errors.push(`الصف ${rowNum} (${row.Name}): ${userFriendlyError}`);
+            
+            // ALWAYS stop import on 403 - this means tenant/market is not set up
+            toast({
+              title: 'خطأ في الإعدادات',
+              description: errorMsg.includes('market') || errorMsg.includes('tenant') || errorMsg.includes('متجر')
+                ? errorMsg
+                : 'يجب إعداد متجر أولاً قبل استيراد المنتجات. يرجى الانتقال إلى إعدادات المتجر.',
+              variant: 'destructive',
+            });
+            setIsImporting(false);
+            setImportProgress({ current: 0, total: 0, currentItem: 'Import stopped due to configuration error' });
+            importStopped = true; // Mark that import was stopped
+            
+            // Break out of the loop immediately
+            break;
+          }
+          
           if (error?.status === 409 || error?.message?.includes('unique') || error?.message?.includes('SKU')) {
             userFriendlyError = 'رمز المنتج (SKU) مستخدم بالفعل. سيتم إنشاء رمز جديد تلقائياً.';
             // Retry with completely unique SKUs
@@ -983,30 +1151,53 @@ export default function ProductsManager() {
         }
       }
 
-      // Show user-friendly summary
-      let description = '';
-      if (successCount > 0 && errorCount === 0) {
-        description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح`;
-      } else if (successCount > 0 && errorCount > 0) {
-        description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح، وفشل استيراد ${errorCount} منتج${errorCount !== 1 ? 'ات' : ''}`;
+      // Only show completion message if import wasn't stopped early
+      if (!importStopped) {
+        // Update progress to 100%
+        setImportProgress({ 
+          current: totalItems, 
+          total: totalItems, 
+          currentItem: 'Import completed!' 
+        });
+
+        // Show user-friendly summary
+        let description = '';
+        if (successCount > 0 && errorCount === 0) {
+          description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح`;
+        } else if (successCount > 0 && errorCount > 0) {
+          description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح، وفشل استيراد ${errorCount} منتج${errorCount !== 1 ? 'ات' : ''}`;
+        } else {
+          description = `فشل استيراد جميع المنتجات (${errorCount} خطأ)`;
+        }
+
+        toast({
+          title: successCount > 0 ? 'تم الاستيراد' : 'فشل الاستيراد',
+          description,
+          variant: errorCount > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
+        });
+
+        // Show detailed errors in console for debugging, but not in toast
+        if (errors.length > 0) {
+          console.group('تفاصيل أخطاء الاستيراد:');
+          errors.forEach(err => console.error(err));
+          console.groupEnd();
+        }
       } else {
-        description = `فشل استيراد جميع المنتجات (${errorCount} خطأ)`;
-      }
-
-      toast({
-        title: successCount > 0 ? 'تم الاستيراد' : 'فشل الاستيراد',
-        description,
-        variant: errorCount > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
-      });
-
-      // Show detailed errors in console for debugging, but not in toast
-      if (errors.length > 0) {
-        console.group('تفاصيل أخطاء الاستيراد:');
-        errors.forEach(err => console.error(err));
-        console.groupEnd();
+        // Import was stopped early due to 403 error
+        // Error toast was already shown, just log errors
+        if (errors.length > 0) {
+          console.group('تفاصيل أخطاء الاستيراد:');
+          errors.forEach(err => console.error(err));
+          console.groupEnd();
+        }
       }
       
-      loadData();
+      // Wait a bit before closing progress dialog (only if not stopped)
+      if (!importStopped) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        loadData();
+      }
+      // Reset file input
       e.target.value = '';
     } catch (error: unknown) {
       toast({ 
@@ -1015,7 +1206,8 @@ export default function ProductsManager() {
         variant: 'destructive' 
       });
     } finally {
-      setLoading(false);
+      setIsImporting(false);
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
     }
   };
 
@@ -1968,6 +2160,26 @@ export default function ProductsManager() {
                   </div>
                 </CardContent>
               </Card>
+
+      {/* Import Progress Dialog */}
+      <Dialog open={isImporting} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importing Products</DialogTitle>
+            <DialogDescription>
+              Please wait while products are being imported...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <UploadProgress
+              current={importProgress.current}
+              total={importProgress.total}
+              currentItem={importProgress.currentItem}
+              isComplete={importProgress.current === importProgress.total && importProgress.total > 0}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4 border-t">

@@ -51,13 +51,13 @@ export const DashboardLayout = () => {
           />
 
           {/* Page Content */}
-          <main className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-[1920px] mx-auto w-full flex flex-col min-h-[calc(100vh-4rem)]">
+          <main className="p-3 sm:p-4 md:p-5 lg:p-6 xl:p-8 max-w-[1920px] mx-auto w-full flex flex-col min-h-[calc(100vh-4rem)]">
             <DashboardBanner />
-            <div className="mt-4 sm:mt-6 flex-1">
+            <div className="mt-3 sm:mt-4 md:mt-5 lg:mt-6 flex-1 w-full overflow-x-hidden">
               <Outlet />
             </div>
             {/* Version Footer */}
-            <VersionFooter className="mt-8 pt-4 border-t border-border" />
+            <VersionFooter className="mt-6 sm:mt-8 pt-3 sm:pt-4 border-t border-border" />
           </main>
         </div>
       </div>

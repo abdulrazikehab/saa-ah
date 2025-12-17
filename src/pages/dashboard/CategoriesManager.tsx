@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
 import { ImageUpload } from '@/components/ui/image-upload';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -74,6 +75,8 @@ export default function CategoriesManager() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; parentId?: string} | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
   const [formData, setFormData] = useState({
     name: '',
     nameAr: '',
@@ -262,14 +265,38 @@ export default function CategoriesManager() {
 
   const handleExport = () => {
     // Define headers for the Excel sheet
-    const headers = ['ID', 'Name', 'Description', 'Slug', 'ProductCount'];
+    const headers = [
+      'ID',
+      'Name',
+      'NameAr',
+      'Description',
+      'DescriptionAr',
+      'Slug',
+      'Image',
+      'Icon',
+      'ParentId',
+      'IsActive',
+      'SortOrder',
+      'ProductCount',
+      'CreatedAt',
+      'UpdatedAt'
+    ];
     
     const exportData = categories.map(c => ({
       ID: c.id,
-      Name: c.name,
+      Name: c.name || '',
+      NameAr: (c as any).nameAr || '',
       Description: c.description || '',
+      DescriptionAr: (c as any).descriptionAr || '',
       Slug: c.slug || '',
+      Image: (c as any).image || '',
+      Icon: (c as any).icon || '',
+      ParentId: (c as any).parentId || '',
+      IsActive: (c as any).isActive !== undefined ? ((c as any).isActive ? 'Yes' : 'No') : 'Yes',
+      SortOrder: (c as any).sortOrder || 0,
       ProductCount: c.productCount || 0,
+      CreatedAt: (c as any).createdAt || '',
+      UpdatedAt: (c as any).updatedAt || '',
     }));
 
     // Create worksheet with headers
@@ -289,7 +316,9 @@ export default function CategoriesManager() {
     if (!file) return;
 
     try {
-      setLoading(true);
+      setIsImporting(true);
+      setImportProgress({ current: 0, total: 0, currentItem: 'Reading file...' });
+      
       const data = await file.arrayBuffer();
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -302,6 +331,9 @@ export default function CategoriesManager() {
         Parent?: string;
         Image?: string;
       }>(worksheet, { defval: '' });
+
+      const totalItems = jsonData.length;
+      setImportProgress({ current: 0, total: totalItems, currentItem: `Processing ${totalItems} categories...` });
 
       let successCount = 0;
       let errorCount = 0;
@@ -320,6 +352,13 @@ export default function CategoriesManager() {
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
         const rowNum = i + 2; // Excel row number (1-indexed + header)
+        
+        // Update progress
+        setImportProgress({ 
+          current: i + 1, 
+          total: totalItems, 
+          currentItem: `Importing: ${row.Name || `Row ${rowNum}`}...` 
+        });
 
         if (!row.Name || !row.Name.trim()) {
           errors.push(`Row ${rowNum}: Name is required`);
@@ -361,6 +400,15 @@ export default function CategoriesManager() {
         }
       }
 
+      // Update progress to 100%
+      setImportProgress({ 
+        current: totalItems, 
+        total: totalItems, 
+        currentItem: 'Import completed!' 
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const errorText = errors.length > 0 
         ? `\n\nErrors:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n... and ${errors.length - 10} more errors` : ''}`
         : '';
@@ -382,7 +430,8 @@ export default function CategoriesManager() {
         variant: 'destructive' 
       });
     } finally {
-      setLoading(false);
+      setIsImporting(false);
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
     }
   };
 
@@ -1374,6 +1423,39 @@ export default function CategoriesManager() {
               {editingOffer ? t('categories.productCategories.update') : t('categories.productCategories.add')}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Progress Dialog */}
+      <Dialog open={isImporting} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importing Categories</DialogTitle>
+            <DialogDescription>
+              Please wait while categories are being imported...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">
+                  {importProgress.currentItem || 'Processing...'}
+                </span>
+                <span className="text-gray-600 dark:text-gray-400">
+                  {importProgress.current} / {importProgress.total}
+                </span>
+              </div>
+              <Progress 
+                value={importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0} 
+                className="w-full"
+              />
+            </div>
+            <p className="text-xs text-gray-500 text-center">
+              {importProgress.total > 0 
+                ? `${Math.round((importProgress.current / importProgress.total) * 100)}% complete`
+                : 'Initializing...'}
+            </p>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

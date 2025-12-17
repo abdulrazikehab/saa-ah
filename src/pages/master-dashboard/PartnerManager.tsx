@@ -112,7 +112,7 @@ export default function PartnerManager() {
       uploadData.append('folder', 'partners');
 
       // Upload to your image service
-      const response = await fetch(`${import.meta.env.VITE_CORE_API_URL || 'http://localhost:3002'}/api/upload`, {
+      const response = await fetch(`${import.meta.env.VITE_CORE_API_URL}/api/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
@@ -176,7 +176,9 @@ export default function PartnerManager() {
     if (!editingPartner) return;
     
     try {
-      await coreApi.put(`/admin/master/partners/${editingPartner.id}`, formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
+      // URL encode the ID to handle special characters and slashes
+      const encodedId = encodeURIComponent(editingPartner.id);
+      await coreApi.put(`/admin/master/partners/${encodedId}`, formData, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Partner updated successfully'
@@ -196,9 +198,11 @@ export default function PartnerManager() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this partner?')) return;
-    
+
     try {
-      await coreApi.delete(`/admin/master/partners/${id}`, { requireAuth: true, adminApiKey: getAdminApiKey() });
+      // URL encode the ID to handle special characters and slashes
+      const encodedId = encodeURIComponent(id);
+      await coreApi.delete(`/admin/master/partners/${encodedId}`, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Partner deleted'

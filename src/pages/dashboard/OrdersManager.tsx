@@ -171,18 +171,62 @@ export default function OrdersManager() {
   const currentOrders = filteredOrders.slice(startIndex, endIndex);
 
   const handleExport = () => {
-    const exportData = orders.map(o => ({
-      ID: o.id,
-      OrderNumber: o.orderNumber,
-      CustomerName: o.customer?.name,
-      CustomerEmail: o.customer?.email,
-      Total: o.total,
-      Status: o.status,
-      PaymentStatus: o.paymentStatus,
-      CreatedAt: o.createdAt
-    }));
+    const headers = [
+      'ID',
+      'OrderNumber',
+      'CustomerName',
+      'CustomerEmail',
+      'CustomerPhone',
+      'Subtotal',
+      'Tax',
+      'Shipping',
+      'Discount',
+      'Total',
+      'Status',
+      'PaymentStatus',
+      'PaymentMethod',
+      'ShippingStreet',
+      'ShippingCity',
+      'ShippingState',
+      'ShippingPostalCode',
+      'ShippingCountry',
+      'Items',
+      'CreatedAt',
+      'UpdatedAt'
+    ];
 
-    const ws = utils.json_to_sheet(exportData);
+    const exportData = orders.map(o => {
+      // Format order items
+      const itemsText = o.items?.map(item => 
+        `${item.product?.name || item.product?.nameAr || 'N/A'} (Qty: ${item.quantity}, Price: ${item.price})`
+      ).join('; ') || '';
+
+      return {
+        ID: o.id,
+        OrderNumber: o.orderNumber,
+        CustomerName: o.customer?.name || '',
+        CustomerEmail: o.customer?.email || '',
+        CustomerPhone: o.customer?.phone || '',
+        Subtotal: o.subtotal || 0,
+        Tax: o.tax || 0,
+        Shipping: o.shipping || 0,
+        Discount: o.discount || 0,
+        Total: o.total || 0,
+        Status: o.status || '',
+        PaymentStatus: o.paymentStatus || '',
+        PaymentMethod: o.paymentMethod || '',
+        ShippingStreet: o.shippingAddress?.street || '',
+        ShippingCity: o.shippingAddress?.city || '',
+        ShippingState: o.shippingAddress?.state || '',
+        ShippingPostalCode: o.shippingAddress?.postalCode || '',
+        ShippingCountry: o.shippingAddress?.country || '',
+        Items: itemsText,
+        CreatedAt: o.createdAt || '',
+        UpdatedAt: o.updatedAt || ''
+      };
+    });
+
+    const ws = utils.json_to_sheet(exportData, { header: headers });
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "Orders");
     writeFile(wb, "orders_export.xlsx");

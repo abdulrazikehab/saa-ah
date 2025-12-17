@@ -5,7 +5,7 @@ import {
   Shield, Activity, Users, CreditCard, Database, Lock, 
   Globe, Sun, Moon, X, Menu, Search, Bell, LogOut, 
   Layers, Zap, CheckCircle, RefreshCcw, Gift, Handshake, 
-  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight, Key
+  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight, Key, UserPlus
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { coreApi } from '@/lib/api';
@@ -22,7 +22,7 @@ import ApiKeyManager from './master-dashboard/ApiKeyManager';
 
 import AiSettingsManager from './master-dashboard/AiSettingsManager';
 import { APP_VERSION } from '../version';
-import { getAdminApiKey } from '@/lib/admin-config';
+import { getAdminApiKeySync, initializeAdminApiKey, clearAdminApiKeyCache } from '@/lib/admin-config';
 
 // Translations
 const translations = {
@@ -264,6 +264,20 @@ export default function SystemAdminPanel() {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
+  const [dbStats, setDbStats] = useState<any>(null);
+  const [rateLimitConfig, setRateLimitConfig] = useState<any>(null);
+  const [rateLimitStats, setRateLimitStats] = useState<any>(null);
+  const [loadingDbStats, setLoadingDbStats] = useState(false);
+  const [clearing, setClearing] = useState<string | null>(null);
+  const [updatingConfig, setUpdatingConfig] = useState(false);
+  const [configForm, setConfigForm] = useState({
+    loginMaxAttempts: 100,
+    loginWindowMs: 15 * 60 * 1000,
+    signupMaxAttempts: 3,
+    signupWindowMs: 60 * 60 * 1000,
+    passwordResetMaxAttempts: 5,
+    passwordResetWindowMs: 60 * 60 * 1000,
+  });
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [language, setLanguage] = useState<'en' | 'ar'>('ar');
   const [customerFingerprints, setCustomerFingerprints] = useState<CustomerFingerprint[]>([]);
@@ -274,8 +288,15 @@ export default function SystemAdminPanel() {
   const t = translations[language];
   const isRTL = language === 'ar';
 
-  // Admin API key from environment variable
-  const ADMIN_PASSWORD = getAdminApiKey();
+  // Admin API key - initialized from backend
+  const [ADMIN_PASSWORD, setAdminPassword] = useState(getAdminApiKeySync());
+
+  // Initialize admin API key on mount
+  useEffect(() => {
+    initializeAdminApiKey().then(() => {
+      setAdminPassword(getAdminApiKeySync());
+    });
+  }, []);
 
   // Normalize any log shape from backend/auth service so UI is robust
   const normalizeLogs = useCallback((raw: any, type: 'security' | 'audit' | 'error') => {
@@ -476,6 +497,14 @@ export default function SystemAdminPanel() {
     }
   }, [isAuthenticated, fetchLogs, fetchDashboardStats, fetchSystemHealth]);
 
+  // Fetch database stats and rate limit config when database tab is opened
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'database') {
+      fetchDbStats();
+      fetchRateLimitConfig();
+    }
+  }, [isAuthenticated, activeTab]);
+
   // Fetch Customer Fingerprints
   const fetchCustomerFingerprints = useCallback(async () => {
     try {
@@ -641,6 +670,175 @@ export default function SystemAdminPanel() {
     return Array.from(actions);
   };
 
+  const fetchDbStats = async () => {
+    setLoadingDbStats(true);
+    try {
+      const stats = await apiClient.fetch(`${apiClient.authUrl}/admin/stats`, {
+        method: 'GET',
+        requireAuth: true,
+        adminApiKey: ADMIN_PASSWORD,
+      });
+      setDbStats(stats);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: language === 'ar' ? 'فشل تحميل إحصائيات قاعدة البيانات' : 'Failed to load database statistics',
+      });
+    } finally {
+      setLoadingDbStats(false);
+    }
+  };
+
+  const fetchRateLimitConfig = async () => {
+    try {
+      const config = await apiClient.fetch(`${apiClient.authUrl}/admin/rate-limit-config`, {
+        method: 'GET',
+        requireAuth: true,
+        adminApiKey: ADMIN_PASSWORD,
+      });
+      setRateLimitConfig(config);
+      // Update form with current config
+      if (config.login) {
+        setConfigForm({
+          loginMaxAttempts: config.login.maxAttempts,
+          loginWindowMs: config.login.windowMs,
+          signupMaxAttempts: config.signup.maxAttempts,
+          signupWindowMs: config.signup.windowMs,
+          passwordResetMaxAttempts: config.passwordReset.maxAttempts,
+          passwordResetWindowMs: config.passwordReset.windowMs,
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: language === 'ar' ? 'فشل تحميل إعدادات قيود المعدل' : 'Failed to load rate limit configuration',
+      });
+    }
+  };
+
+  const handleUpdateRateLimitConfig = async () => {
+    if (!confirm(language === 'ar' 
+      ? 'هل أنت متأكد من تحديث إعدادات قيود المعدل؟ سيتم تطبيق التغييرات فوراً.'
+      : 'Are you sure you want to update rate limit configuration? Changes will be applied immediately.')) return;
+
+    setUpdatingConfig(true);
+    try {
+      const result = await apiClient.fetch(`${apiClient.authUrl}/admin/rate-limit-config`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          loginMaxAttempts: configForm.loginMaxAttempts,
+          loginWindowMs: configForm.loginWindowMs,
+          signupMaxAttempts: configForm.signupMaxAttempts,
+          signupWindowMs: configForm.signupWindowMs,
+        }),
+        requireAuth: true,
+        adminApiKey: ADMIN_PASSWORD,
+      });
+      
+      toast({
+        title: '✅ Success',
+        description: result.message || (language === 'ar' ? 'تم تحديث الإعدادات بنجاح' : 'Configuration updated successfully'),
+      });
+      fetchRateLimitConfig();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: '❌ Error',
+        description: error?.message || (language === 'ar' ? 'فشل تحديث الإعدادات' : 'Failed to update configuration'),
+      });
+    } finally {
+      setUpdatingConfig(false);
+    }
+  };
+
+  const handleClearRateLimits = async (type?: string) => {
+    if (!confirm(type 
+      ? `Clear rate limits for ${type}?` 
+      : 'Clear ALL rate limits? This will remove all rate limiting restrictions.')) return;
+
+    setClearing(type ? `rateLimits-${type}` : 'rateLimits');
+    try {
+      const url = type 
+        ? `${apiClient.authUrl}/admin/clear-rate-limits?type=${type}`
+        : `${apiClient.authUrl}/admin/clear-rate-limits`;
+      
+      const result = await apiClient.fetch(url, {
+        method: 'DELETE',
+        requireAuth: true,
+        adminApiKey: ADMIN_PASSWORD,
+      });
+      
+      toast({
+        title: '✅ Success',
+        description: result.message || 'Rate limits cleared successfully',
+      });
+      fetchDbStats();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: '❌ Error',
+        description: error?.message || 'Failed to clear rate limits',
+      });
+    } finally {
+      setClearing(null);
+    }
+  };
+
+  const handleClearData = async (type: string) => {
+    if (!confirm(`Clear all ${type}? This action cannot be undone.`)) return;
+    
+    setClearing(type);
+    try {
+      let url = '';
+      let method = 'DELETE';
+      
+      switch (type) {
+        case 'loginAttempts':
+          url = `${apiClient.authUrl}/admin/clear-login-attempts`;
+          break;
+        case 'securityEvents':
+          url = `${apiClient.authUrl}/admin/clear-security-events`;
+          break;
+        case 'passwordResets':
+          url = `${apiClient.authUrl}/admin/clear-password-resets`;
+          break;
+        case 'refreshTokens':
+          url = `${apiClient.authUrl}/admin/clear-refresh-tokens`;
+          break;
+        case 'users':
+          url = `${apiClient.authUrl}/admin/clear-users`;
+          break;
+        default:
+          throw new Error('Unknown clear type');
+      }
+      
+      const result = await apiClient.fetch(url, {
+        method,
+        requireAuth: true,
+        adminApiKey: ADMIN_PASSWORD,
+      });
+      
+      toast({
+        title: '✅ Success',
+        description: result.message || `Cleared ${type} successfully`,
+      });
+      fetchDbStats();
+      if (type === 'users') {
+        fetchDashboardStats();
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: '❌ Error',
+        description: error?.message || `Failed to clear ${type}`,
+      });
+    } finally {
+      setClearing(null);
+    }
+  };
+
   const handleResetDatabase = async () => {
     if (!confirm('ARE YOU SURE? This will delete ALL data. This action cannot be undone.')) return;
     if (!confirm('Really? Last warning!')) return;
@@ -655,6 +853,7 @@ export default function SystemAdminPanel() {
       // Refresh stats
       fetchDashboardStats();
       fetchSystemHealth();
+      fetchDbStats();
     } catch (error) {
       // Error logged to backend
       toast({
@@ -1109,50 +1308,354 @@ export default function SystemAdminPanel() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-3xl font-bold text-white mb-2">{t.database}</h2>
-                    <p className="text-gray-400">Manage system database and perform maintenance</p>
+                    <h2 className={`text-3xl font-bold ${theme.text} mb-2`}>{t.database}</h2>
+                    <p className={theme.textMuted}>{language === 'ar' ? 'إدارة قاعدة البيانات وصيانة النظام' : 'Manage system database and perform maintenance'}</p>
+                  </div>
+                  <button
+                    onClick={() => { fetchDbStats(); fetchRateLimitConfig(); }}
+                    disabled={loadingDbStats}
+                    className={`p-2 ${theme.card} ${theme.border} border rounded-lg ${theme.textMuted} hover:${theme.accentText} transition-colors`}
+                  >
+                    {loadingDbStats ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {/* Database Statistics */}
+                {dbStats && (
+                  <div className={`${cardStyle} p-6 rounded-2xl`}>
+                    <h3 className={`text-lg font-bold ${theme.text} mb-4`}>{t.dbStats}</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'المستخدمين' : 'Users'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.users || 0}</div>
+                      </div>
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'المستأجرين' : 'Tenants'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.tenants || 0}</div>
+                      </div>
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'قيود المعدل' : 'Rate Limits'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.rateLimits || 0}</div>
+                      </div>
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'محاولات تسجيل الدخول' : 'Login Attempts'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.loginAttempts || 0}</div>
+                      </div>
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'أحداث الأمان' : 'Security Events'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.securityEvents || 0}</div>
+                      </div>
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'إعادة تعيين كلمة المرور' : 'Password Resets'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.passwordResets || 0}</div>
+                      </div>
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <div className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'رموز التحديث' : 'Refresh Tokens'}</div>
+                        <div className={`text-2xl font-bold ${theme.text}`}>{dbStats.refreshTokens || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rate Limiting Management */}
+                <div className={`${cardStyle} p-6 rounded-2xl`}>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className={`text-lg font-bold ${theme.text}`}>
+                      {language === 'ar' ? 'إدارة قيود المعدل' : 'Rate Limiting Management'}
+                    </h3>
+                    <button
+                      onClick={fetchRateLimitConfig}
+                      className={`px-3 py-1.5 text-sm ${theme.card} ${theme.border} border rounded-lg ${theme.textMuted} hover:${theme.accentText} transition-colors`}
+                    >
+                      {language === 'ar' ? 'تحديث' : 'Refresh'}
+                    </button>
+                  </div>
+
+                  {/* Current Configuration */}
+                  {rateLimitConfig && (
+                    <div className="mb-6 space-y-4">
+                      <div className={`p-4 ${isDarkMode ? 'bg-gray-800' : 'bg-slate-100'} rounded-lg`}>
+                        <h4 className={`font-semibold ${theme.text} mb-4`}>{language === 'ar' ? 'الإعدادات الحالية' : 'Current Configuration'}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <label className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'تسجيل الدخول' : 'Login'}</label>
+                            <div className={`mt-1 ${theme.text}`}>
+                              {rateLimitConfig.login.maxAttempts} {language === 'ar' ? 'محاولة' : 'attempts'} / {Math.floor(rateLimitConfig.login.windowMs / 60000)} {language === 'ar' ? 'دقيقة' : 'min'}
+                            </div>
+                          </div>
+                          <div>
+                            <label className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'التسجيل' : 'Signup'}</label>
+                            <div className={`mt-1 ${theme.text}`}>
+                              {rateLimitConfig.signup.maxAttempts} {language === 'ar' ? 'محاولة' : 'attempts'} / {Math.floor(rateLimitConfig.signup.windowMs / 3600000)} {language === 'ar' ? 'ساعة' : 'hour'}
+                            </div>
+                          </div>
+                          <div>
+                            <label className={`text-sm ${theme.textMuted}`}>{language === 'ar' ? 'إعادة تعيين كلمة المرور' : 'Password Reset'}</label>
+                            <div className={`mt-1 ${theme.text}`}>
+                              {rateLimitConfig.passwordReset.maxAttempts} {language === 'ar' ? 'محاولة' : 'attempts'} / {Math.floor(rateLimitConfig.passwordReset.windowMs / 3600000)} {language === 'ar' ? 'ساعة' : 'hour'}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Configuration Form */}
+                        <div className="border-t border-gray-700 pt-4 mt-4">
+                          <h5 className={`font-semibold ${theme.text} mb-3`}>{language === 'ar' ? 'تعديل الإعدادات' : 'Update Configuration'}</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className={`text-sm ${theme.textMuted} block mb-1`}>{language === 'ar' ? 'تسجيل الدخول - عدد المحاولات' : 'Login - Max Attempts'}</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={configForm.loginMaxAttempts}
+                                onChange={(e) => setConfigForm({...configForm, loginMaxAttempts: parseInt(e.target.value) || 1})}
+                                className={`w-full ${theme.input} border rounded-lg px-3 py-2 text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                              />
+                              <span className={`text-xs ${theme.textMuted} mt-1 block`}>{Math.floor(configForm.loginWindowMs / 60000)} {language === 'ar' ? 'دقيقة' : 'min'} window</span>
+                            </div>
+                            <div>
+                              <label className={`text-sm ${theme.textMuted} block mb-1`}>{language === 'ar' ? 'التسجيل - عدد المحاولات' : 'Signup - Max Attempts'}</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={configForm.signupMaxAttempts}
+                                onChange={(e) => setConfigForm({...configForm, signupMaxAttempts: parseInt(e.target.value) || 1})}
+                                className={`w-full ${theme.input} border rounded-lg px-3 py-2 text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                              />
+                              <span className={`text-xs ${theme.textMuted} mt-1 block`}>{Math.floor(configForm.signupWindowMs / 3600000)} {language === 'ar' ? 'ساعة' : 'hour'} window</span>
+                            </div>
+                            <div>
+                              <label className={`text-sm ${theme.textMuted} block mb-1`}>{language === 'ar' ? 'إعادة تعيين - عدد المحاولات' : 'Password Reset - Max Attempts'}</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={configForm.passwordResetMaxAttempts}
+                                onChange={(e) => setConfigForm({...configForm, passwordResetMaxAttempts: parseInt(e.target.value) || 1})}
+                                className={`w-full ${theme.input} border rounded-lg px-3 py-2 text-sm ${theme.text} focus:outline-none ${theme.focus}`}
+                              />
+                              <span className={`text-xs ${theme.textMuted} mt-1 block`}>{Math.floor(configForm.passwordResetWindowMs / 3600000)} {language === 'ar' ? 'ساعة' : 'hour'} window</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleUpdateRateLimitConfig}
+                            disabled={updatingConfig}
+                            className={`mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50`}
+                          >
+                            {updatingConfig ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                            {language === 'ar' ? 'حفظ الإعدادات' : 'Save Configuration'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rate Limit Actions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <button
+                      onClick={() => handleClearRateLimits()}
+                      disabled={clearing === 'rateLimits'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'rateLimits' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-blue-500" />
+                        ) : (
+                          <RefreshCcw className="w-5 h-5 text-blue-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح جميع قيود المعدل' : 'Clear All Rate Limits'}
+                          </div>
+                          <div className={`text-sm ${theme.textMuted}`}>
+                            {language === 'ar' ? 'إزالة جميع قيود المعدل' : 'Remove all rate limiting restrictions'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleClearRateLimits('LOGIN')}
+                      disabled={clearing === 'rateLimits-LOGIN'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'rateLimits-LOGIN' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-green-500" />
+                        ) : (
+                          <Lock className="w-5 h-5 text-green-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح قيود تسجيل الدخول' : 'Clear Login Rate Limits'}
+                          </div>
+                          <div className={`text-sm ${theme.textMuted}`}>
+                            {language === 'ar' ? 'إزالة قيود تسجيل الدخول فقط' : 'Remove login rate limits only'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleClearRateLimits('REGISTRATION')}
+                      disabled={clearing === 'rateLimits-REGISTRATION'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'rateLimits-REGISTRATION' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-purple-500" />
+                        ) : (
+                          <UserPlus className="w-5 h-5 text-purple-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح قيود التسجيل' : 'Clear Signup Rate Limits'}
+                          </div>
+                          <div className={`text-sm ${theme.textMuted}`}>
+                            {language === 'ar' ? 'إزالة قيود التسجيل فقط' : 'Remove signup rate limits only'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleClearRateLimits('PASSWORD_RESET')}
+                      disabled={clearing === 'rateLimits-PASSWORD_RESET'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'rateLimits-PASSWORD_RESET' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-orange-500" />
+                        ) : (
+                          <Key className="w-5 h-5 text-orange-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح قيود إعادة تعيين كلمة المرور' : 'Clear Password Reset Limits'}
+                          </div>
+                          <div className={`text-sm ${theme.textMuted}`}>
+                            {language === 'ar' ? 'إزالة قيود إعادة تعيين كلمة المرور' : 'Remove password reset rate limits'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
+                {/* Database Management */}
+                <div className={`${cardStyle} p-6 rounded-2xl`}>
+                  <h3 className={`text-lg font-bold ${theme.text} mb-4`}>
+                    {language === 'ar' ? 'إدارة قاعدة البيانات' : 'Database Management'}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button
+                      onClick={() => handleClearData('loginAttempts')}
+                      disabled={clearing === 'loginAttempts'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'loginAttempts' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-blue-500" />
+                        ) : (
+                          <Trash2 className="w-5 h-5 text-blue-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح محاولات تسجيل الدخول' : 'Clear Login Attempts'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleClearData('securityEvents')}
+                      disabled={clearing === 'securityEvents'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'securityEvents' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-red-500" />
+                        ) : (
+                          <Trash2 className="w-5 h-5 text-red-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح أحداث الأمان' : 'Clear Security Events'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleClearData('passwordResets')}
+                      disabled={clearing === 'passwordResets'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'passwordResets' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-orange-500" />
+                        ) : (
+                          <Trash2 className="w-5 h-5 text-orange-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح طلبات إعادة تعيين كلمة المرور' : 'Clear Password Resets'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleClearData('refreshTokens')}
+                      disabled={clearing === 'refreshTokens'}
+                      className={`p-4 ${theme.card} ${theme.border} border rounded-lg hover:${theme.cardHover} transition-colors text-left disabled:opacity-50`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {clearing === 'refreshTokens' ? (
+                          <RefreshCcw className="w-5 h-5 animate-spin text-purple-500" />
+                        ) : (
+                          <Trash2 className="w-5 h-5 text-purple-500" />
+                        )}
+                        <div>
+                          <div className={`font-semibold ${theme.text}`}>
+                            {language === 'ar' ? 'مسح رموز التحديث' : 'Clear Refresh Tokens'}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Danger Zone */}
                 <div className={`${cardStyle} p-6 rounded-2xl border border-red-500/20`}>
                   <div className="flex items-start gap-4">
                     <div className="p-3 bg-red-500/10 rounded-lg">
                       <Trash2 className="w-6 h-6 text-red-500" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <h3 className={`text-lg font-bold ${theme.text} mb-2`}>{t.dangerZone}</h3>
                       <p className={`${theme.textMuted} mb-6`}>
                         {t.resetWarning}
                       </p>
                       
-                      <button
-                        onClick={handleResetDatabase}
-                        disabled={resetting}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2"
-                      >
-                        {resetting ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                        {t.resetDatabaseAction}
-                      </button>
+                      <div className="space-y-3">
+                        <button
+                          onClick={() => handleClearData('users')}
+                          disabled={clearing === 'users'}
+                          className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {clearing === 'users' ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                          {language === 'ar' ? 'مسح جميع المستخدمين' : 'Clear All Users'}
+                        </button>
+                        <button
+                          onClick={handleResetDatabase}
+                          disabled={resetting}
+                          className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {resetting ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          {t.resetDatabaseAction}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div className={`${cardStyle} p-6 rounded-2xl`}>
-                   <h3 className={`text-lg font-bold ${theme.text} mb-4`}>{t.dbStats}</h3>
-                   <div className="grid grid-cols-3 gap-4">
-                      <div className="p-4 bg-slate-800 rounded-lg">
-                        <div className="text-sm text-gray-400">Total Tenants</div>
-                        <div className="text-2xl font-bold text-white">{systemHealth?.database?.tenants || 0}</div>
-                      </div>
-                      <div className="p-4 bg-slate-800 rounded-lg">
-                        <div className="text-sm text-gray-400">Total Users</div>
-                        <div className="text-2xl font-bold text-white">{systemHealth?.database?.users || 0}</div>
-                      </div>
-                      <div className="p-4 bg-slate-800 rounded-lg">
-                        <div className="text-sm text-gray-400">Total Orders</div>
-                        <div className="text-2xl font-bold text-white">{systemHealth?.database?.orders || 0}</div>
-                      </div>
-                   </div>
                 </div>
               </div>
             )}
@@ -1165,7 +1668,31 @@ export default function SystemAdminPanel() {
             {activeTab === 'features' && <FeatureControlManager />}
             {activeTab === 'ai' && <AiSettingsManager />}
             {activeTab === 'gifts' && <UserGiftsManager />}
-            {activeTab === 'api-keys' && <ApiKeyManager />}
+            {activeTab === 'api-keys' && (
+              <div className="space-y-6">
+                <ApiKeyManager />
+                
+                {/* Admin API Key Management */}
+                <AdminApiKeySection 
+                  adminPassword={ADMIN_PASSWORD}
+                  onUpdate={() => {
+                    clearAdminApiKeyCache();
+                    initializeAdminApiKey().then(() => {
+                      setAdminPassword(getAdminApiKeySync());
+                      toast({
+                        title: language === 'ar' ? 'تم التحديث' : 'Updated',
+                        description: language === 'ar' 
+                          ? 'تم تحديث مفتاح API بنجاح'
+                          : 'API key updated successfully',
+                      });
+                    });
+                  }}
+                  theme={theme}
+                  language={language}
+                  cardStyle={cardStyle}
+                />
+              </div>
+            )}
 
             {activeTab === 'customers' && (
               <div className="space-y-6">
@@ -1972,6 +2499,188 @@ export default function SystemAdminPanel() {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Admin API Key Management Component
+function AdminApiKeySection({ adminPassword, onUpdate, theme, language, cardStyle }: {
+  adminPassword: string;
+  onUpdate: () => void;
+  theme: any;
+  language: 'en' | 'ar';
+  cardStyle: string;
+}) {
+  const [currentApiKey, setCurrentApiKey] = useState('');
+  const [newApiKey, setNewApiKey] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    loadCurrentApiKey();
+  }, []);
+
+  const loadCurrentApiKey = async () => {
+    try {
+      setFetching(true);
+      const response = await coreApi.get('/admin/master/admin-api-key', { 
+        requireAuth: true, 
+        adminApiKey: adminPassword 
+      });
+      setCurrentApiKey(response.apiKey || '');
+    } catch (error: any) {
+      console.error('Failed to load admin API key:', error);
+      toast({
+        variant: 'destructive',
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: language === 'ar' 
+          ? 'فشل تحميل مفتاح API'
+          : 'Failed to load API key',
+      });
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!newApiKey.trim() || newApiKey.trim().length < 8) {
+      toast({
+        variant: 'destructive',
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: language === 'ar' 
+          ? 'يجب أن يكون مفتاح API 8 أحرف على الأقل'
+          : 'API key must be at least 8 characters long',
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await coreApi.post('/admin/master/admin-api-key', { 
+        apiKey: newApiKey.trim() 
+      }, { 
+        requireAuth: true, 
+        adminApiKey: adminPassword 
+      });
+      
+      toast({
+        title: language === 'ar' ? 'نجح' : 'Success',
+        description: language === 'ar' 
+          ? 'تم تحديث مفتاح API بنجاح'
+          : 'API key updated successfully',
+      });
+      
+      setNewApiKey('');
+      await loadCurrentApiKey();
+      onUpdate();
+    } catch (error: any) {
+      console.error('Failed to update admin API key:', error);
+      toast({
+        variant: 'destructive',
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: error?.response?.data?.message || (language === 'ar' 
+          ? 'فشل تحديث مفتاح API'
+          : 'Failed to update API key'),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: language === 'ar' ? 'تم النسخ' : 'Copied',
+      description: language === 'ar' 
+        ? 'تم نسخ مفتاح API إلى الحافظة'
+        : 'API key copied to clipboard',
+    });
+  };
+
+  return (
+    <div className={`${cardStyle} p-6 rounded-2xl border-2 border-violet-500/20`}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className={`text-xl font-bold ${theme.text} mb-2`}>
+            {language === 'ar' ? 'مفتاح API للمدير' : 'Admin API Key'}
+          </h3>
+          <p className={`text-sm ${theme.textMuted}`}>
+            {language === 'ar' 
+              ? 'إدارة مفتاح API الرئيسي للنظام. يستخدم هذا المفتاح للوصول إلى لوحة الإدارة.'
+              : 'Manage the system admin API key. This key is used to access the admin panel.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Current API Key */}
+        <div>
+          <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+            {language === 'ar' ? 'مفتاح API الحالي' : 'Current API Key'}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type={showCurrent ? 'text' : 'password'}
+              value={fetching ? (language === 'ar' ? 'جاري التحميل...' : 'Loading...') : currentApiKey}
+              readOnly
+              className={`flex-1 px-4 py-2 ${theme.input} border ${theme.border} rounded-lg font-mono text-sm`}
+            />
+            <button
+              onClick={() => setShowCurrent(!showCurrent)}
+              className={`p-2 ${theme.card} border ${theme.border} rounded-lg ${theme.textMuted} hover:${theme.accentText}`}
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleCopy(currentApiKey)}
+              className={`p-2 ${theme.card} border ${theme.border} rounded-lg ${theme.textMuted} hover:${theme.accentText}`}
+            >
+              <Key className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* New API Key */}
+        <div>
+          <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+            {language === 'ar' ? 'مفتاح API جديد' : 'New API Key'}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type={showNew ? 'text' : 'password'}
+              value={newApiKey}
+              onChange={(e) => setNewApiKey(e.target.value)}
+              placeholder={language === 'ar' ? 'أدخل مفتاح API جديد (8 أحرف على الأقل)' : 'Enter new API key (min 8 characters)'}
+              className={`flex-1 px-4 py-2 ${theme.input} border ${theme.border} rounded-lg font-mono text-sm`}
+            />
+            <button
+              onClick={() => setShowNew(!showNew)}
+              className={`p-2 ${theme.card} border ${theme.border} rounded-lg ${theme.textMuted} hover:${theme.accentText}`}
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          </div>
+          <p className={`text-xs ${theme.textMuted} mt-1`}>
+            {language === 'ar' 
+              ? 'يجب أن يكون المفتاح 8 أحرف على الأقل'
+              : 'Key must be at least 8 characters long'}
+          </p>
+        </div>
+
+        {/* Update Button */}
+        <button
+          onClick={handleUpdate}
+          disabled={loading || !newApiKey.trim()}
+          className={`w-full px-4 py-2 ${theme.accent} ${theme.accentHover} text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+        >
+          {loading 
+            ? (language === 'ar' ? 'جاري التحديث...' : 'Updating...')
+            : (language === 'ar' ? 'تحديث مفتاح API' : 'Update API Key')}
+        </button>
+      </div>
     </div>
   );
 }

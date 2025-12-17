@@ -12,13 +12,27 @@ const getBaseUrl = (defaultPort: string) => {
     // Remove trailing slashes for consistency
     envUrl = envUrl.replace(/\/+$/, '');
     
-    // If URL uses HTTPS but is an IP address, convert to HTTP
-    // IP addresses typically don't have valid SSL certificates
-    // Check if it's an IP address (IPv4 pattern: xxx.xxx.xxx.xxx)
+    // Check if current page is loaded over HTTPS
+    const isPageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    
+    // If URL uses HTTPS but is an IP address, we need to handle mixed content
+    // IP addresses typically don't have valid SSL certificates, but browsers
+    // block HTTP requests from HTTPS pages (Mixed Content error)
     const ipv4Pattern = /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?/;
-    if (ipv4Pattern.test(envUrl) && envUrl.startsWith('https://')) {
-      console.warn(`Converting HTTPS to HTTP for IP address URL: ${envUrl}`);
-      envUrl = envUrl.replace(/^https:\/\//, 'http://');
+    const isIpAddress = ipv4Pattern.test(envUrl);
+    
+    if (isIpAddress) {
+      // If page is HTTPS, we must use HTTPS for the API (even if IP has no cert)
+      // Otherwise browser will block it as Mixed Content
+      if (isPageHttps && envUrl.startsWith('http://')) {
+        console.warn(`Converting HTTP to HTTPS for IP address URL to avoid Mixed Content: ${envUrl}`);
+        envUrl = envUrl.replace(/^http:\/\//, 'https://');
+      }
+      // If page is HTTP and API URL is HTTPS, we can downgrade to HTTP for IPs
+      else if (!isPageHttps && envUrl.startsWith('https://')) {
+        console.warn(`Converting HTTPS to HTTP for IP address URL: ${envUrl}`);
+        envUrl = envUrl.replace(/^https:\/\//, 'http://');
+      }
     }
     
     return envUrl;
@@ -26,7 +40,8 @@ const getBaseUrl = (defaultPort: string) => {
   
   // For local development, use localhost with the appropriate port
   // This works from both main domain and subdomains
-  return `http://localhost:${defaultPort}`;
+  const isPageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  return isPageHttps ? `https://localhost:${defaultPort}` : `http://localhost:${defaultPort}`;
 };
 
 const AUTH_BASE_URL = getBaseUrl('3001');
@@ -163,10 +178,9 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), fetchOptions.timeout || 60000);
 
-    // Safely extract Authorization header for logging (headers is always a Record<string, string> here)
+    // Safely extract Authorization header for logging
     const headersObj = headers as Record<string, string>;
     const authHeader = headersObj['Authorization'] || headersObj['authorization'];
-    
     console.log('🌐 fetchApi: Making request to', url, 'with headers:', { 
       ...headersObj, 
       Authorization: authHeader ? 'Bearer ***' : undefined 
@@ -193,7 +207,7 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
           }).then(() => {
-            // Retry the original request with new token
+            // Retry the original request with new token (only once)
             return fetchApi(url, { ...options, _retry: true });
           });
         }
@@ -206,11 +220,16 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
           if (newToken) {
             processQueue(null, newToken);
             isRefreshing = false;
-            // Retry the original request with new token
+            // Retry the original request with new token (only once)
             return fetchApi(url, { ...options, _retry: true });
           } else {
             processQueue(new Error('Token refresh failed'), null);
             isRefreshing = false;
+            // Clear invalid tokens
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
             // Redirect to login
             window.location.href = '/auth/login';
             throw new ApiError(401, 'Session expired. Please login again.');
@@ -218,14 +237,41 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
         } catch (error) {
           processQueue(error instanceof Error ? error : new Error('Unknown error'), null);
           isRefreshing = false;
-          window.location.href = '/auth/login';
+          // Clear invalid tokens
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          // Prevent infinite redirects - only redirect if not already on login page
+          if (!window.location.pathname.includes('/auth/login')) {
+            window.location.href = '/auth/login';
+          }
           throw new ApiError(401, 'Session expired. Please login again.');
         }
+      }
+
+      // If we get 401 after retry, don't try again - just throw the error
+      if (response.status === 401 && _retry) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.message || 'Authentication failed. Please login again.';
+        // Clear tokens as they're invalid
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        throw new ApiError(401, errorMessage, errorData);
       }
 
       let errorMessage = data.message || 'An error occurred';
       if (typeof errorMessage === 'object') {
         errorMessage = JSON.stringify(errorMessage);
+      }
+      
+      // Handle 403 Forbidden - tenant/market not set up
+      if (response.status === 403) {
+        const forbiddenMessage = data.message || errorMessage || 'Access forbidden. Please ensure you have set up a market.';
+        // Don't show toast for 403s - let the component handle it
+        throw new ApiError(response.status, forbiddenMessage, data);
       }
       
       // Don't show toast for expected 404s on public endpoints

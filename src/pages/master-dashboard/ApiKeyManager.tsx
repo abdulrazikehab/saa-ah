@@ -61,7 +61,9 @@ export default function ApiKeyManager() {
     try {
       setLoading(true);
       const response = await coreApi.get('/admin/master/api-keys', { requireAuth: true, adminApiKey: getAdminApiKey() });
-      setApiKeys(response.apiKeys || response || []);
+      // Handle both response formats: { apiKeys: [...] } or direct array
+      const keys = Array.isArray(response) ? response : (response?.apiKeys || []);
+      setApiKeys(keys);
     } catch (error: any) {
       console.error('Failed to load API keys:', error);
       toast({
@@ -69,6 +71,7 @@ export default function ApiKeyManager() {
         title: 'Error',
         description: error.response?.data?.message || 'Failed to load API keys'
       });
+      // Set empty array on error to show empty state
       setApiKeys([]);
     } finally {
       setLoading(false);
@@ -93,7 +96,9 @@ export default function ApiKeyManager() {
     setLoading(true);
     try {
       if (editingApiKey) {
-        await coreApi.put(`/admin/master/api-keys/${editingApiKey.id}`, { name: formData.name }, { requireAuth: true, adminApiKey: getAdminApiKey() });
+        // URL encode the ID to handle special characters like + and /
+        const encodedId = encodeURIComponent(editingApiKey.id);
+        await coreApi.put(`/admin/master/api-keys/${encodedId}`, { name: formData.name }, { requireAuth: true, adminApiKey: getAdminApiKey() });
         toast({
           title: 'Success',
           description: 'API key updated successfully'
@@ -134,7 +139,9 @@ export default function ApiKeyManager() {
     if (!confirm('Are you sure you want to delete this API key? Any application using it will lose access to the API.')) return;
 
     try {
-      await coreApi.delete(`/admin/master/api-keys/${id}`, { requireAuth: true, adminApiKey: getAdminApiKey() });
+      // URL encode the ID to handle special characters like + and /
+      const encodedId = encodeURIComponent(id);
+      await coreApi.delete(`/admin/master/api-keys/${encodedId}`, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'API key deleted successfully'
@@ -151,8 +158,10 @@ export default function ApiKeyManager() {
 
   const handleToggleActive = async (apiKey: ApiKey) => {
     try {
+      // URL encode the ID to handle special characters like + and /
+      const encodedId = encodeURIComponent(apiKey.id);
       await coreApi.put(
-        `/admin/master/api-keys/${apiKey.id}`,
+        `/admin/master/api-keys/${encodedId}`,
         { isActive: !apiKey.isActive },
         { requireAuth: true, adminApiKey: getAdminApiKey() }
       );
@@ -177,7 +186,9 @@ export default function ApiKeyManager() {
 
     setLoading(true);
     try {
-      const response = await coreApi.post(`/admin/master/api-keys/${regeneratingApiKey.id}/regenerate`, {}, { requireAuth: true, adminApiKey: getAdminApiKey() });
+      // URL encode the ID to handle special characters like + and /
+      const encodedId = encodeURIComponent(regeneratingApiKey.id);
+      const response = await coreApi.post(`/admin/master/api-keys/${encodedId}/regenerate`, {}, { requireAuth: true, adminApiKey: getAdminApiKey() });
       setNewApiKey(response.apiKey);
       setIsRegenerateDialogOpen(true);
       toast({

@@ -279,28 +279,28 @@ export const DashboardHeader = ({
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-14 sm:h-16 items-center justify-between px-3 sm:px-4 md:px-6 lg:px-8 gap-2 sm:gap-4">
+      <div className="flex h-14 sm:h-16 items-center justify-between px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 gap-1.5 sm:gap-2 md:gap-3 lg:gap-4">
         {/* Left Section - Mobile Menu + Search */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-1 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
+            className="lg:hidden h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 flex-shrink-0"
             onClick={onMenuClick}
             aria-label="فتح القائمة"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
 
           {/* Saeaa Logo */}
-          <div className={`hidden sm:flex items-center flex-shrink-0 ${isRTL ? 'mr-2 md:mr-6' : 'ml-2 md:ml-6'}`}>
-            <img src={getLogoUrl()} alt="Saeaa - سِعَة" className="h-7 sm:h-8 object-contain bg-transparent" />
+          <div className={`hidden sm:flex items-center flex-shrink-0 ${isRTL ? 'mr-1 md:mr-3 lg:mr-6' : 'ml-1 md:ml-3 lg:ml-6'}`}>
+            <img src={getLogoUrl()} alt="Saeaa - سِعَة" className="h-6 sm:h-7 md:h-8 object-contain bg-transparent" />
           </div>
 
         </div>
 
         {/* Center Section - Date Range Selector */}
-        <div className="hidden xl:flex items-center gap-2 flex-shrink-0">
+        <div className="hidden lg:flex items-center gap-1.5 xl:gap-2 flex-shrink-0">
           <Select value={dateRange} onValueChange={setDateRange}>
             <SelectTrigger className="w-[240px] xl:w-[280px] bg-muted/50 border-0 h-9">
               <Calendar className={`h-4 w-4 text-muted-foreground ${isRTL ? 'ml-2' : 'mr-2'}`} />
@@ -351,16 +351,18 @@ export const DashboardHeader = ({
         </div>
 
         {/* Right Section - Actions */}
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 lg:gap-2 flex-shrink-0">
           {/* Currency Display */}
-          <div className="hidden md:flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50 border border-border">
+          <div className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-muted/50 border border-border">
             <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium">{currencySymbol}</span>
-            <span className="text-xs text-muted-foreground">{currency}</span>
+            <span className="text-xs text-muted-foreground hidden xl:inline">{currency}</span>
           </div>
           
           {/* Store Switcher */}
-          <StoreSwitcher />
+          <div className="hidden sm:block">
+            <StoreSwitcher />
+          </div>
 
           {/* Theme Toggle */}
           <ThemeToggle />
@@ -371,7 +373,7 @@ export const DashboardHeader = ({
           {/* Notifications */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9 sm:h-10 sm:w-10">
+              <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10">
                 <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
                 {unreadCount > 0 && (
                   <Badge 
@@ -383,7 +385,7 @@ export const DashboardHeader = ({
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 max-w-sm p-0" align="end">
+            <PopoverContent className="w-[calc(100vw-3rem)] sm:w-80 md:w-96 max-w-sm p-0" align="end">
               <div className="flex items-center justify-between p-4 border-b">
                 <h3 className="font-semibold">{t('dashboard.header.notifications')}</h3>
                 <Button variant="ghost" size="sm" className="h-8 text-xs">
@@ -431,21 +433,21 @@ export const DashboardHeader = ({
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-1.5 sm:gap-2 px-1.5 sm:px-2 h-9 sm:h-10">
-                <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+              <Button variant="ghost" className="gap-1 sm:gap-1.5 md:gap-2 px-1 sm:px-1.5 md:px-2 h-8 sm:h-9 md:h-10">
+                <Avatar className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8">
                   <AvatarImage src={userAvatar} alt={userName} />
-                  <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-xs sm:text-sm">
+                  <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-[10px] sm:text-xs md:text-sm">
                     {userName.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div className="hidden md:flex flex-col items-start">
-                  <span className="text-xs sm:text-sm font-medium truncate max-w-[120px]">{userName}</span>
-                  <span className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[120px]">{userEmail}</span>
+                <div className="hidden lg:flex flex-col items-start">
+                  <span className="text-[10px] sm:text-xs md:text-sm font-medium truncate max-w-[100px] xl:max-w-[120px]">{userName}</span>
+                  <span className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground truncate max-w-[100px] xl:max-w-[120px]">{userEmail}</span>
                 </div>
-                <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground hidden sm:block" />
+                <ChevronDown className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground hidden md:block" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 sm:w-64">
+            <DropdownMenuContent align="end" className="w-56 sm:w-64 md:w-72">
               <DropdownMenuLabel>
                 <div className="flex flex-col">
                   <span>{userName}</span>
@@ -478,13 +480,13 @@ export const DashboardHeader = ({
       </div>
 
       {/* Mobile Search Bar */}
-      <div className="lg:hidden px-3 sm:px-4 pb-2 sm:pb-3 border-t">
+      <div className="lg:hidden px-2 sm:px-3 md:px-4 pb-2 sm:pb-3 border-t">
         <div className="relative">
-          <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground ${isRTL ? 'right-3' : 'left-3'}`} />
+          <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground ${isRTL ? 'right-2 sm:right-3' : 'left-2 sm:left-3'}`} />
           <Input
             type="search"
             placeholder={t('dashboard.header.searchPlaceholder')}
-            className={`bg-muted/50 border-0 h-9 text-sm ${isRTL ? 'pr-10' : 'pl-10'}`}
+            className={`bg-muted/50 border-0 h-8 sm:h-9 text-xs sm:text-sm ${isRTL ? 'pr-8 sm:pr-10' : 'pl-8 sm:pl-10'}`}
           />
         </div>
       </div>

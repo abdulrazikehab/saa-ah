@@ -704,7 +704,7 @@ export function HierarchicalExplorer({
           nameAr: newBrandData.nameAr || newBrandData.name,
           code: newBrandData.code || undefined,
           logo: newBrandData.logo || undefined,
-        });
+        }, { requireAuth: true });
         
         toast({
           title: 'نجح',

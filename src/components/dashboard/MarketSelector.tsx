@@ -331,6 +331,7 @@ export function MarketSelectorDropdown() {
   };
 
   const activeMarket = markets.find(m => m.isActive);
+  const hasValidMarket = activeMarket && user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system';
 
   if (loading) {
     return (
@@ -341,6 +342,78 @@ export function MarketSelectorDropdown() {
     );
   }
 
+  // If no markets exist, redirect to setup when clicked
+  if (markets.length === 0) {
+    return (
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="gap-2"
+        onClick={() => navigate('/setup')}
+      >
+        <Plus className="h-4 w-4" />
+        <span className="max-w-[150px] truncate">
+          إنشاء متجر
+        </span>
+      </Button>
+    );
+  }
+
+  // If markets exist but none is active/valid, show dropdown with option to create
+  if (!hasValidMarket && markets.length > 0) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <Store className="h-4 w-4" />
+            <span className="max-w-[150px] truncate">
+              اختر متجر
+            </span>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[280px]">
+          <div className="p-2 text-xs text-muted-foreground border-b">
+            المتاجر ({marketLimit.currentCount}/{marketLimit.limit})
+          </div>
+          <ScrollArea className="h-[200px]">
+            {markets.map((market) => (
+              <DropdownMenuItem
+                key={market.id}
+                onClick={() => handleSwitchMarket(market.id)}
+                className="flex items-center justify-between cursor-pointer"
+                disabled={switching}
+              >
+                <div className="flex items-center gap-2">
+                  <Store className="h-4 w-4" />
+                  <div>
+                    <div className="font-medium">{market.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {market.subdomain}
+                    </div>
+                  </div>
+                </div>
+                {market.isActive && <Check className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </ScrollArea>
+          {canCreate && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/setup" className="flex items-center gap-2 cursor-pointer">
+                  <Plus className="h-4 w-4" />
+                  إنشاء متجر جديد
+                </Link>
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  // Normal dropdown when market exists and is active
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

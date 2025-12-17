@@ -18,6 +18,9 @@ import CustomerProtectedRoute from "@/components/auth/CustomerProtectedRoute";
 import NotFound from "@/pages/NotFound";
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
+import ForgotPassword from "@/pages/auth/ForgotPassword";
+import ResetPassword from "@/pages/auth/ResetPassword";
+import Help from "@/pages/dashboard/Help";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
 // Digital Cards Marketplace Storefront
 import CardsHome from "@/pages/storefront/cards/CardsHome";
@@ -62,7 +65,16 @@ export const TenantRouter = () => {
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/login" element={<Login />} />
         <Route path="/auth/signup" element={<Signup />} />
+        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+        <Route path="/auth/reset-password" element={<ResetPassword />} />
       </Route>
+      
+      {/* Public pages - available on both main and tenant domains */}
+      <Route path="/help" element={<StorefrontLayout><Help /></StorefrontLayout>} />
+      <Route path="/privacy" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
+      <Route path="/terms" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
+      <Route path="/policies" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
+      <Route path="/rules" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
       
       {/* Fallback */}
       <Route path="*" element={<NotFound />} />

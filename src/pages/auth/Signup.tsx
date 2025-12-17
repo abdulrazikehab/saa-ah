@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { authService } from '@/services/auth.service';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
-import { Loader2, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, CheckCircle2, Copy, Key, Shield } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, CheckCircle2, Copy, Key, Shield, Download, MessageSquare, X } from 'lucide-react';
 import { InteractiveFace, FaceState } from '@/components/ui/InteractiveFace';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
 import { VersionFooter } from '@/components/common/VersionFooter';
@@ -29,6 +29,10 @@ export default function Signup() {
   const [recoveryId, setRecoveryId] = useState<string | null>(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const [copiedRecovery, setCopiedRecovery] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [signupEmail, setSignupEmail] = useState<string>('');
 
   // Calculate password strength
   useEffect(() => {
@@ -85,8 +89,27 @@ export default function Signup() {
     try {
       const result = await authService.signup({ name, email, password });
       setFaceState('happy');
+      setSignupEmail(email);
       
+      // Store recovery ID for later (after OTP verification)
       if (result.recoveryId) {
+        setRecoveryId(result.recoveryId);
+      }
+      
+      // Check if email was sent successfully
+      if (!result.verificationCodeSent) {
+        toast({
+          title: '⚠️ Warning',
+          description: 'Verification code may not have been sent. Please check your email or contact support.',
+          variant: 'destructive',
+        });
+      }
+      
+      // Show OTP verification modal first (recovery ID will be shown after verification)
+      if (result.verificationCodeSent || result.emailVerified === false || (result as any).verificationCode) {
+        setShowOtpModal(true);
+      } else if (result.recoveryId) {
+        // Fallback: if no verification needed, show recovery ID directly
         setRecoveryId(result.recoveryId);
         setShowRecoveryModal(true);
       } else {
@@ -116,7 +139,22 @@ export default function Signup() {
         }
       } else if (error?.response?.status === 400) {
         const errorData = error?.response?.data;
-        errorMessage = errorData?.message || 'البريد الإلكتروني غير صالح | Invalid email address';
+        const errorMsg = errorData?.message || '';
+        
+        // Check if it's an email sending error - in development, allow signup to continue
+        if (errorMsg.includes('verification email') || errorMsg.includes('SMTP') || errorMsg.includes('email')) {
+          // Try to extract verification code from error or show helpful message
+          toast({
+            title: '⚠️ Email sending failed',
+            description: 'Email service is not configured properly. Please contact support or check your SMTP settings.',
+            variant: 'destructive',
+            duration: 10000,
+          });
+          // Don't block signup - let user know they need to contact support
+          errorMessage = errorMsg;
+        } else {
+          errorMessage = errorMsg || 'البريد الإلكتروني غير صالح | Invalid email address';
+        }
       } else if (error?.message) {
         errorMessage = error.message;
       }
@@ -143,15 +181,127 @@ export default function Signup() {
     }
   };
 
+  const downloadRecoveryId = () => {
+    if (recoveryId) {
+      const content = `Recovery ID | رمز الاسترداد\n\n${recoveryId}\n\nPlease keep this ID in a safe place. You can use it to recover your account if you forget your email or it gets compromised.\n\nيرجى الاحتفاظ بهذا الرمز في مكان آمن. يمكنك استخدامه لاسترداد حسابك إذا نسيت بريدك الإلكتروني أو تعرض للاختراق.\n\nGenerated: ${new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'long' })}`;
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `recovery-id-${recoveryId.substring(0, 8)}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: 'تم التنزيل! | Downloaded!',
+        description: 'تم تنزيل رمز الاسترداد | Recovery ID downloaded',
+      });
+      
+      // Mark as copied since user has downloaded it
+      setCopiedRecovery(true);
+    }
+  };
+
   const handleContinueAfterRecovery = () => {
     setShowRecoveryModal(false);
+    localStorage.removeItem('setupPending');
+    
+    // New users must always create their market first
     toast({
       title: t('common.success'),
-      description: t('auth.signup.success', 'Account created successfully! Redirecting...'),
+      description: t('auth.signup.successSetup', 'Account created successfully! Please set up your store.'),
     });
     setTimeout(() => {
-      navigate('/auth/login');
+      // Always redirect to setup for new signups - they must create market first
+      navigate('/setup');
     }, 1000);
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      toast({
+        variant: 'destructive',
+        title: 'خطأ',
+        description: 'يرجى إدخال رمز التحقق المكون من 6 أرقام',
+      });
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const result = await authService.verifyEmail(signupEmail, otpCode);
+      
+      if (result.valid && result.tokens) {
+        // Store tokens
+        localStorage.setItem('accessToken', result.tokens.accessToken);
+        localStorage.setItem('refreshToken', result.tokens.refreshToken);
+        
+        // Close OTP modal
+        setShowOtpModal(false);
+        
+        // Check if setup is pending (no tenant created)
+        const setupPending = (result as any).setupPending || !(result as any).tenantId;
+        
+        // Get recovery ID from verification result (account was just created)
+        if ((result as any).recoveryId) {
+          setRecoveryId((result as any).recoveryId);
+          setShowRecoveryModal(true);
+          // Store setupPending flag for after recovery modal
+          if (setupPending) {
+            localStorage.setItem('setupPending', 'true');
+          }
+        } else {
+          // If no recovery ID, always redirect to setup for new users
+          // New users must create their market first
+          toast({
+            title: 'تم التحقق بنجاح!',
+            description: setupPending 
+              ? 'تم التحقق من بريدك الإلكتروني. يرجى إعداد متجرك الآن.'
+              : 'تم التحقق من بريدك الإلكتروني. يرجى إعداد متجرك الآن.',
+          });
+          setTimeout(() => {
+            // Always redirect to setup for new signups - they must create market first
+            navigate('/setup');
+          }, 1000);
+        }
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'فشل التحقق',
+          description: result.message || 'رمز التحقق غير صحيح. يرجى المحاولة مرة أخرى.',
+        });
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'خطأ',
+        description: error?.message || 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى.',
+      });
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setOtpLoading(true);
+    try {
+      await authService.resendVerificationCode(signupEmail);
+      toast({
+        title: 'تم الإرسال!',
+        description: 'تم إرسال رمز التحقق الجديد إلى بريدك الإلكتروني',
+      });
+      setOtpCode('');
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'خطأ',
+        description: error?.message || 'فشل إعادة الإرسال. يرجى المحاولة مرة أخرى.',
+      });
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const handleGoogleSignIn = () => {
@@ -197,28 +347,39 @@ export default function Signup() {
                 </div>
               </div>
               
-              <div className="flex gap-3">
-                <Button
-                  onClick={copyRecoveryId}
-                  variant="outline"
-                  className="flex-1 h-12"
-                >
-                  {copiedRecovery ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 ml-2 text-success" />
-                      تم النسخ
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 ml-2" />
-                      نسخ الرمز
-                    </>
-                  )}
-                </Button>
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <Button
+                    onClick={copyRecoveryId}
+                    variant="outline"
+                    className="flex-1 h-12"
+                  >
+                    {copiedRecovery ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 ml-2 text-success" />
+                        تم النسخ
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 ml-2" />
+                        نسخ الرمز
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    onClick={downloadRecoveryId}
+                    variant="outline"
+                    className="flex-1 h-12"
+                  >
+                    <Download className="w-4 h-4 ml-2" />
+                    تحميل الرمز
+                  </Button>
+                </div>
                 
                 <Button
                   onClick={handleContinueAfterRecovery}
-                  className="flex-1 h-12 gradient-primary"
+                  className="w-full h-12 gradient-primary"
                   disabled={!copiedRecovery}
                 >
                   متابعة
@@ -228,9 +389,122 @@ export default function Signup() {
               
               {!copiedRecovery && (
                 <p className="text-xs text-center text-muted-foreground">
-                  يرجى نسخ الرمز قبل المتابعة | Please copy the ID before continuing
+                  يرجى نسخ أو تحميل الرمز قبل المتابعة | Please copy or download the ID before continuing
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowOtpModal(false);
+            }
+          }}
+        >
+          <div className="bg-card rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden animate-scale-in">
+            <div className="gradient-primary p-6 text-white text-center relative">
+              <button
+                onClick={() => setShowOtpModal(false)}
+                className="absolute top-4 left-4 p-2 hover:bg-white/20 rounded-full transition-colors"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
+                <MessageSquare className="w-8 h-8" />
+              </div>
+              <h2 className="text-2xl font-heading font-bold">تحقق من بريدك الإلكتروني</h2>
+              <p className="text-sm text-white/80 mt-1">Email Verification</p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-primary/10 border border-primary/20 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <Mail className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-primary">
+                    <p className="font-semibold mb-1">تحقق من بريدك الإلكتروني</p>
+                    <p>تم إرسال رمز التحقق المكون من 6 أرقام إلى:</p>
+                    <p className="font-mono font-bold mt-1">{signupEmail}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="otp" className="text-sm font-medium">
+                  رمز التحقق | Verification Code
+                </Label>
+                <Input
+                  id="otp"
+                  type="text"
+                  placeholder="123456"
+                  value={otpCode}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                    setOtpCode(value);
+                  }}
+                  className="h-12 text-center text-2xl font-mono tracking-widest"
+                  maxLength={6}
+                  disabled={otpLoading}
+                />
+                <p className="text-xs text-muted-foreground text-center">
+                  يرجى إدخال الرمز المكون من 6 أرقام
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Button
+                  onClick={handleVerifyOtp}
+                  className="w-full h-12 gradient-primary"
+                  disabled={otpLoading || otpCode.length !== 6}
+                >
+                  {otpLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                      جاري التحقق...
+                    </>
+                  ) : (
+                    <>
+                      التحقق
+                      <ArrowRight className="w-4 h-4 mr-2" />
+                    </>
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={handleResendOtp}
+                  variant="outline"
+                  className="w-full h-12"
+                  disabled={otpLoading}
+                >
+                  {otpLoading ? (
+                    <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 ml-2" />
+                      إعادة إرسال الرمز
+                    </>
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={() => {
+                    setShowOtpModal(false);
+                    setOtpCode('');
+                  }}
+                  variant="ghost"
+                  className="w-full h-12 text-muted-foreground hover:text-foreground"
+                  disabled={otpLoading}
+                >
+                  <X className="w-4 h-4 ml-2" />
+                  إلغاء
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -493,17 +767,6 @@ export default function Signup() {
                 </p>
               </CardFooter>
             </Card>
-
-            {/* Footer Links */}
-            <div className="mt-6 text-center space-y-2">
-              <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-                <Link to="/privacy" className="hover:text-primary transition-colors">{t('landing.footer.links.privacy')}</Link>
-                <span>•</span>
-                <Link to="/terms" className="hover:text-primary transition-colors">{t('landing.footer.links.terms')}</Link>
-                <span>•</span>
-                <Link to="/help" className="hover:text-primary transition-colors">{t('landing.footer.links.helpCenter')}</Link>
-              </div>
-            </div>
           </div>
           <VersionFooter className="absolute bottom-0 left-0 right-0 py-2 bg-background" />
         </div>

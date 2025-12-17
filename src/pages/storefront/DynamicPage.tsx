@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useMemo } from 'react';
+import { useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { coreApi } from '@/lib/api';
 import { SectionRenderer } from '@/components/builder/SectionRenderer';
 import { Section } from '@/components/builder/PageBuilder';
@@ -7,32 +7,44 @@ import { Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function DynamicPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug: slugFromParams } = useParams<{ slug: string }>();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === 'true';
   const [page, setPage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (slug) loadPage();
-  }, [slug]);
+  // Get slug from params or extract from pathname (remove leading/trailing slashes)
+  const slug = useMemo(() => {
+    return slugFromParams || location.pathname.replace(/^\//, '').replace(/\/$/, '');
+  }, [slugFromParams, location.pathname]);
 
-  const loadPage = async () => {
-    try {
-      const data = await coreApi.getPageBySlug(slug!);
-      // Only set page if it's published (unless preview mode)
-      if (data && (isPreview || data.isPublished)) {
-        setPage(data);
-      } else {
-        setPage(null);
-      }
-    } catch (error) {
-      // Error logged to backend
-      setPage(null);
-    } finally {
+  useEffect(() => {
+    setLoading(true);
+    setPage(null);
+    
+    if (slug) {
+      const loadPage = async () => {
+        try {
+          const data = await coreApi.getPageBySlug(slug);
+          // Only set page if it's published (unless preview mode)
+          if (data && (isPreview || data.isPublished)) {
+            setPage(data);
+          } else {
+            setPage(null);
+          }
+        } catch (error) {
+          // Error logged to backend
+          setPage(null);
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadPage();
+    } else {
       setLoading(false);
     }
-  };
+  }, [slug, isPreview]);
 
   if (loading) {
     return (

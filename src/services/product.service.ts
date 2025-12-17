@@ -37,7 +37,9 @@ export const productService = {
   },
 
   updateProduct: async (id: string, data: Partial<CreateProductData>): Promise<Product> => {
-    return apiClient.fetch(`${apiClient.coreUrl}/products/${id}`, {
+    // Properly encode product ID to handle special characters like /, +, etc.
+    const encodedId = encodeURIComponent(id);
+    return apiClient.fetch(`${apiClient.coreUrl}/products/${encodedId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
       requireAuth: true,

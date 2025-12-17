@@ -26,7 +26,7 @@ const formSchema = z.object({
 
 export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { toast } = useToast();
   const logoUrl = getLogoUrl();
@@ -42,10 +42,10 @@ export default function ForgotPassword() {
     setIsLoading(true);
     try {
       await authApi.forgotPassword(values.email);
-      setIsSubmitted(true);
+      setEmailSent(true);
       toast({
         title: 'تم إرسال رابط إعادة التعيين',
-        description: 'إذا كان هناك حساب بهذا البريد، ستتلقى رابط إعادة تعيين كلمة المرور.',
+        description: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني',
       });
     } catch (error) {
       toast({
@@ -58,7 +58,8 @@ export default function ForgotPassword() {
     }
   }
 
-  if (isSubmitted) {
+  // This is no longer needed as we show OTP modal instead
+  if (false && isSubmitted) {
     return (
       <div className="min-h-screen flex">
         {/* Left Side - Branding */}

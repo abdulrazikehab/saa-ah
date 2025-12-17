@@ -2,7 +2,14 @@ import { apiClient } from './core/api-client';
 import type { Page, CreatePageData, PageHistory } from './types';
 
 // Helper to safely encode ID for URL (handles special characters like + and /)
-const encodeId = (id: string): string => encodeURIComponent(id);
+// Double-encode forward slashes to prevent them from being interpreted as path separators
+const encodeId = (id: string): string => {
+  // First encode the entire ID
+  let encoded = encodeURIComponent(id);
+  // Double-encode forward slashes to prevent routing issues
+  encoded = encoded.replace(/%2F/g, '%252F');
+  return encoded;
+};
 
 export const pageService = {
   getPages: async (): Promise<Page[]> => {

@@ -193,13 +193,34 @@ export default function BrandSettings() {
   };
 
   const handleExport = () => {
+    const headers = [
+      'ID',
+      'Name',
+      'NameAr',
+      'Code',
+      'ShortName',
+      'BrandType',
+      'Status',
+      'RechargeUsdValue',
+      'UsdValueForCoins',
+      'SafetyStock',
+      'LeadTime',
+      'ReorderPoint',
+      'AverageConsumptionPerMonth',
+      'AverageConsumptionPerDay',
+      'AbcAnalysis',
+      'OdooCategoryId',
+      'CreatedAt'
+    ];
+
     const exportData = brands.map(brand => ({
-      Name: brand.name,
+      ID: brand.id || '',
+      Name: brand.name || '',
       NameAr: brand.nameAr || '',
       Code: brand.code || '',
       ShortName: brand.shortName || '',
       BrandType: brand.brandType || '',
-      Status: brand.status,
+      Status: brand.status || '',
       RechargeUsdValue: brand.rechargeUsdValue || 0,
       UsdValueForCoins: brand.usdValueForCoins || 0,
       SafetyStock: brand.safetyStock || 0,
@@ -209,9 +230,9 @@ export default function BrandSettings() {
       AverageConsumptionPerDay: brand.averageConsumptionPerDay || 0,
       AbcAnalysis: brand.abcAnalysis || '',
       OdooCategoryId: brand.odooCategoryId || '',
+      CreatedAt: brand.createdAt || '',
     }));
 
-    const headers = ['Name', 'NameAr', 'Code', 'ShortName', 'BrandType', 'Status', 'RechargeUsdValue', 'UsdValueForCoins', 'SafetyStock', 'LeadTime', 'ReorderPoint', 'AverageConsumptionPerMonth', 'AverageConsumptionPerDay', 'AbcAnalysis', 'OdooCategoryId'];
     const ws = utils.json_to_sheet(exportData, { header: headers });
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, 'Brands');

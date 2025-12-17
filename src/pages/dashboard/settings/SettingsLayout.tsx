@@ -26,6 +26,7 @@ const settingsNav = [
     title: 'المتجر',
     items: [
       { name: 'الدفع', path: '/dashboard/settings/payment', icon: CreditCard },
+      { name: 'خيارات الدفع', path: '/dashboard/settings/payment-options', icon: CreditCard },
       { name: 'الطلبات', path: '/dashboard/settings/checkout', icon: ShoppingCart },
       { name: 'النطاقات', path: '/dashboard/settings/domains', icon: Globe },
       { name: 'الموردين', path: '/dashboard/settings/suppliers', icon: Building2 },

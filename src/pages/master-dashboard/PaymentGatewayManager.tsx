@@ -44,9 +44,9 @@ const PROVIDERS = [
   { value: 'NEOLEAP', label: 'Neoleap' }
 ];
 
-import { getAdminApiKey } from '@/lib/admin-config';
+import { getAdminApiKeySync } from '@/lib/admin-config';
 
-const ADMIN_API_KEY = getAdminApiKey();
+const ADMIN_API_KEY = getAdminApiKeySync();
 
 export default function PaymentGatewayManager() {
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);

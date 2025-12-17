@@ -1049,6 +1049,16 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
                     loop={props.loop === true}
                     poster={props.thumbnail ? String(props.thumbnail) : undefined}
                     className="w-full h-full"
+                    onPlay={(e) => {
+                      // Handle play promise to avoid AbortError
+                      const video = e.currentTarget;
+                      const playPromise = video.play();
+                      if (playPromise !== undefined) {
+                        playPromise.catch(() => {
+                          // Ignore play() interruptions - this is normal when pause() is called quickly
+                        });
+                      }
+                    }}
                   />
                 </div>
               ) : (

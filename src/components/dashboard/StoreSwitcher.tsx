@@ -112,7 +112,7 @@ export function StoreSwitcher() {
     );
   }
 
-  // No markets - show create button
+  // No markets - show create button that redirects to setup when clicked
   if (markets.length === 0) {
     return (
       <Button 

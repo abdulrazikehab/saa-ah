@@ -38,6 +38,7 @@ import BrandsPage from "./pages/dashboard/BrandsPage";
 import UnitsPage from "./pages/dashboard/UnitsPage";
 import CurrenciesPage from "./pages/dashboard/CurrenciesPage";
 import PaymentSettings from "./pages/dashboard/settings/PaymentSettings";
+import PaymentOptions from "./pages/dashboard/PaymentOptions";
 import CheckoutSettings from "./pages/dashboard/settings/CheckoutSettings";
 import NotificationsSettings from "./pages/dashboard/settings/NotificationsSettings";
 import DomainsSettings from "./pages/dashboard/settings/DomainsSettings";
@@ -328,6 +329,7 @@ const App = () => {
                     <Route index element={<Settings />} />
                     <Route path="notifications" element={<NotificationsSettings />} />
                     <Route path="payment" element={<PaymentSettings />} />
+                    <Route path="payment-options" element={<PaymentOptions />} />
                     <Route path="checkout" element={<CheckoutSettings />} />
                     <Route path="domains" element={<DomainsSettings />} />
                     <Route path="suppliers" element={<SupplierSettings />} />
