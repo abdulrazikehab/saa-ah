@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { ImageUpload } from '@/components/ui/image-upload';
 import { coreApi } from '@/lib/api';
@@ -77,6 +78,8 @@ export default function CategoriesManager() {
   const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; parentId?: string} | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     nameAr: '',
@@ -254,6 +257,7 @@ export default function CategoriesManager() {
         description: t('categories.productCategories.deleteSuccess'),
       });
       loadCategories();
+      setSelectedCategories(new Set());
     } catch (error: any) {
       toast({
         title: t('common.error'),
@@ -262,6 +266,71 @@ export default function CategoriesManager() {
       });
     }
   };
+
+  const handleBulkDelete = async () => {
+    if (selectedCategories.size === 0) {
+      toast({
+        title: 'لا يوجد فئات محددة',
+        description: 'يرجى تحديد الفئات المراد حذفها',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const count = selectedCategories.size;
+    if (!confirm(`هل أنت متأكد من حذف ${count} فئة${count > 1 ? 'ات' : ''}؟`)) return;
+
+    try {
+      setIsDeleting(true);
+      const ids = Array.from(selectedCategories);
+      const result = await coreApi.post('/categories/bulk-delete', { ids }, { requireAuth: true });
+      
+      toast({
+        title: 'نجح',
+        description: result?.message || `تم حذف ${result?.deleted || count} فئة${count > 1 ? 'ات' : ''} بنجاح`,
+      });
+      
+      if (result?.errors && result.errors.length > 0) {
+        toast({
+          title: 'تحذير',
+          description: `بعض الفئات لم يتم حذفها: ${result.errors.join(', ')}`,
+          variant: 'destructive',
+        });
+      }
+      
+      setSelectedCategories(new Set());
+      loadCategories();
+    } catch (error: any) {
+      console.error('Failed to delete categories:', error);
+      toast({
+        title: 'خطأ',
+        description: error?.response?.data?.message || 'فشل حذف الفئات',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedCategories(new Set(categories.map(c => c.id)));
+    } else {
+      setSelectedCategories(new Set());
+    }
+  };
+
+  const handleSelectCategory = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedCategories);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedCategories(newSelected);
+  };
+
+  const isAllSelected = categories.length > 0 && categories.every(c => selectedCategories.has(c.id));
 
   const handleExport = () => {
     // Define headers for the Excel sheet
@@ -605,6 +674,17 @@ export default function CategoriesManager() {
         {/* Product Categories Tab */}
         <TabsContent value="categories">
           <div className="flex justify-end gap-2 mb-4">
+            {selectedCategories.size > 0 && (
+              <Button 
+                variant="destructive" 
+                className="gap-2" 
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeleting ? 'جاري الحذف...' : `حذف ${selectedCategories.size}`}
+              </Button>
+            )}
             <Button variant="outline" onClick={handleExport} className="gap-2">
               <Download className="h-4 w-4" />
               {t('categories.productCategories.export')}
@@ -652,6 +732,13 @@ export default function CategoriesManager() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={isAllSelected}
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
                       <TableHead>{t('categories.productCategories.logo')}</TableHead>
                       <TableHead>{t('categories.productCategories.category')}</TableHead>
                       <TableHead>Slug</TableHead>
@@ -662,6 +749,13 @@ export default function CategoriesManager() {
                   <TableBody>
                     {categories.map((category) => (
                       <TableRow key={category.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedCategories.has(category.id)}
+                            onCheckedChange={(checked) => handleSelectCategory(category.id, checked as boolean)}
+                            aria-label={`Select ${category.name}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           {category.image ? (
                             <img 

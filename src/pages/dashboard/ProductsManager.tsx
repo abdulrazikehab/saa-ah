@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { UploadProgress } from '@/components/ui/upload-progress';
@@ -109,6 +110,8 @@ export default function ProductsManager() {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -522,29 +525,16 @@ export default function ProductsManager() {
     if (!confirm(t('dashboard.products.delete') + '?')) return;
 
     try {
-      // Clean the ID before deletion (handle special characters)
-      let cleanId = id.trim();
-      if (cleanId.includes('/') || cleanId.includes('+')) {
-        const parts = cleanId.split(/[/+]/);
-        const validParts = parts.filter(part => {
-          const trimmed = part.trim();
-          return trimmed.length >= 20 && !trimmed.includes('/') && !trimmed.includes('+');
-        });
-        if (validParts.length > 0) {
-          cleanId = validParts.reduce((a, b) => a.length > b.length ? a : b).trim();
-        }
-      }
-      
-      await coreApi.deleteProduct(cleanId);
+      await coreApi.deleteProduct(id);
       toast({ title: t('common.success'), description: t('dashboard.products.delete') + ' ' + t('common.success') });
       loadData();
+      setSelectedProducts(new Set());
     } catch (error: any) {
       console.error('Failed to delete product:', error);
       const errorMessage = error?.message || 'حدث خطأ أثناء حذف المنتج';
       const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
       
       if (isNotFound) {
-        // Product might have been already deleted, just refresh
         toast({
           title: 'تم الحذف',
           description: 'المنتج غير موجود (ربما تم حذفه مسبقاً)',
@@ -558,6 +548,53 @@ export default function ProductsManager() {
         });
       }
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: 'لا يوجد منتجات محددة',
+        description: 'يرجى تحديد المنتجات المراد حذفها',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const count = selectedProducts.size;
+    if (!confirm(`هل أنت متأكد من حذف ${count} منتج${count > 1 ? 'ات' : ''}؟`)) return;
+
+    try {
+      setIsDeleting(true);
+      const ids = Array.from(selectedProducts);
+      await coreApi.post('/products/bulk-delete', { ids }, { requireAuth: true });
+      
+      toast({
+        title: 'نجح',
+        description: `تم حذف ${count} منتج${count > 1 ? 'ات' : ''} بنجاح`,
+      });
+      
+      setSelectedProducts(new Set());
+      loadData();
+    } catch (error: any) {
+      console.error('Failed to delete products:', error);
+      toast({
+        title: 'خطأ',
+        description: error?.response?.data?.message || 'فشل حذف المنتجات',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSelectProduct = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedProducts);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedProducts(newSelected);
   };
 
   const resetForm = () => {
@@ -673,6 +710,17 @@ export default function ProductsManager() {
 
     return matchesSearch && matchesStatus && matchesCategory && matchesTab;
   });
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedProducts(new Set(filteredProducts.map(p => p.id)));
+    } else {
+      setSelectedProducts(new Set());
+    }
+  };
+
+  const isAllSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedProducts.has(p.id));
+  const isSomeSelected = selectedProducts.size > 0 && selectedProducts.size < filteredProducts.length;
 
   // Export products to Excel with all order-related fields
   const handleExportProducts = async () => {
@@ -1853,6 +1901,17 @@ export default function ProductsManager() {
               </SelectContent>
             </Select>
             <div className="flex gap-2">
+              {selectedProducts.size > 0 && (
+                <Button 
+                  variant="destructive" 
+                  className="gap-2" 
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDeleting ? 'جاري الحذف...' : `حذف ${selectedProducts.size}`}
+                </Button>
+              )}
               <Button variant="outline" className="gap-2" onClick={handleExportProducts}>
                 <Download className="h-4 w-4" />
                 {t('dashboard.products.export')}
@@ -1895,6 +1954,13 @@ export default function ProductsManager() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead>{t('dashboard.products.product')}</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>{t('dashboard.products.price')}</TableHead>
@@ -1907,17 +1973,27 @@ export default function ProductsManager() {
                 {filteredProducts.map((product, index) => (
                   <TableRow 
                     key={product.id} 
-                    className="group hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent dark:hover:from-gray-800 dark:hover:to-transparent transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
+                    className="group hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent dark:hover:from-gray-800 dark:hover:to-transparent transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
                     style={{ 
                       animationDelay: `${index * 50}ms`,
                       animationDuration: '500ms'
                     }}
-                    onClick={() => {
-                      setViewingProduct(product);
-                      setIsDetailsModalOpen(true);
-                    }}
                   >
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedProducts.has(product.id)}
+                        onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Select ${product.nameAr || product.name}`}
+                      />
+                    </TableCell>
+                    <TableCell
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setViewingProduct(product);
+                        setIsDetailsModalOpen(true);
+                      }}
+                    >
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 rounded-xl flex items-center justify-center overflow-hidden border-2 border-transparent transition-all duration-300 group-hover:border-primary group-hover:shadow-lg group-hover:scale-110">
                           {product.images?.[0] ? (

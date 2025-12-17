@@ -47,23 +47,19 @@ export const productService = {
   },
 
   deleteProduct: async (id: string): Promise<void> => {
-    // Clean and encode the ID to handle special characters
-    let cleanId = id.trim();
-    
-    // If ID contains slashes or plus signs, try to extract the actual ID
-    if (cleanId.includes('/') || cleanId.includes('+')) {
-      const parts = cleanId.split(/[/+]/);
-      const validParts = parts.filter(part => {
-        const trimmed = part.trim();
-        return trimmed.length >= 20 && !trimmed.includes('/') && !trimmed.includes('+');
-      });
-      if (validParts.length > 0) {
-        cleanId = validParts.reduce((a, b) => a.length > b.length ? a : b).trim();
-      }
-    }
-    
-    await apiClient.fetch(`${apiClient.coreUrl}/products/${encodeURIComponent(cleanId)}`, {
-      method: 'DELETE',
+    // Properly encode product ID to handle special characters like /, +, etc.
+    // Same approach as updateProduct for consistency
+    const encodedId = encodeURIComponent(id);
+    await apiClient.delete(`/products/${encodedId}`, {
+      requireAuth: true,
+    });
+  },
+
+  deleteProducts: async (ids: string[]): Promise<void> => {
+    // Bulk delete products
+    await apiClient.fetch(`${apiClient.coreUrl}/products/bulk-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
       requireAuth: true,
     });
   },
