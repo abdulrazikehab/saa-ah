@@ -283,12 +283,20 @@ export default function CategoriesManager() {
     try {
       setIsDeleting(true);
       const ids = Array.from(selectedCategories);
-      const result = await coreApi.post('/categories/bulk-delete', { ids }, { requireAuth: true });
+      const result = await coreApi.deleteCategories(ids);
       
-      toast({
-        title: 'نجح',
-        description: result?.message || `تم حذف ${result?.deleted || count} فئة${count > 1 ? 'ات' : ''} بنجاح`,
-      });
+      if (result.failed > 0) {
+        toast({
+          title: 'تحذير',
+          description: `تم حذف ${result.deleted} من أصل ${count} فئة. عدد المحاولات الفاشلة: ${result.failed}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'نجح',
+          description: result?.message || `تم حذف ${result?.deleted || count} فئة${count > 1 ? 'ات' : ''} بنجاح`,
+        });
+      }
       
       if (result?.errors && result.errors.length > 0) {
         toast({

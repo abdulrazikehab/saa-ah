@@ -47,7 +47,7 @@ const OAuthCallback = () => {
           await loginWithTokens(accessToken, refreshToken);
 
           setStatus('success');
-          toast.success('Successfully logged in with Google!');
+          toast.success('تم تسجيل الدخول بنجاح باستخدام Google');
 
           // Redirect based on setup status
           setTimeout(() => {

@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authApi } from '@/lib/api';
-import { toast } from '@/hooks/use-toast';
-import { getErrorMessage } from '@/lib/error-utils';
 
 interface User {
   id: string;
@@ -13,6 +11,14 @@ interface User {
   tenantName?: string;
   tenantLogo?: string | null;
   tenantSubdomain?: string;
+}
+
+interface SignUpResponse {
+  id: string;
+  email: string;
+  recoveryId: string;
+  accessToken: string;
+  refreshToken: string;
 }
 
 interface AuthContextType {
@@ -48,18 +54,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkAuth = async () => {
     try {
-      // Check cookies first, then localStorage as fallback
-      const cookieToken = getCookie('accessToken');
-      const token = cookieToken || localStorage.getItem('accessToken');
-      if (token) {
-        const data = await authApi.me();
-        
-        // Allow users without tenantId to access the dashboard
-        // They can create pages and content before setting up a market
-        setUser(data.user);
+      // Prefer localStorage token – cross-domain HttpOnly cookies are not readable from JS
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      const data = await authApi.me();
+
+      // Allow users without tenantId to access the dashboard
+      // They can create pages and content before setting up a market
+      setUser(data.user);
+
+      // Keep localStorage user in sync so non‑React utilities (like api-client)
+      // can read the latest tenantId and other user info
+      try {
+        localStorage.setItem('user', JSON.stringify(data.user));
+      } catch {
+        // ignore storage errors
       }
     } catch (error) {
+      // On auth failure, clear all local auth state
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -70,41 +90,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (identifier: string, password: string) => {
-    try {
-      // Determine if identifier is email or username
-      const isEmail = identifier.includes('@');
-      const payload = isEmail ? { email: identifier, password } : { username: identifier, password };
-      
-      const data = await authApi.login(payload);
-      // Cookies are set by server, but also store in localStorage as fallback
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      
-      const userData: User = {
-        id: data.id,
-        email: data.email,
-        role: data.role,
-        tenantId: data.tenantId,
-        tenantName: (data as any).tenantName,
-        tenantSubdomain: (data as any).tenantSubdomain,
-        avatar: data.avatar,
-      };
-      
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
-      
-      toast({
-        title: 'Welcome back!',
-        description: 'You have successfully logged in.',
-      });
-    } catch (error: unknown) {
-      toast({
-        title: 'Login failed',
-        description: getErrorMessage(error) || 'Invalid credentials',
-        variant: 'destructive',
-      });
-      throw error;
-    }
+    // Determine if identifier is email or username
+    const isEmail = identifier.includes('@');
+    const payload = isEmail ? { email: identifier, password } : { username: identifier, password };
+
+    const data = await authApi.login(payload);
+
+    // Cookies are set by server, but also store in localStorage as fallback
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+
+    const userData: User = {
+      id: data.id,
+      email: data.email,
+      role: data.role,
+      tenantId: data.tenantId,
+      tenantName: data.tenantName,
+      tenantSubdomain: data.tenantSubdomain,
+      avatar: data.avatar,
+    };
+
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
   };
 
   const loginWithTokens = async (accessToken: string, refreshToken: string) => {
@@ -124,34 +131,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (email: string, password: string, storeName: string, subdomain: string) => {
-    try {
-      const data = await authApi.signup({ email, password, storeName, subdomain });
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      
-      const userData: User = {
-        id: data.id,
-        email: data.email,
-        role: 'SHOP_OWNER',
-        tenantId: undefined,
-        avatar: null,
-      };
-      
-      localStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData);
-      
-      toast({
-        title: 'Account created!',
-        description: 'Welcome to your new store.',
-      });
-    } catch (error: unknown) {
-      toast({
-        title: 'Signup failed',
-        description: error instanceof Error ? error.message : 'Could not create account',
-        variant: 'destructive',
-      });
-      throw error;
-    }
+    const data = await authApi.signup({ email, password, storeName, subdomain }) as SignUpResponse;
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+
+    const userData: User = {
+      id: data.id,
+      email: data.email,
+      role: 'SHOP_OWNER',
+      tenantId: undefined,
+      avatar: null,
+    };
+
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
   };
 
   const logout = async () => {
@@ -173,23 +166,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     setUser(null);
-    toast({
-      title: 'Logged out',
-      description: 'See you next time!',
-    });
   };
 
   const refreshToken = async (): Promise<boolean> => {
     try {
-      // Check if we have a refresh token (cookie or localStorage)
-      const cookieRefreshToken = getCookie('refreshToken');
-      const refreshTokenValue = cookieRefreshToken || localStorage.getItem('refreshToken');
+      // Use refresh token from localStorage (cookies are HttpOnly & cross-domain)
+      const refreshTokenValue = localStorage.getItem('refreshToken');
       if (!refreshTokenValue) {
         return false;
       }
       
-      // Call refresh - token will come from cookie if available
-      const response = await authApi.refreshToken();
+      // Call refresh and explicitly pass refreshToken so it works cross-site
+      const response = await authApi.refreshToken(refreshTokenValue);
       
       localStorage.setItem('accessToken', response.accessToken);
       localStorage.setItem('refreshToken', response.refreshToken);

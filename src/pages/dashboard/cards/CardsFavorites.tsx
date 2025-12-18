@@ -152,8 +152,8 @@ export default function CardsFavorites() {
       toast.success(isRTL ? 'تم إتمام الطلب بنجاح' : 'Order completed successfully');
       navigate('/dashboard/cards/orders');
     } catch (error: any) {
-      const message = error?.response?.data?.message || (isRTL ? 'فشل في إتمام الطلب' : 'Failed to complete order');
-      toast.error(message);
+      console.error('Error completing favorites order:', error?.response?.data || error);
+      toast.error(isRTL ? 'فشل في إتمام الطلب' : 'Failed to complete order');
     }
   };
 

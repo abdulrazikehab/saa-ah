@@ -14,7 +14,9 @@ export const productService = {
   getProducts: async (params?: ProductQueryParams): Promise<Product[]> => {
     const url = `${apiClient.coreUrl}/products?${new URLSearchParams(params as Record<string, string>)}`;
     const response = await apiClient.fetch(url, {
-      requireAuth: false, // Public access for storefront
+      // Attach auth if available so tenantId can be resolved from JWT for dashboard,
+      // but still works for public storefront (no token -> no header).
+      requireAuth: true,
     });
     // Backend returns { data: [...], meta: {...} } or just [...]
     // After central unwrapping, response is already the data object
@@ -55,13 +57,15 @@ export const productService = {
     });
   },
 
-  deleteProducts: async (ids: string[]): Promise<void> => {
-    // Bulk delete products
-    await apiClient.fetch(`${apiClient.coreUrl}/products/bulk-delete`, {
+  deleteProducts: async (
+    ids: string[]
+  ): Promise<{ deleted: number; failed: number; errors: string[] }> => {
+    // Bulk delete products and return summary from backend
+    return apiClient.fetch(`${apiClient.coreUrl}/products/bulk-delete`, {
       method: 'POST',
       body: JSON.stringify({ ids }),
       requireAuth: true,
-    });
+    }) as Promise<{ deleted: number; failed: number; errors: string[] }>;
   },
 
   // Categories
@@ -101,6 +105,17 @@ export const productService = {
       method: 'DELETE',
       requireAuth: true,
     });
+  },
+
+  deleteCategories: async (
+    ids: string[]
+  ): Promise<{ deleted: number; failed: number; errors?: string[]; message?: string }> => {
+    // Bulk delete categories and return summary from backend
+    return apiClient.fetch(`${apiClient.coreUrl}/categories/bulk-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+      requireAuth: true,
+    }) as Promise<{ deleted: number; failed: number; errors?: string[]; message?: string }>;
   },
 
   // Variants

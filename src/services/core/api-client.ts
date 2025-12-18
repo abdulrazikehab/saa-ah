@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { isErrorObject } from '@/lib/error-utils';
+import i18n from '@/i18n';
 
 // Determine base URLs based on environment
 const getBaseUrl = (defaultPort: string) => {
@@ -150,6 +151,25 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     'X-Tenant-Domain': window.location.hostname,
     ...fetchOptions.headers,
   };
+
+  // Attach current tenantId for multi-tenant APIs (helps when JWT token was
+  // issued before market setup and doesn't contain tenantId yet)
+  try {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser) as { tenantId?: string | null };
+      const tenantId = parsed?.tenantId;
+      if (
+        tenantId &&
+        tenantId !== 'default' &&
+        tenantId !== 'system'
+      ) {
+        (headers as Record<string, string>)['X-Tenant-Id'] = tenantId;
+      }
+    }
+  } catch {
+    // Ignore JSON/localStorage errors – request can still proceed without tenant header
+  }
 
   // If body is FormData, let the browser set the Content-Type header with boundary
   if (fetchOptions.body instanceof FormData) {
@@ -355,7 +375,12 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       throw error;
     }
     // Network errors - logged to backend error logs
-    toast.error('تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.');
+    const isArabic = i18n.language === 'ar';
+    toast.error(
+      isArabic
+        ? 'تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.'
+        : 'Unable to connect to the server. Please check your internet connection.'
+    );
     throw new ApiError(500, 'Network error');
   }
 }

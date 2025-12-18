@@ -204,9 +204,10 @@ export default function ProductsManager() {
       const [productsData, categoriesData, unitsData, brandsData, suppliersData] = await Promise.all([
         coreApi.getProducts({ limit: 1000 }),
         coreApi.getCategories(),
-        coreApi.get('/units').catch(() => []), // Load units, ignore if not available
-        coreApi.get('/brands').catch(() => []), // Load brands, ignore if not available
-        coreApi.get('/suppliers').catch(() => []) // Load suppliers, ignore if not available
+        // Protected endpoints: require auth so Authorization header is attached
+        coreApi.get('/units', { requireAuth: true }).catch(() => []),
+        coreApi.get('/brands').catch(() => []), // Brands GET is public-friendly
+        coreApi.get('/suppliers', { requireAuth: true }).catch(() => [])
       ]);
 
       // Validate categoriesData
@@ -566,12 +567,21 @@ export default function ProductsManager() {
     try {
       setIsDeleting(true);
       const ids = Array.from(selectedProducts);
-      await coreApi.post('/products/bulk-delete', { ids }, { requireAuth: true });
+      const result = await coreApi.deleteProducts(ids);
       
-      toast({
-        title: 'نجح',
-        description: `تم حذف ${count} منتج${count > 1 ? 'ات' : ''} بنجاح`,
-      });
+      // Handle partial failures gracefully
+      if (result.failed > 0) {
+        toast({
+          title: 'تنبيه',
+          description: `تم حذف ${result.deleted} من أصل ${count} منتج. عدد المحاولات الفاشلة: ${result.failed}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'نجح',
+          description: `تم حذف ${count} منتج${count > 1 ? 'ات' : ''} بنجاح`,
+        });
+      }
       
       setSelectedProducts(new Set());
       loadData();
@@ -1058,17 +1068,8 @@ export default function ProductsManager() {
 
           const tags = row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : [];
 
-          // Generate unique SKU if not provided or if it might conflict
-          let productSku = row.SKU?.trim() || undefined;
-          if (!productSku) {
-            // Generate SKU from product name + timestamp to ensure uniqueness
-            const nameSlug = row.Name.trim()
-              .toLowerCase()
-              .replace(/[^\w\s-]/g, '')
-              .replace(/\s+/g, '-')
-              .substring(0, 20);
-            productSku = `PROD-${nameSlug}-${Date.now()}-${i}`;
-          }
+          // If CSV provides a SKU, use it; otherwise let the backend auto-generate
+          const productSku = row.SKU?.trim() || undefined;
 
           // Don't set variant SKU to avoid global unique constraint conflicts
           // The backend will handle variant creation without SKU
@@ -1087,7 +1088,8 @@ export default function ProductsManager() {
             descriptionAr: row.DescriptionAr?.trim() || '',
             price,
             compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) ? compareAtPrice : undefined,
-            sku: productSku,
+            // Let backend generate SKU if not provided in CSV
+            ...(productSku ? { sku: productSku } : {}),
             barcode: row.Barcode?.trim() || undefined,
             weight: row.Weight?.trim() ? parseFloat(row.Weight.replace(/[^\d.-]/g, '')) || undefined : undefined,
             dimensions: row.Dimensions?.trim() || undefined,
@@ -1128,11 +1130,9 @@ export default function ProductsManager() {
           }
           
           if (error?.status === 409 || error?.message?.includes('unique') || error?.message?.includes('SKU')) {
-            userFriendlyError = 'رمز المنتج (SKU) مستخدم بالفعل. سيتم إنشاء رمز جديد تلقائياً.';
-            // Retry with completely unique SKUs
+            userFriendlyError = 'رمز المنتج (SKU) مستخدم بالفعل. سيتم إنشاء رمز جديد تلقائياً بواسطة النظام.';
+            // Retry without forcing a SKU so backend can generate according to its rules
             try {
-              const uniqueSku = `PROD-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
-              const uniqueVariantSku = `VAR-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
               const price = typeof row.Price === 'string' ? parseFloat(row.Price.replace(/[^\d.-]/g, '')) : row.Price;
               const compareAtPrice = row.CompareAtPrice 
                 ? (typeof row.CompareAtPrice === 'string' 
@@ -1144,7 +1144,7 @@ export default function ProductsManager() {
                 : 0;
               const tags = row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : [];
 
-              // Don't set variant SKU to avoid conflicts
+              // Don't set SKU to avoid conflicts; let backend generate
               const retryVariantData: any = {
                 name: 'Default',
                 price,
@@ -1158,7 +1158,6 @@ export default function ProductsManager() {
                 descriptionAr: row.DescriptionAr?.trim() || '',
                 price,
                 compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) ? compareAtPrice : undefined,
-                sku: uniqueSku,
                 barcode: row.Barcode?.trim() || undefined,
                 weight: row.Weight?.trim() ? parseFloat(row.Weight.replace(/[^\d.-]/g, '')) || undefined : undefined,
                 dimensions: row.Dimensions?.trim() || undefined,
