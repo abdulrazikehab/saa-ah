@@ -159,8 +159,9 @@ export const productService = {
 
   // Brands
   getBrands: async (): Promise<any[]> => {
+    // Attach auth if available so we load brands for the same tenant context
     const response = await apiClient.fetch(`${apiClient.coreUrl}/brands`, {
-      requireAuth: false,
+      requireAuth: true,
     });
     return Array.isArray(response) ? response : [];
   },

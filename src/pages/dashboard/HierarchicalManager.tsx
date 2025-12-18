@@ -42,7 +42,7 @@ export default function HierarchicalManager() {
     try {
       setLoading(true);
       const [brandsData, categoriesData, productsData] = await Promise.all([
-        coreApi.get('/brands').catch(() => []),
+        coreApi.getBrands().catch(() => []),
         coreApi.getCategories(),
         coreApi.getProducts({ limit: '1000' } as any).catch(() => []),
       ]);
@@ -150,7 +150,8 @@ export default function HierarchicalManager() {
               }}
               onCreateBrand={async (brandData) => {
                 try {
-                  const newBrand = await coreApi.post('/brands', brandData);
+                  // Use dedicated createBrand API so auth headers & tenant context are handled correctly
+                  const newBrand = await coreApi.createBrand(brandData as any);
                   await loadData();
                   return {
                     id: newBrand.id,

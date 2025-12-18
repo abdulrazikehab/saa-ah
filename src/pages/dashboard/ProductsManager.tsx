@@ -206,7 +206,7 @@ export default function ProductsManager() {
         coreApi.getCategories(),
         // Protected endpoints: require auth so Authorization header is attached
         coreApi.get('/units', { requireAuth: true }).catch(() => []),
-        coreApi.get('/brands').catch(() => []), // Brands GET is public-friendly
+        coreApi.getBrands().catch(() => []), // Brands: attach auth when available for correct tenant
         coreApi.get('/suppliers', { requireAuth: true }).catch(() => [])
       ]);
 
