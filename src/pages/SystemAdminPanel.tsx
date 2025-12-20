@@ -400,8 +400,9 @@ export default function SystemAdminPanel() {
   const fetchSecurityEvents = useCallback(async () => {
     try {
       // Fetch from both auth and core backends
+      const authUrl = apiClient.authUrl.endsWith('/auth') ? apiClient.authUrl : `${apiClient.authUrl}/auth`;
       const [authData, coreData] = await Promise.allSettled([
-        apiClient.get(`${apiClient.authUrl}/auth/security-events`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        apiClient.get(`${authUrl}/security-events`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
         coreApi.get('/admin/master/security-events', { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
       ]);
       
@@ -429,8 +430,9 @@ export default function SystemAdminPanel() {
   const fetchErrorLogs = useCallback(async () => {
     try {
       // Fetch all error logs from both auth and core backends (with high limit to get all)
+      const authUrl = apiClient.authUrl.endsWith('/auth') ? apiClient.authUrl : `${apiClient.authUrl}/auth`;
       const [authData, coreData] = await Promise.allSettled([
-        apiClient.get(`${apiClient.authUrl}/auth/error-logs?limit=10000`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        apiClient.get(`${authUrl}/error-logs?limit=10000`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
         coreApi.get('/admin/master/error-logs?limit=10000', { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })),
       ]);
       
@@ -457,8 +459,9 @@ export default function SystemAdminPanel() {
   const fetchAuditLogs = useCallback(async () => {
     try {
       // Fetch from both auth and core backends
+      const authUrl = apiClient.authUrl.endsWith('/auth') ? apiClient.authUrl : `${apiClient.authUrl}/auth`;
       const [authData, coreData] = await Promise.allSettled([
-        apiClient.get(`${apiClient.authUrl}/auth/audit-logs`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
+        apiClient.get(`${authUrl}/audit-logs`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }),
         coreApi.get('/admin/master/audit-logs', { requireAuth: true, adminApiKey: ADMIN_PASSWORD, timeout: 20000 }).catch(() => ({ logs: [] })), // Gracefully handle core backend errors
       ]);
       
@@ -673,7 +676,8 @@ export default function SystemAdminPanel() {
   const fetchDbStats = async () => {
     setLoadingDbStats(true);
     try {
-      const stats = await apiClient.fetch(`${apiClient.authUrl}/admin/stats`, {
+      const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+      const stats = await apiClient.fetch(`${baseAuthUrl}/admin/stats`, {
         method: 'GET',
         requireAuth: true,
         adminApiKey: ADMIN_PASSWORD,
@@ -692,7 +696,8 @@ export default function SystemAdminPanel() {
 
   const fetchRateLimitConfig = async () => {
     try {
-      const config = await apiClient.fetch(`${apiClient.authUrl}/admin/rate-limit-config`, {
+      const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+      const config = await apiClient.fetch(`${baseAuthUrl}/admin/rate-limit-config`, {
         method: 'GET',
         requireAuth: true,
         adminApiKey: ADMIN_PASSWORD,
@@ -795,21 +800,31 @@ export default function SystemAdminPanel() {
       let method = 'DELETE';
       
       switch (type) {
-        case 'loginAttempts':
-          url = `${apiClient.authUrl}/admin/clear-login-attempts`;
+        case 'loginAttempts': {
+          const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+          url = `${baseAuthUrl}/admin/clear-login-attempts`;
           break;
-        case 'securityEvents':
-          url = `${apiClient.authUrl}/admin/clear-security-events`;
+        }
+        case 'securityEvents': {
+          const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+          url = `${baseAuthUrl}/admin/clear-security-events`;
           break;
-        case 'passwordResets':
-          url = `${apiClient.authUrl}/admin/clear-password-resets`;
+        }
+        case 'passwordResets': {
+          const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+          url = `${baseAuthUrl}/admin/clear-password-resets`;
           break;
-        case 'refreshTokens':
-          url = `${apiClient.authUrl}/admin/clear-refresh-tokens`;
+        }
+        case 'refreshTokens': {
+          const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+          url = `${baseAuthUrl}/admin/clear-refresh-tokens`;
           break;
-        case 'users':
-          url = `${apiClient.authUrl}/admin/clear-users`;
+        }
+        case 'users': {
+          const baseAuthUrl = apiClient.authUrl.replace(/\/auth$/, '');
+          url = `${baseAuthUrl}/admin/clear-users`;
           break;
+        }
         default:
           throw new Error('Unknown clear type');
       }
@@ -1813,7 +1828,10 @@ export default function SystemAdminPanel() {
                   <div className="flex items-center gap-2">
                     <button 
                       onClick={() => {
-                        apiClient.fetch(`${apiClient.authUrl}/auth/test-security-event`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD })
+                        (async () => {
+                          const authUrl = apiClient.authUrl.endsWith('/auth') ? apiClient.authUrl : `${apiClient.authUrl}/auth`;
+                          return apiClient.fetch(`${authUrl}/test-security-event`, { requireAuth: true, adminApiKey: ADMIN_PASSWORD });
+                        })()
                           .then(data => {
                             toast({ title: language === 'ar' ? 'تم إنشاء حدث اختبار' : 'Test event created', description: data.message });
                             fetchLogs();

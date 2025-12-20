@@ -8,6 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, LogIn, Mail, Lock, Eye, EyeOff, X } from 'lucide-react';
 import { apiClient } from '@/services/core/api-client';
 import { getErrorMessage, isErrorObject } from '@/lib/error-utils';
+import { getProfessionalErrorMessage } from '@/lib/toast-errors';
+import { useTranslation } from 'react-i18next';
 
 interface CustomerLoginProps {
   onClose: () => void;
@@ -17,6 +19,8 @@ interface CustomerLoginProps {
 
 export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: CustomerLoginProps) {
   const { toast } = useToast();
+  const { i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,8 +32,10 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
     if (!email || !password) {
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: 'يرجى إدخال البريد الإلكتروني وكلمة المرور',
+        title: isRTL ? 'معلومة مطلوبة' : 'Required Information',
+        description: isRTL 
+          ? 'يرجى إدخال البريد الإلكتروني وكلمة المرور' 
+          : 'Please enter your email and password',
       });
       return;
     }
@@ -68,12 +74,16 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
       onClose();
     } catch (error: unknown) {
       console.error('Login error:', error);
-      const errorMessage = getErrorMessage(error) || 'البريد الإلكتروني أو كلمة المرور غير صحيحة. إذا لم يكن لديك حساب، يرجى إنشاء حساب جديد.';
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'تسجيل الدخول' : 'login', resource: isRTL ? 'كعميل' : 'as customer' },
+        isRTL
+      );
       
       toast({
         variant: 'destructive',
-        title: 'خطأ في تسجيل الدخول',
-        description: errorMessage,
+        title,
+        description,
       });
     } finally {
       setLoading(false);

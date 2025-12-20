@@ -49,14 +49,21 @@ export default function MasterOverview() {
 
   const loadOverview = async () => {
     try {
+      setLoading(true);
       const response = await coreApi.get('/admin/master/overview', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setOverview(response);
     } catch (error) {
       console.error('Failed to load overview:', error);
+      setOverview(null);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadOverview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (

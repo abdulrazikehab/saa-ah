@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Filter, Download, Eye, Package, Truck, CheckCircle, XCircle, Clock, Printer, Upload } from 'lucide-react';
+import { Search, Filter, Download, Eye, Package, Truck, CheckCircle, XCircle, Clock, Printer, Upload, Wallet, Check, X, Image as ImageIcon } from 'lucide-react';
 import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Pagination,
   PaginationContent,
@@ -20,7 +22,6 @@ import {
 } from "@/components/ui/pagination";
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { Label } from '@/components/ui/label';
 import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
 import { useTranslation } from 'react-i18next';
 
@@ -48,6 +49,36 @@ interface Order {
   updatedAt: string;
 }
 
+interface TopUpRequest {
+  id: string;
+  amount: number;
+  currency: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  paymentMethod: string;
+  proofImage?: string;
+  createdAt: string;
+  processedAt?: string;
+  rejectionReason?: string;
+  user: {
+    id: string;
+    name?: string;
+    email: string;
+  };
+  bank?: {
+    id: string;
+    name: string;
+    nameAr?: string;
+    accountName: string;
+    accountNumber: string;
+    iban?: string;
+  };
+  senderAccount?: {
+    id: string;
+    accountName: string;
+    accountNumber: string;
+  };
+}
+
 export default function OrdersManager() {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -59,6 +90,15 @@ export default function OrdersManager() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [previousOrdersCount, setPreviousOrdersCount] = useState(0);
+  
+  // Top-up requests state
+  const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
+  const [loadingTopUps, setLoadingTopUps] = useState(false);
+  const [selectedTopUp, setSelectedTopUp] = useState<TopUpRequest | null>(null);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [processingTopUp, setProcessingTopUp] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('orders');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -104,6 +144,34 @@ export default function OrdersManager() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  // Listen for filter event from header
+  useEffect(() => {
+    const handleFilterEvent = (e: CustomEvent) => {
+      if (e.detail?.status) {
+        setFilterStatus(e.detail.status);
+      }
+    };
+
+    window.addEventListener('applyFilter', handleFilterEvent as EventListener);
+    return () => {
+      window.removeEventListener('applyFilter', handleFilterEvent as EventListener);
+    };
+  }, []);
+
+  // Listen for search event from header
+  useEffect(() => {
+    const handleSearchEvent = (e: CustomEvent) => {
+      if (e.detail) {
+        setSearchQuery(e.detail);
+      }
+    };
+
+    window.addEventListener('searchQuery', handleSearchEvent as EventListener);
+    return () => {
+      window.removeEventListener('searchQuery', handleSearchEvent as EventListener);
+    };
+  }, []);
 
   const handleUpdateStatus = async (orderId: string, newStatus: string) => {
     try {
@@ -170,7 +238,7 @@ export default function OrdersManager() {
   const endIndex = startIndex + itemsPerPage;
   const currentOrders = filteredOrders.slice(startIndex, endIndex);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const headers = [
       'ID',
       'OrderNumber',
@@ -230,7 +298,19 @@ export default function OrdersManager() {
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "Orders");
     writeFile(wb, "orders_export.xlsx");
-  };
+  }, [orders]);
+
+  // Listen for export event from header (moved after handleExport declaration)
+  useEffect(() => {
+    const handleExportEvent = () => {
+      handleExport();
+    };
+
+    window.addEventListener('exportOrders', handleExportEvent);
+    return () => {
+      window.removeEventListener('exportOrders', handleExportEvent);
+    };
+  }, [handleExport]);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -267,16 +347,142 @@ export default function OrdersManager() {
     setIsDetailsOpen(true);
   };
 
+  // Load top-up requests
+  const loadTopUpRequests = useCallback(async () => {
+    try {
+      setLoadingTopUps(true);
+      const response = await coreApi.get('/wallet/admin/pending-topups', { requireAuth: true });
+      setTopUpRequests(Array.isArray(response) ? response : (response.data || []));
+    } catch (error) {
+      console.error('Failed to load top-up requests:', error);
+      toast({
+        title: 'تعذر تحميل طلبات الشحن',
+        description: 'حدث خطأ أثناء تحميل طلبات الشحن. يرجى تحديث الصفحة.',
+        variant: 'destructive',
+      });
+      setTopUpRequests([]);
+    } finally {
+      setLoadingTopUps(false);
+    }
+  }, [toast]);
+
+  // Load top-up requests when tab is active
+  useEffect(() => {
+    if (activeTab === 'topups') {
+      loadTopUpRequests();
+    }
+  }, [activeTab, loadTopUpRequests]);
+
+  // Approve top-up request
+  const handleApproveTopUp = async (requestId: string) => {
+    try {
+      setProcessingTopUp(requestId);
+      await coreApi.post(`/wallet/admin/topup/${requestId}/approve`, {}, { requireAuth: true });
+      
+      toast({
+        title: 'تمت الموافقة',
+        description: 'تمت الموافقة على طلب الشحن بنجاح',
+      });
+      
+      loadTopUpRequests();
+      loadOrders(); // Refresh orders in case balance affects anything
+    } catch (error: any) {
+      console.error('Failed to approve top-up:', error);
+      toast({
+        title: 'فشل الموافقة',
+        description: error?.message || 'حدث خطأ أثناء الموافقة على طلب الشحن',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingTopUp(null);
+    }
+  };
+
+  // Reject top-up request
+  const handleRejectTopUp = async () => {
+    if (!selectedTopUp || !rejectReason.trim()) {
+      toast({
+        title: 'حقل مطلوب',
+        description: 'يرجى إدخال سبب الرفض',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setProcessingTopUp(selectedTopUp.id);
+      await coreApi.post(
+        `/wallet/admin/topup/${selectedTopUp.id}/reject`,
+        { reason: rejectReason },
+        { requireAuth: true }
+      );
+      
+      toast({
+        title: 'تم الرفض',
+        description: 'تم رفض طلب الشحن بنجاح',
+      });
+      
+      setShowRejectDialog(false);
+      setRejectReason('');
+      setSelectedTopUp(null);
+      loadTopUpRequests();
+    } catch (error: any) {
+      console.error('Failed to reject top-up:', error);
+      toast({
+        title: 'فشل الرفض',
+        description: error?.message || 'حدث خطأ أثناء رفض طلب الشحن',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingTopUp(null);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('ar-SA', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">الطلبات</h1>
-          <p className="text-sm text-gray-500 mt-1">إدارة طلبات العملاء والشحنات</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">الطلبات وطلبات الشحن</h1>
+          <p className="text-sm text-gray-500 mt-1">إدارة طلبات العملاء وطلبات شحن الرصيد</p>
         </div>
       </div>
 
+      {/* Tabs for Orders and Top-up Requests */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="orders" className="gap-2">
+            <Package className="h-4 w-4" />
+            الطلبات
+          </TabsTrigger>
+          <TabsTrigger value="topups" className="gap-2 relative">
+            <Wallet className="h-4 w-4" />
+            طلبات الشحن
+            {topUpRequests.length > 0 && (
+              <Badge variant="destructive" className="mr-2 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                {topUpRequests.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Orders Tab */}
+        <TabsContent value="orders" className="space-y-6 mt-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="border-r-4 border-r-blue-500">
@@ -507,6 +713,127 @@ export default function OrdersManager() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        {/* Top-up Requests Tab */}
+        <TabsContent value="topups" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                طلبات شحن الرصيد
+                {topUpRequests.length > 0 && (
+                  <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">
+                    {topUpRequests.length} في الانتظار
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingTopUps ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+                </div>
+              ) : topUpRequests.length === 0 ? (
+                <div className="text-center py-12">
+                  <Wallet className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">لا توجد طلبات شحن</h3>
+                  <p className="text-gray-500">لا توجد طلبات شحن رصيد في الانتظار</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>المستخدم</TableHead>
+                      <TableHead>المبلغ</TableHead>
+                      <TableHead>البنك</TableHead>
+                      <TableHead>صورة الإيصال</TableHead>
+                      <TableHead>تاريخ الطلب</TableHead>
+                      <TableHead>الإجراءات</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topUpRequests.map((request) => (
+                      <TableRow key={request.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{request.user.name || request.user.email}</p>
+                            <p className="text-sm text-gray-500">{request.user.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-semibold text-green-600">
+                            {Number(request.amount).toFixed(2)} {request.currency || 'ر.س'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {request.bank ? (
+                            <div>
+                              <p className="font-medium">{request.bank.nameAr || request.bank.name}</p>
+                              <p className="text-xs text-gray-500">رقم الحساب: {request.bank.accountNumber}</p>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {request.proofImage ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.open(request.proofImage, '_blank')}
+                              className="gap-2"
+                            >
+                              <ImageIcon className="h-4 w-4" />
+                              عرض
+                            </Button>
+                          ) : (
+                            <span className="text-gray-400">لا توجد صورة</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{formatDate(request.createdAt)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="bg-green-600 hover:bg-green-700 gap-2"
+                              onClick={() => handleApproveTopUp(request.id)}
+                              disabled={processingTopUp === request.id}
+                            >
+                              {processingTopUp === request.id ? (
+                                <Clock className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4" />
+                              )}
+                              موافقة
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="gap-2"
+                              onClick={() => {
+                                setSelectedTopUp(request);
+                                setShowRejectDialog(true);
+                              }}
+                              disabled={processingTopUp === request.id}
+                            >
+                              <X className="h-4 w-4" />
+                              رفض
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Order Details Dialog */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
@@ -634,6 +961,63 @@ export default function OrdersManager() {
               </TabsContent>
             </Tabs>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Top-up Request Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>رفض طلب شحن الرصيد</DialogTitle>
+            <DialogDescription>
+              يرجى إدخال سبب رفض طلب شحن الرصيد من المستخدم {selectedTopUp?.user.name || selectedTopUp?.user.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="rejectReason">سبب الرفض *</Label>
+              <Textarea
+                id="rejectReason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="أدخل سبب رفض طلب الشحن..."
+                rows={4}
+                dir="rtl"
+              />
+            </div>
+            {selectedTopUp && (
+              <div className="p-4 bg-muted rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">المبلغ:</span>
+                  <span className="font-semibold">{Number(selectedTopUp.amount).toFixed(2)} {selectedTopUp.currency || 'ر.س'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">المستخدم:</span>
+                  <span className="font-medium">{selectedTopUp.user.name || selectedTopUp.user.email}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectDialog(false);
+                setRejectReason('');
+                setSelectedTopUp(null);
+              }}
+              disabled={processingTopUp !== null}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectTopUp}
+              disabled={processingTopUp !== null || !rejectReason.trim()}
+            >
+              {processingTopUp ? 'جاري المعالجة...' : 'رفض الطلب'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

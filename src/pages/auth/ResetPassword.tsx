@@ -20,8 +20,22 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Lock, Mail, Key, Eye, EyeOff, CheckCircle2, Sparkles } from 'lucide-react';
 import { VersionFooter } from '@/components/common/VersionFooter';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN } from '@/config/logo.config';
+import { getProfessionalErrorMessage } from '@/lib/toast-errors';
+import { useTranslation } from 'react-i18next';
 
-const formSchema = z.object({
+// Token-based form schema (new flow)
+const tokenFormSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+// Legacy form schema (email + code flow)
+const legacyFormSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  code: z.string().min(4, 'Code must be at least 4 characters'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -30,6 +44,8 @@ const formSchema = z.object({
 });
 
 export default function ResetPassword() {
+  const { i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
   const [isTokenValid, setIsTokenValid] = useState(false);
@@ -72,18 +88,28 @@ export default function ResetPassword() {
             setIsTokenValid(true);
             setUserEmail(result.email);
           } else {
+            const { title, description } = getProfessionalErrorMessage(
+              { message: result.message || 'Invalid or expired link' },
+              { operation: isRTL ? 'التحقق من' : 'verify', resource: isRTL ? 'الرابط' : 'link' },
+              isRTL
+            );
             toast({
               variant: 'destructive',
-              title: 'رابط غير صحيح',
-              description: result.message || 'الرابط منتهي الصلاحية أو غير صحيح',
+              title,
+              description,
             });
             setTimeout(() => navigate('/auth/forgot-password'), 2000);
           }
         } catch (error: any) {
+          const { title, description } = getProfessionalErrorMessage(
+            error,
+            { operation: isRTL ? 'التحقق من' : 'verify', resource: isRTL ? 'الرابط' : 'link' },
+            isRTL
+          );
           toast({
             variant: 'destructive',
-            title: 'خطأ',
-            description: error?.message || 'فشل التحقق من الرابط',
+            title,
+            description,
           });
           setTimeout(() => navigate('/auth/forgot-password'), 2000);
         } finally {
@@ -96,10 +122,15 @@ export default function ResetPassword() {
         setIsVerifying(false);
       } else {
         // No token or code provided
+        const { title, description } = getProfessionalErrorMessage(
+          { message: 'Invalid link' },
+          { operation: isRTL ? 'استخدام' : 'use', resource: isRTL ? 'الرابط' : 'link' },
+          isRTL
+        );
         toast({
           variant: 'destructive',
-          title: 'رابط غير صحيح',
-          description: 'الرابط غير صحيح. يرجى طلب رابط جديد',
+          title,
+          description,
         });
         setTimeout(() => navigate('/auth/forgot-password'), 2000);
         setIsVerifying(false);
@@ -157,10 +188,15 @@ export default function ResetPassword() {
       });
       navigate('/auth/login');
     } catch (error: any) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'إعادة تعيين' : 'reset', resource: isRTL ? 'كلمة المرور' : 'password' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'تعذر تغيير كلمة المرور',
-        description: error?.message || 'حدث خطأ أثناء إعادة تعيين كلمة المرور. يرجى المحاولة مرة أخرى.',
+        title,
+        description,
       });
     } finally {
       setIsLoading(false);

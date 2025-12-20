@@ -42,7 +42,8 @@ export default function UserManagement() {
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await authApi.get('/auth/users', { requireAuth: true, adminApiKey: getAdminApiKey() });
+      // Users endpoint is at /users (not /auth/users) since authApi already includes authUrl
+      const response = await authApi.get('/users', { requireAuth: true, adminApiKey: getAdminApiKey() });
       setUsers(response.users || []);
     } catch (error) {
       toast({
@@ -78,7 +79,7 @@ export default function UserManagement() {
     }
 
     try {
-      await authApi.put(`/auth/users/${editingUser.id}/market-limit`, { limit: marketLimit }, { requireAuth: true, adminApiKey: getAdminApiKey() });
+      await authApi.put(`/users/${editingUser.id}/market-limit`, { limit: marketLimit }, { requireAuth: true, adminApiKey: getAdminApiKey() });
       toast({
         title: 'Success',
         description: 'Market limit updated successfully'

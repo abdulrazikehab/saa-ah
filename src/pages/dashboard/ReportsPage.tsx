@@ -12,6 +12,7 @@ import {
   ArrowDownRight,
   CreditCard
 } from 'lucide-react';
+import { writeFile, utils } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -50,12 +51,14 @@ export default function ReportsPage() {
   const [productReport, setProductReport] = useState<ProductReportItem[]>([]);
   const [customerReport, setCustomerReport] = useState<CustomerReportItem[]>([]);
   const [paymentReport, setPaymentReport] = useState<PaymentReportItem[]>([]);
+  const [chartMetric, setChartMetric] = useState<'revenue' | 'orders'>('revenue');
+  const [originalSalesData, setOriginalSalesData] = useState<{ name: string; revenue: number; orders: number }[]>([]);
 
   // Calculate date ranges based on selected period
   const getDateRanges = (range: string) => {
     const now = new Date();
     let currentStart: Date;
-    let currentEnd: Date = new Date(now);
+    const currentEnd: Date = new Date(now);
     let previousStart: Date;
     let previousEnd: Date;
 
@@ -152,6 +155,7 @@ export default function ReportsPage() {
 
       // Process orders data for charts (current period only)
       const chartData = processOrdersForChart(currentOrders);
+      setOriginalSalesData(chartData);
       setSalesData(chartData);
 
     } catch (error) {
@@ -213,6 +217,69 @@ export default function ReportsPage() {
       trend: percentChange >= 0 ? 'up' : 'down',
     };
   };
+
+  // Export reports to Excel
+  const handleExportReports = useCallback(() => {
+    const wb = utils.book_new();
+    
+    // Export Sales Report
+    const salesExportData = originalSalesData.length > 0 ? originalSalesData : salesData;
+    const salesExport = salesExportData.map((item, index) => ({
+      Date: item.name,
+      Revenue: item.revenue,
+      Orders: item.orders,
+    }));
+    const salesWs = utils.json_to_sheet(salesExport);
+    utils.book_append_sheet(wb, salesWs, 'Sales Report');
+
+    // Export Products Report
+    const productsData = productReport.map((product) => ({
+      Product: product.name,
+      Sales: product.salesCount,
+      Revenue: product.revenue,
+    }));
+    const productsWs = utils.json_to_sheet(productsData);
+    utils.book_append_sheet(wb, productsWs, 'Products Report');
+
+    // Export Customers Report
+    const customersData = customerReport.map((customer) => ({
+      Name: customer.name,
+      Email: customer.email,
+      Orders: customer.orders,
+      TotalSpent: customer.totalSpent,
+    }));
+    const customersWs = utils.json_to_sheet(customersData);
+    utils.book_append_sheet(wb, customersWs, 'Customers Report');
+
+    // Export Payments Report
+    const paymentsData = paymentReport.map((payment) => ({
+      Provider: payment.provider,
+      Volume: payment.volume,
+      Net: payment.net,
+      Fees: payment.fees,
+      Currency: payment.currency || 'SAR',
+    }));
+    const paymentsWs = utils.json_to_sheet(paymentsData);
+    utils.book_append_sheet(wb, paymentsWs, 'Payments Report');
+
+    // Generate filename with date range
+    const { currentStart, currentEnd } = getDateRanges(dateRange);
+    const filename = `reports_${currentStart.toISOString().split('T')[0]}_to_${currentEnd.toISOString().split('T')[0]}.xlsx`;
+    
+    writeFile(wb, filename);
+  }, [dateRange, originalSalesData, salesData, productReport, customerReport, paymentReport]);
+
+  // Listen for export event from header
+  useEffect(() => {
+    const handleExportEvent = () => {
+      handleExportReports();
+    };
+
+    window.addEventListener('exportReports', handleExportEvent);
+    return () => {
+      window.removeEventListener('exportReports', handleExportEvent);
+    };
+  }, [handleExportReports]);
 
   const MetricCard = ({ 
     title, 
@@ -286,7 +353,11 @@ export default function ReportsPage() {
               <SelectItem value="year">{t('dashboard.reports.thisYear')}</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            onClick={handleExportReports}
+          >
             <Download className="h-4 w-4" />
             {t('dashboard.reports.export')}
           </Button>
@@ -338,7 +409,22 @@ export default function ReportsPage() {
                   <CardTitle>{t('dashboard.reports.salesAnalysis')}</CardTitle>
                   <CardDescription>{t('dashboard.reports.salesAndRevenueTrends')}</CardDescription>
                 </div>
-                <Select defaultValue="revenue">
+                <Select 
+                  value={chartMetric}
+                  onValueChange={(value: 'revenue' | 'orders') => {
+                    setChartMetric(value);
+                    // Update chart based on selected metric
+                    if (value === 'orders') {
+                      const ordersData = originalSalesData.map(item => ({
+                        ...item,
+                        revenue: item.orders
+                      }));
+                      setSalesData(ordersData);
+                    } else {
+                      setSalesData(originalSalesData);
+                    }
+                  }}
+                >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue />
                   </SelectTrigger>

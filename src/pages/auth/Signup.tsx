@@ -12,9 +12,12 @@ import { Loader2, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, CheckCirc
 import { InteractiveFace, FaceState } from '@/components/ui/InteractiveFace';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
 import { VersionFooter } from '@/components/common/VersionFooter';
+import { apiClient } from '@/lib/api';
+import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 
 export default function Signup() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const navigate = useNavigate();
   const { toast } = useToast();
   const [name, setName] = useState('');
@@ -99,8 +102,10 @@ export default function Signup() {
       // Check if email was sent successfully
       if (!result.verificationCodeSent) {
         toast({
-          title: '⚠️ Warning',
-          description: 'Verification code may not have been sent. Please check your email or contact support.',
+          title: isRTL ? 'تحذير' : 'Warning',
+          description: isRTL 
+            ? 'قد لا يكون رمز التحقق قد تم إرساله. يرجى التحقق من بريدك الإلكتروني أو الاتصال بالدعم.'
+            : 'Verification code may not have been sent. Please check your email or contact support.',
           variant: 'destructive',
         });
       }
@@ -123,46 +128,33 @@ export default function Signup() {
       }
     } catch (error: any) {
       setFaceState('sad');
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'إنشاء' : 'create', resource: isRTL ? 'الحساب' : 'account' },
+        isRTL
+      );
       
-      let errorMessage = t('auth.signup.error', 'Failed to create account. Please try again.');
-      
-      if (error?.response?.status === 409) {
-        const errorData = error?.response?.data;
-        if (errorData?.message) {
-          if (errorData.message.toLowerCase().includes('email')) {
-            errorMessage = 'هذا البريد الإلكتروني مستخدم بالفعل. الرجاء استخدام بريد آخر.';
-          } else if (errorData.message.toLowerCase().includes('subdomain')) {
-            errorMessage = 'اسم النطاق الفرعي مستخدم بالفعل. الرجاء اختيار اسم آخر.';
-          } else {
-            errorMessage = errorData.message;
-          }
-        }
-      } else if (error?.response?.status === 400) {
+      // Special handling for email/SMTP errors
+      if (error?.response?.status === 400) {
         const errorData = error?.response?.data;
         const errorMsg = errorData?.message || '';
-        
-        // Check if it's an email sending error - in development, allow signup to continue
         if (errorMsg.includes('verification email') || errorMsg.includes('SMTP') || errorMsg.includes('email')) {
-          // Try to extract verification code from error or show helpful message
           toast({
-            title: '⚠️ Email sending failed',
-            description: 'Email service is not configured properly. Please contact support or check your SMTP settings.',
+            title: isRTL ? 'تحذير: فشل إرسال البريد' : 'Warning: Email Sending Failed',
+            description: isRTL
+              ? 'خدمة البريد الإلكتروني غير معينة بشكل صحيح. يرجى الاتصال بالدعم أو التحقق من إعدادات SMTP.'
+              : 'Email service is not configured properly. Please contact support or check your SMTP settings.',
             variant: 'destructive',
             duration: 10000,
           });
-          // Don't block signup - let user know they need to contact support
-          errorMessage = errorMsg;
-        } else {
-          errorMessage = errorMsg || 'البريد الإلكتروني غير صالح | Invalid email address';
+          return; // Don't show duplicate error
         }
-      } else if (error?.message) {
-        errorMessage = error.message;
       }
       
       toast({
         variant: 'destructive',
-        title: t('common.error'),
-        description: errorMessage,
+        title,
+        description,
       });
     } finally {
       setLoading(false);
@@ -267,17 +259,27 @@ export default function Signup() {
           }, 1000);
         }
       } else {
+        const { title, description } = getProfessionalErrorMessage(
+          { message: result.message || 'Verification code is invalid' },
+          { operation: isRTL ? 'التحقق' : 'verify', resource: isRTL ? 'البريد الإلكتروني' : 'email' },
+          isRTL
+        );
         toast({
           variant: 'destructive',
-          title: 'فشل التحقق',
-          description: result.message || 'رمز التحقق غير صحيح. يرجى المحاولة مرة أخرى.',
+          title,
+          description,
         });
       }
     } catch (error: any) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'التحقق' : 'verify', resource: isRTL ? 'البريد الإلكتروني' : 'email' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: error?.message || 'حدث خطأ أثناء التحقق. يرجى المحاولة مرة أخرى.',
+        title,
+        description,
       });
     } finally {
       setOtpLoading(false);
@@ -294,10 +296,15 @@ export default function Signup() {
       });
       setOtpCode('');
     } catch (error: any) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'إعادة إرسال' : 'resend', resource: isRTL ? 'رمز التحقق' : 'verification code' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'خطأ',
-        description: error?.message || 'فشل إعادة الإرسال. يرجى المحاولة مرة أخرى.',
+        title,
+        description,
       });
     } finally {
       setOtpLoading(false);
@@ -305,10 +312,14 @@ export default function Signup() {
   };
 
   const handleGoogleSignIn = () => {
-    const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001';
-    const googleAuthUrl = authBaseUrl.includes('localhost')
-      ? `${authBaseUrl}/auth/google`
-      : `${authBaseUrl}/google`;
+    // Use apiClient.authUrl which is already configured, or fallback to env
+    const authBaseUrl = apiClient.authUrl || import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001';
+    // Remove trailing slash and ensure proper path construction
+    const baseUrl = authBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+    // Ensure /auth/google path (backend route is @Controller('auth') @Get('google'))
+    const googleAuthUrl = baseUrl.endsWith('/auth') 
+      ? `${baseUrl}/google` 
+      : `${baseUrl}/auth/google`;
     window.location.href = googleAuthUrl;
   };
 

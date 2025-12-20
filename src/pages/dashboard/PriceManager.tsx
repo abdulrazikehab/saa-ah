@@ -71,7 +71,7 @@ export default function PriceManager() {
       const [productsData, categoriesData, brandsData] = await Promise.all([
         coreApi.getProducts({ limit: '10000' } as any),
         coreApi.getCategories(),
-        coreApi.get('/brands').catch(() => []),
+        coreApi.getBrands().catch(() => []),
       ]);
 
       const mappedProducts: Product[] = productsData.map((p: any) => ({

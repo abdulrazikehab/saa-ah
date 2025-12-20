@@ -11,12 +11,14 @@ import { Separator } from '@/components/ui/separator';
 import { InteractiveFace, FaceState } from '@/components/ui/InteractiveFace';
 import { useTranslation } from 'react-i18next';
 import { authService } from '@/services/auth.service';
-import { coreApi } from '@/lib/api';
+import { coreApi, apiClient } from '@/lib/api';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
 import { VersionFooter } from '@/components/common/VersionFooter';
+import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 
 export default function Login() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const navigate = useNavigate();
   const { login, loginWithTokens } = useAuth();
   const { toast } = useToast();
@@ -96,10 +98,15 @@ export default function Login() {
       }, 100);
     } catch (error: unknown) {
       setFaceState('sad');
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'تسجيل الدخول' : 'login', resource: isRTL ? 'الحساب' : 'account' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'خطأ في تسجيل الدخول',
-        description: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
+        title,
+        description,
       });
     } finally {
       setLoading(false);
@@ -134,10 +141,15 @@ export default function Login() {
       }, 1500);
     } catch (error: unknown) {
       setFaceState('sad');
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'تسجيل الدخول' : 'login', resource: isRTL ? 'باستخدام رمز الاسترداد' : 'using recovery ID' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'خطأ في تسجيل الدخول',
-        description: 'رمز الاسترداد أو كلمة المرور غير صحيحة',
+        title,
+        description,
       });
     } finally {
       setLoading(false);
@@ -148,8 +160,8 @@ export default function Login() {
     if (!recoveryId) {
       toast({
         variant: 'destructive',
-        title: 'رمز الاسترداد مطلوب',
-        description: 'يرجى إدخال رمز الاسترداد للمتابعة',
+        title: isRTL ? 'معلومة مطلوبة' : 'Required Information',
+        description: isRTL ? 'يرجى إدخال رمز الاسترداد للمتابعة' : 'Please enter your recovery ID to continue',
       });
       return;
     }
@@ -159,14 +171,21 @@ export default function Login() {
       const result = await authService.recoverEmail(recoveryId);
       setRecoveredEmail(result.maskedEmail);
       toast({
-        title: 'تم العثور على الحساب',
-        description: `البريد الإلكتروني المرتبط: ${result.maskedEmail}`,
+        title: isRTL ? 'تم العثور على الحساب' : 'Account Found',
+        description: isRTL 
+          ? `البريد الإلكتروني المرتبط: ${result.maskedEmail}`
+          : `Associated email: ${result.maskedEmail}`,
       });
     } catch (error: unknown) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'استرداد' : 'recover', resource: isRTL ? 'البريد الإلكتروني' : 'email' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'لم نتمكن من العثور على الحساب',
-        description: 'تأكد من صحة رمز الاسترداد وحاول مرة أخرى',
+        title,
+        description,
       });
     } finally {
       setLoading(false);
@@ -174,10 +193,14 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = () => {
-    const authBaseUrl = import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001';
-    const googleAuthUrl = authBaseUrl.includes('localhost')
-      ? `${authBaseUrl}/auth/google`
-      : `${authBaseUrl}/google`;
+    // Use apiClient.authUrl which is already configured, or fallback to env
+    const authBaseUrl = apiClient.authUrl || import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:3001';
+    // Remove trailing slash and ensure proper path construction
+    const baseUrl = authBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+    // Ensure /auth/google path (backend route is @Controller('auth') @Get('google'))
+    const googleAuthUrl = baseUrl.endsWith('/auth') 
+      ? `${baseUrl}/google` 
+      : `${baseUrl}/auth/google`;
     window.location.href = googleAuthUrl;
   };
 
@@ -475,10 +498,15 @@ export default function Login() {
                                   description: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني',
                                 });
                               } catch (error) {
+                                const { title, description } = getProfessionalErrorMessage(
+                                  error,
+                                  { operation: isRTL ? 'إرسال' : 'send', resource: isRTL ? 'رابط إعادة التعيين' : 'reset link' },
+                                  isRTL
+                                );
                                 toast({
                                   variant: 'destructive',
-                                  title: 'تعذر الإرسال',
-                                  description: 'لم نتمكن من إرسال رابط إعادة التعيين. يرجى المحاولة مرة أخرى.',
+                                  title,
+                                  description,
                                 });
                               } finally {
                                 setLoading(false);

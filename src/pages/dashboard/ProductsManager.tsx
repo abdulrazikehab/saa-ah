@@ -112,6 +112,8 @@ export default function ProductsManager() {
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [importErrors, setImportErrors] = useState<Array<{ row: number; column: string; productName: string; error: string }>>([]);
+  const [showImportErrorDialog, setShowImportErrorDialog] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -966,11 +968,17 @@ export default function ProductsManager() {
 
     try {
       setIsImporting(true);
-      setImportProgress({ current: 0, total: 0, currentItem: 'Reading file...' });
+      setImportProgress({ current: 0, total: 0, currentItem: 'جاري قراءة الملف...' });
+      
+      // Show loading dialog immediately
+      setImportProgress({ current: 0, total: 100, currentItem: 'جاري قراءة ملف Excel...' });
       
       const data = await file.arrayBuffer();
+      setImportProgress({ current: 10, total: 100, currentItem: 'جاري تحليل البيانات...' });
+      
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      setImportProgress({ current: 20, total: 100, currentItem: 'جاري معالجة البيانات...' });
       const jsonData = utils.sheet_to_json<{
         SKU?: string;
         Name: string;
@@ -992,32 +1000,38 @@ export default function ProductsManager() {
       }>(worksheet, { defval: '' });
 
       const totalItems = jsonData.length;
-      setImportProgress({ current: 0, total: totalItems, currentItem: `Processing ${totalItems} products...` });
+      setImportProgress({ current: 30, total: 100, currentItem: `جاري معالجة ${totalItems} منتج...` });
 
       let successCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
+      const detailedErrors: Array<{ row: number; column: string; productName: string; error: string }> = [];
       let importStopped = false; // Flag to track if import was stopped early
 
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
         const rowNum = i + 2; // Excel row number (1-indexed + header)
         
-        // Update progress
+        // Update progress with percentage
+        const progressPercent = 30 + Math.floor(((i + 1) / totalItems) * 60); // 30% to 90%
         setImportProgress({ 
-          current: i + 1, 
-          total: totalItems, 
-          currentItem: `Importing: ${row.Name || `Row ${rowNum}`}...` 
+          current: progressPercent, 
+          total: 100, 
+          currentItem: `جاري استيراد: ${row.Name || `الصف ${rowNum}`}... (${i + 1}/${totalItems})` 
         });
         
         if (!row.Name) {
-          errors.push(`Row ${rowNum}: Name is required`);
+          const error = 'Name is required';
+          errors.push(`Row ${rowNum}: ${error}`);
+          detailedErrors.push({ row: rowNum, column: 'Name', productName: '', error });
           errorCount++;
           continue;
         }
 
         if (!row.Price || (typeof row.Price === 'string' && !row.Price.trim())) {
-          errors.push(`Row ${rowNum}: Price is required`);
+          const error = 'Price is required';
+          errors.push(`Row ${rowNum}: ${error}`);
+          detailedErrors.push({ row: rowNum, column: 'Price', productName: row.Name, error });
           errorCount++;
           continue;
         }
@@ -1032,7 +1046,9 @@ export default function ProductsManager() {
           );
           categoryId = category?.id;
           if (!categoryId && row.Category.trim()) {
-            errors.push(`Row ${rowNum}: Category "${row.Category}" not found`);
+            const error = `Category "${row.Category}" not found`;
+            errors.push(`Row ${rowNum}: ${error}`);
+            detailedErrors.push({ row: rowNum, column: 'Category', productName: row.Name, error });
           }
         }
 
@@ -1046,14 +1062,20 @@ export default function ProductsManager() {
           );
           brandId = brand?.id;
           if (!brandId && (row.Brand?.trim() || row.BrandCode?.trim())) {
-            errors.push(`Row ${rowNum}: Brand "${row.Brand || row.BrandCode}" not found`);
+            const error = `Brand "${row.Brand || row.BrandCode}" not found`;
+            errors.push(`Row ${rowNum}: ${error}`);
+            detailedErrors.push({ row: rowNum, column: row.Brand ? 'Brand' : 'BrandCode', productName: row.Name, error });
           }
         }
 
         try {
           const price = typeof row.Price === 'string' ? parseFloat(row.Price.replace(/[^\d.-]/g, '')) : row.Price;
           if (isNaN(price) || price < 0) {
-            throw new Error('Invalid price');
+            const error = 'Invalid price format';
+            errors.push(`Row ${rowNum}: ${error}`);
+            detailedErrors.push({ row: rowNum, column: 'Price', productName: row.Name, error });
+            errorCount++;
+            continue;
           }
 
           const compareAtPrice = row.CompareAtPrice 
@@ -1194,6 +1216,14 @@ export default function ProductsManager() {
           }
           
           errors.push(`الصف ${rowNum} (${row.Name}): ${userFriendlyError}`);
+          // Determine which column had the error based on error message
+          let errorColumn = 'General';
+          const errorLower = userFriendlyError.toLowerCase();
+          if (errorLower.includes('سعر') || errorLower.includes('price')) errorColumn = 'Price';
+          else if (errorLower.includes('فئة') || errorLower.includes('category')) errorColumn = 'Category';
+          else if (errorLower.includes('علامة') || errorLower.includes('brand')) errorColumn = 'Brand';
+          else if (errorLower.includes('sku') || errorLower.includes('رمز')) errorColumn = 'SKU';
+          detailedErrors.push({ row: rowNum, column: errorColumn, productName: row.Name, error: userFriendlyError });
           errorCount++;
         }
       }
@@ -1202,9 +1232,9 @@ export default function ProductsManager() {
       if (!importStopped) {
         // Update progress to 100%
         setImportProgress({ 
-          current: totalItems, 
-          total: totalItems, 
-          currentItem: 'Import completed!' 
+          current: 100, 
+          total: 100, 
+          currentItem: 'اكتمل الاستيراد!' 
         });
 
         // Show user-friendly summary
@@ -1223,19 +1253,25 @@ export default function ProductsManager() {
           variant: errorCount > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
         });
 
-        // Show detailed errors in console for debugging, but not in toast
-        if (errors.length > 0) {
+        // Show detailed errors in console for debugging, and show error dialog
+        if (detailedErrors.length > 0) {
           console.group('تفاصيل أخطاء الاستيراد:');
           errors.forEach(err => console.error(err));
           console.groupEnd();
+          // Show error dialog
+          setImportErrors(detailedErrors);
+          setShowImportErrorDialog(true);
         }
       } else {
         // Import was stopped early due to 403 error
         // Error toast was already shown, just log errors
-        if (errors.length > 0) {
+        if (detailedErrors.length > 0) {
           console.group('تفاصيل أخطاء الاستيراد:');
           errors.forEach(err => console.error(err));
           console.groupEnd();
+          // Show error dialog
+          setImportErrors(detailedErrors);
+          setShowImportErrorDialog(true);
         }
       }
       
@@ -2238,11 +2274,11 @@ export default function ProductsManager() {
 
       {/* Import Progress Dialog */}
       <Dialog open={isImporting} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle>Importing Products</DialogTitle>
+            <DialogTitle>جاري استيراد المنتجات</DialogTitle>
             <DialogDescription>
-              Please wait while products are being imported...
+              يرجى الانتظار أثناء استيراد المنتجات...
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -2253,6 +2289,131 @@ export default function ProductsManager() {
               isComplete={importProgress.current === importProgress.total && importProgress.total > 0}
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Errors Dialog */}
+      <Dialog open={showImportErrorDialog} onOpenChange={setShowImportErrorDialog}>
+        <DialogContent className="max-w-5xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">أخطاء استيراد ملف Excel</DialogTitle>
+            <DialogDescription>
+              حدثت الأخطاء التالية أثناء الاستيراد. يرجى إصلاح هذه المشاكل والمحاولة مرة أخرى.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 max-h-[65vh] overflow-y-auto">
+            <div className="space-y-4">
+              {/* Summary Card */}
+              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-100 dark:bg-red-900/50 rounded-full">
+                      <X className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-red-900 dark:text-red-300">إجمالي الأخطاء: {importErrors.length}</h3>
+                      <p className="text-sm text-red-700 dark:text-red-400">يرجى مراجعة الأخطاء أدناه وإصلاحها في ملف Excel</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Errors grouped by column */}
+              <div className="space-y-3">
+                {Object.entries(
+                  importErrors.reduce((acc, err) => {
+                    const col = err.column || 'عام';
+                    if (!acc[col]) acc[col] = [];
+                    acc[col].push(err);
+                    return acc;
+                  }, {} as Record<string, typeof importErrors>)
+                ).map(([column, errors]) => (
+                  <Card key={column} className="border-l-4 border-l-red-500">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <span className="font-bold text-red-600 dark:text-red-400">العمود: {column}</span>
+                        <Badge variant="destructive" className="mr-auto">{errors.length} خطأ</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-20"># الصف</TableHead>
+                            <TableHead>اسم المنتج</TableHead>
+                            <TableHead>سبب الخطأ</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {errors.map((err, idx) => (
+                            <TableRow key={idx}>
+                              <TableCell className="font-mono font-bold text-center bg-gray-50 dark:bg-gray-900">
+                                {err.row}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {err.productName || '(لا يوجد اسم)'}
+                              </TableCell>
+                              <TableCell className="text-red-600 dark:text-red-400">
+                                {err.error}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* All errors table (fallback if grouping doesn't work) */}
+              {importErrors.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">جميع الأخطاء بالتفصيل</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-20"># الصف</TableHead>
+                          <TableHead>اسم المنتج</TableHead>
+                          <TableHead>العمود</TableHead>
+                          <TableHead>سبب الخطأ</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {importErrors.map((err, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-mono font-semibold text-center bg-gray-50 dark:bg-gray-900">
+                              {err.row}
+                            </TableCell>
+                            <TableCell className="font-medium">{err.productName || '(لا يوجد اسم)'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="font-medium text-blue-600 dark:text-blue-400">
+                                {err.column}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-red-600 dark:text-red-400">{err.error}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportErrorDialog(false)}>
+              إغلاق
+            </Button>
+            <Button onClick={() => {
+              setShowImportErrorDialog(false);
+              // Could add functionality to download error report
+            }}>
+              تصدير تقرير الأخطاء
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

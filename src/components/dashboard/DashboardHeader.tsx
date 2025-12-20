@@ -11,7 +11,8 @@ import {
   LogOut,
   HelpCircle,
   Menu,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { LanguageToggle } from '@/components/LanguageToggle';
@@ -42,7 +51,8 @@ import { StoreSwitcher } from '@/components/dashboard/StoreSwitcher';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useNavigate } from 'react-router-dom';
+import { Label } from '@/components/ui/label';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -75,12 +85,18 @@ export const DashboardHeader = ({
   const isRTL = i18n.language === 'ar';
   const [dateRange, setDateRange] = useState('month');
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout, user, refreshUser } = useAuth();
   const { toast } = useToast();
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currency, setCurrency] = useState<string>('SAR');
   const [currencySymbol, setCurrencySymbol] = useState<string>('ر.س');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilterDialog, setShowFilterDialog] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -263,18 +279,128 @@ export const DashboardHeader = ({
     navigate('/auth/login');
   };
 
-  const handleDownload = () => {
-    toast({
-      title: t('dashboard.header.download'),
-      description: t('dashboard.header.download', 'Report will be downloaded soon'),
-    });
+  const handleDownload = async () => {
+    try {
+      const currentPath = location.pathname;
+      
+      // Export based on current page
+      if (currentPath.includes('/reports')) {
+        // Trigger reports export
+        const event = new CustomEvent('exportReports');
+        window.dispatchEvent(event);
+        toast({
+          title: t('dashboard.header.download'),
+          description: t('dashboard.header.exportingReports', 'Exporting reports...'),
+        });
+      } else if (currentPath.includes('/orders')) {
+        // Trigger orders export
+        const event = new CustomEvent('exportOrders');
+        window.dispatchEvent(event);
+        toast({
+          title: t('dashboard.header.download'),
+          description: t('dashboard.header.exportingOrders', 'Exporting orders...'),
+        });
+      } else if (currentPath.includes('/products')) {
+        // Trigger products export
+        const event = new CustomEvent('exportProducts');
+        window.dispatchEvent(event);
+        toast({
+          title: t('dashboard.header.download'),
+          description: t('dashboard.header.exportingProducts', 'Exporting products...'),
+        });
+      } else if (currentPath.includes('/customers')) {
+        // Trigger customers export
+        const event = new CustomEvent('exportCustomers');
+        window.dispatchEvent(event);
+        toast({
+          title: t('dashboard.header.download'),
+          description: t('dashboard.header.exportingCustomers', 'Exporting customers...'),
+        });
+      } else {
+        // Default: navigate to reports page
+        navigate('/dashboard/reports');
+        toast({
+          title: t('dashboard.header.download'),
+          description: t('dashboard.header.navigateToReports', 'Navigate to reports page to export data'),
+        });
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: t('common.error'),
+        description: t('dashboard.header.exportError', 'Failed to export data'),
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleFilter = () => {
+    setShowFilterDialog(true);
+  };
+
+  const applyFilter = () => {
+    // Dispatch filter event for current page
+    const currentPath = location.pathname;
+    const filterData = {
+      status: filterStatus,
+      dateFrom: filterDateFrom,
+      dateTo: filterDateTo,
+    };
+    
+    const event = new CustomEvent('applyFilter', { detail: filterData });
+    window.dispatchEvent(event);
+    
+    setShowFilterDialog(false);
     toast({
       title: t('dashboard.header.filter'),
-      description: t('dashboard.header.filter', 'Default filter applied'),
+      description: t('dashboard.header.filterApplied', 'Filter applied successfully'),
     });
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    toast({
+      title: t('dashboard.header.notificationsCleared'),
+      description: t('dashboard.header.allNotificationsCleared', 'All notifications marked as read'),
+    });
+  };
+
+  const handleNotificationClick = (notification: Notification) => {
+    // Mark as read
+    setNotifications(prev => 
+      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+    );
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case 'order':
+        navigate('/dashboard/orders');
+        break;
+      case 'payment':
+        navigate('/dashboard/reports');
+        break;
+      case 'stock':
+        navigate('/dashboard/products');
+        break;
+      case 'review':
+        navigate('/dashboard/reviews');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    // Dispatch search event for current page
+    const currentPath = location.pathname;
+    const event = new CustomEvent('searchQuery', { detail: searchQuery });
+    window.dispatchEvent(event);
+
+    // Or navigate to search results page
+    navigate(`/dashboard/search?q=${encodeURIComponent(searchQuery)}`);
   };
 
   return (
@@ -388,42 +514,52 @@ export const DashboardHeader = ({
             <PopoverContent className="w-[calc(100vw-3rem)] sm:w-80 md:w-96 max-w-sm p-0" align="end">
               <div className="flex items-center justify-between p-4 border-b">
                 <h3 className="font-semibold">{t('dashboard.header.notifications')}</h3>
-                <Button variant="ghost" size="sm" className="h-8 text-xs">
-                  {t('dashboard.header.clearAll')}
-                </Button>
+                {unreadCount > 0 && (
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={clearAllNotifications}>
+                    {t('dashboard.header.clearAll')}
+                  </Button>
+                )}
               </div>
               <ScrollArea className="h-[400px]">
-                <div className="divide-y">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
-                        !notification.read ? 'bg-cyan-50/30 dark:bg-cyan-900/10' : ''
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          notification.type === 'order' ? 'bg-green-100 dark:bg-green-900/30' :
-                          notification.type === 'payment' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                          notification.type === 'stock' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
-                          'bg-purple-100 dark:bg-purple-900/30'
-                        }`}>
-                          <Bell className="h-4 w-4" />
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <Bell className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">{t('dashboard.header.noNotifications', 'No notifications')}</p>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        onClick={() => handleNotificationClick(notification)}
+                        className={`p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
+                          !notification.read ? 'bg-cyan-50/30 dark:bg-cyan-900/10' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`p-2 rounded-lg ${
+                            notification.type === 'order' ? 'bg-green-100 dark:bg-green-900/30' :
+                            notification.type === 'payment' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                            notification.type === 'stock' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
+                            'bg-purple-100 dark:bg-purple-900/30'
+                          }`}>
+                            <Bell className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{String(notification.title || '')}</p>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {String(notification.message || '')}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2">{String(notification.time || '')}</p>
+                          </div>
+                          {!notification.read && (
+                            <div className="w-2 h-2 bg-cyan-500 rounded-full mt-2" />
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{String(notification.title || '')}</p>
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                            {String(notification.message || '')}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-2">{String(notification.time || '')}</p>
-                        </div>
-                        {!notification.read && (
-                          <div className="w-2 h-2 bg-cyan-500 rounded-full mt-2" />
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </ScrollArea>
             </PopoverContent>
           </Popover>
@@ -481,15 +617,77 @@ export const DashboardHeader = ({
 
       {/* Mobile Search Bar */}
       <div className="lg:hidden px-2 sm:px-3 md:px-4 pb-2 sm:pb-3 border-t">
-        <div className="relative">
+        <form onSubmit={handleSearch} className="relative">
           <Search className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground ${isRTL ? 'right-2 sm:right-3' : 'left-2 sm:left-3'}`} />
           <Input
             type="search"
             placeholder={t('dashboard.header.searchPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className={`bg-muted/50 border-0 h-8 sm:h-9 text-xs sm:text-sm ${isRTL ? 'pr-8 sm:pr-10' : 'pl-8 sm:pl-10'}`}
           />
-        </div>
+        </form>
       </div>
+
+      {/* Filter Dialog */}
+      <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('dashboard.header.filter', 'Filter')}</DialogTitle>
+            <DialogDescription>
+              {t('dashboard.header.filterDescription', 'Apply filters to the current page')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>{t('dashboard.header.status', 'Status')}</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('dashboard.header.all', 'All')}</SelectItem>
+                  <SelectItem value="active">{t('dashboard.header.active', 'Active')}</SelectItem>
+                  <SelectItem value="inactive">{t('dashboard.header.inactive', 'Inactive')}</SelectItem>
+                  <SelectItem value="pending">{t('dashboard.header.pending', 'Pending')}</SelectItem>
+                  <SelectItem value="completed">{t('dashboard.header.completed', 'Completed')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>{t('dashboard.header.fromDate', 'From Date')}</Label>
+                <Input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('dashboard.header.toDate', 'To Date')}</Label>
+                <Input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setFilterStatus('all');
+              setFilterDateFrom('');
+              setFilterDateTo('');
+              setShowFilterDialog(false);
+            }}>
+              {t('common.reset', 'Reset')}
+            </Button>
+            <Button onClick={applyFilter}>
+              {t('common.apply', 'Apply')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 };

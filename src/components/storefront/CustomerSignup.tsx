@@ -8,6 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight, Download } from 'lucide-react';
 import { coreApi } from '@/lib/api';
 import { apiClient } from '@/services/core/api-client';
+import { getProfessionalErrorMessage } from '@/lib/toast-errors';
+import { useTranslation } from 'react-i18next';
 
 interface CustomerSignupProps {
   onClose: () => void;
@@ -17,6 +19,8 @@ interface CustomerSignupProps {
 
 export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: CustomerSignupProps) {
   const { toast } = useToast();
+  const { i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -105,8 +109,10 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
     if (password !== confirmPassword) {
       toast({
         variant: 'destructive',
-        title: 'كلمتا المرور غير متطابقتين',
-        description: 'تأكد من تطابق كلمتي المرور وحاول مرة أخرى',
+        title: isRTL ? 'عدم تطابق' : 'Mismatch',
+        description: isRTL
+          ? 'كلمتا المرور غير متطابقتين. يرجى التأكد من تطابق كلمتي المرور والمحاولة مرة أخرى'
+          : 'Passwords do not match. Please ensure both passwords are identical and try again',
       });
       return;
     }
@@ -139,11 +145,15 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
         onClose();
       }
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'إنشاء' : 'create', resource: isRTL ? 'الحساب' : 'account' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'خطأ في إنشاء الحساب',
-        description: err.response?.data?.message || 'حدث خطأ أثناء إنشاء الحساب',
+        title,
+        description,
       });
     } finally {
       setLoading(false);

@@ -62,7 +62,7 @@ export default function BrandSettings() {
 
   const loadBrands = async () => {
     try {
-      const response = await coreApi.get('/brands');
+      const response = await coreApi.getBrands();
       // Validate response is an array of valid brand objects
       if (Array.isArray(response)) {
         const validBrands = response.filter((b: any) =>
@@ -102,7 +102,7 @@ export default function BrandSettings() {
           description: 'تم تحديث العلامة التجارية بنجاح',
         });
       } else {
-        await coreApi.post('/brands', {
+        await coreApi.createBrand({
           ...formData,
           rechargeUsdValue: parseFloat(formData.rechargeUsdValue.toString()),
           usdValueForCoins: parseFloat(formData.usdValueForCoins.toString()),
@@ -286,7 +286,7 @@ export default function BrandSettings() {
         }
 
         try {
-          await coreApi.post('/brands', {
+          await coreApi.createBrand({
             name: row.Name.trim(),
             nameAr: row.NameAr?.trim() || undefined,
             code: row.Code?.trim() || undefined,

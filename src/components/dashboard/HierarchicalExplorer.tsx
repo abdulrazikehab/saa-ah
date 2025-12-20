@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, Folder, FolderOpen, Package, ArrowLeft, Plus, Tag, Eye, Edit, X, Image as ImageIcon, AlertTriangle, Home, Store, Box, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, Package, ArrowLeft, Plus, Tag, Eye, Edit, X, Image as ImageIcon, AlertTriangle, Home, Store, Box, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -110,8 +110,12 @@ export function HierarchicalExplorer({
   const [categoryPath, setCategoryPath] = useState<Category[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showCreateCategoryDialog, setShowCreateCategoryDialog] = useState(false);
   const [showCreateBrandDialog, setShowCreateBrandDialog] = useState(false);
+  const [categoryParentBrand, setCategoryParentBrand] = useState<string | null>(null); // Track which brand the new category belongs to
+  const [categoryParentCategory, setCategoryParentCategory] = useState<string | null>(null); // Track parent category if any
   const [newCategoryData, setNewCategoryData] = useState({
     name: '',
     nameAr: '',
@@ -571,13 +575,24 @@ export function HierarchicalExplorer({
       return;
     }
 
-    // Determine parentId: if we're in subcategories or products view, use the selected category
-    // Otherwise, use the last category in the path
-    const parentId = (currentView === 'subcategories' || currentView === 'products') && selectedCategory 
-      ? selectedCategory 
-      : categoryPath.length > 0 
-      ? categoryPath[categoryPath.length - 1].id 
-      : undefined;
+    // Determine parentId: 
+    // 1. If categoryParentCategory is set (from context menu), use it
+    // 2. If categoryParentBrand is set but no parent category, it's a top-level category (no parentId)
+    // 3. If we're in subcategories or products view, use the selected category
+    // 4. Otherwise, use the last category in the path
+    let parentId: string | undefined;
+    if (categoryParentCategory) {
+      parentId = categoryParentCategory;
+    } else if (categoryParentBrand) {
+      // Top-level category under brand (no parent)
+      parentId = undefined;
+    } else {
+      parentId = (currentView === 'subcategories' || currentView === 'products') && selectedCategory 
+        ? selectedCategory 
+        : categoryPath.length > 0 
+        ? categoryPath[categoryPath.length - 1].id 
+        : undefined;
+    }
 
     // Check subcategory limit (max 10 subcategories per parent)
     if (parentId) {
@@ -616,7 +631,16 @@ export function HierarchicalExplorer({
 
         // Clear form and close dialog
         setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
+        setCategoryParentBrand(null);
+        setCategoryParentCategory(null);
         setShowCreateCategoryDialog(false);
+        
+        // If category was created under a brand, expand that brand
+        if (categoryParentBrand) {
+          const newExpanded = new Set(expandedBrands);
+          newExpanded.add(categoryParentBrand);
+          setExpandedBrands(newExpanded);
+        }
 
         // If we're in subcategories view, navigate to the new category
         if (parentId) {
@@ -699,12 +723,12 @@ export function HierarchicalExplorer({
         setShowCreateBrandDialog(false);
       } else {
         // Fallback: use coreApi directly
-        await coreApi.post('/brands', {
+        await coreApi.createBrand({
           name: newBrandData.name,
           nameAr: newBrandData.nameAr || newBrandData.name,
           code: newBrandData.code || undefined,
           logo: newBrandData.logo || undefined,
-        }, { requireAuth: true });
+        });
         
         toast({
           title: 'نجح',
@@ -916,64 +940,296 @@ export function HierarchicalExplorer({
                       </Button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {brands.map((brand) => (
-                        <ContextMenu key={brand.id}>
-                          <ContextMenuTrigger asChild>
-                            <div
-                              className="group cursor-pointer"
-                              onClick={() => handleBrandClick(brand.id)}
-                            >
-                              <div className="flex flex-col items-center p-4 rounded-lg hover:bg-slate-800 transition-colors">
-                                {/* Brand Logo/Icon */}
-                                <div className={`w-16 h-16 mb-3 rounded-xl flex items-center justify-center overflow-hidden transition-all duration-200 ${
-                                  brand.logo 
-                                    ? 'bg-white shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/40 group-hover:scale-105' 
-                                    : 'bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 group-hover:border-cyan-500'
-                                }`}>
-                                  {brand.logo ? (
-                                    <img 
-                                      src={brand.logo} 
-                                      alt={brand.name} 
-                                      className="w-full h-full object-contain p-1.5"
-                                    />
-                                  ) : (
-                                    <Store className="h-8 w-8 text-cyan-500" />
+                    <div className="space-y-1">
+                      {/* Windows Explorer-style tree view */}
+                      {brands.map((brand) => {
+                        const isExpanded = expandedBrands.has(brand.id);
+                        const brandCategories = getCategoriesByBrand(brand.id);
+                        
+                        return (
+                          <ContextMenu key={brand.id}>
+                            <ContextMenuTrigger asChild>
+                              <div className="select-none">
+                                {/* Brand Row - Tree Item */}
+                                <div
+                                  className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-800/50 rounded cursor-pointer group"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newExpanded = new Set(expandedBrands);
+                                    if (newExpanded.has(brand.id)) {
+                                      newExpanded.delete(brand.id);
+                                    } else {
+                                      newExpanded.add(brand.id);
+                                    }
+                                    setExpandedBrands(newExpanded);
+                                  }}
+                                >
+                                  {/* Expand/Collapse Icon */}
+                                  <div className="w-4 h-4 flex items-center justify-center">
+                                    {brandCategories.length > 0 ? (
+                                      isExpanded ? (
+                                        <ChevronDown className="h-3 w-3 text-slate-400" />
+                                      ) : (
+                                        <ChevronRight className="h-3 w-3 text-slate-400" />
+                                      )
+                                    ) : (
+                                      <div className="w-3 h-3" />
+                                    )}
+                                  </div>
+                                  {/* Brand Icon */}
+                                  <Store className="h-4 w-4 text-cyan-500 flex-shrink-0" />
+                                  {/* Brand Name */}
+                                  <span className="text-sm text-slate-300 group-hover:text-white flex-1 truncate">
+                                    {brand.nameAr || brand.name}
+                                  </span>
+                                  {brand.code && (
+                                    <span className="text-xs text-slate-500 ml-2">{brand.code}</span>
                                   )}
                                 </div>
-                                {/* Brand Name */}
-                                <p className="text-sm text-slate-300 text-center font-medium truncate w-full group-hover:text-white">
-                                  {brand.nameAr || brand.name}
-                                </p>
-                                {brand.code && (
-                                  <p className="text-xs text-slate-500 mt-0.5">{brand.code}</p>
+                                
+                                {/* Add Category Button when Brand is Expanded */}
+                                {isExpanded && (
+                                  <div className="mr-6 mb-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 text-xs gap-1 text-slate-400 hover:text-white hover:bg-slate-700/50 w-full justify-start"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCategoryParentBrand(brand.id);
+                                        setCategoryParentCategory(null);
+                                        setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
+                                        setShowCreateCategoryDialog(true);
+                                      }}
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                      إضافة فئة
+                                    </Button>
+                                  </div>
+                                )}
+                                
+                                {/* Categories under Brand - Indented Tree */}
+                                {isExpanded && brandCategories.length > 0 && (
+                                  <div className="mr-6 space-y-0.5">
+                                    {brandCategories.map((category) => {
+                                      const categoryKey = `${brand.id}-${category.id}`;
+                                      const isCategoryExpanded = expandedCategories.has(categoryKey);
+                                      const subcategories = getSubcategories(category.id);
+                                      
+                                      return (
+                                        <ContextMenu key={category.id}>
+                                          <ContextMenuTrigger asChild>
+                                            <div>
+                                              <div
+                                                className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-800/50 rounded cursor-pointer group"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (subcategories.length > 0) {
+                                                    const newExpanded = new Set(expandedCategories);
+                                                    if (newExpanded.has(categoryKey)) {
+                                                      newExpanded.delete(categoryKey);
+                                                    } else {
+                                                      newExpanded.add(categoryKey);
+                                                    }
+                                                    setExpandedCategories(newExpanded);
+                                                  } else {
+                                                    handleCategoryClick(category);
+                                                  }
+                                                }}
+                                              >
+                                                {/* Expand/Collapse Icon */}
+                                                <div className="w-4 h-4 flex items-center justify-center">
+                                                  {subcategories.length > 0 ? (
+                                                    isCategoryExpanded ? (
+                                                      <ChevronDown className="h-3 w-3 text-slate-400" />
+                                                    ) : (
+                                                      <ChevronRight className="h-3 w-3 text-slate-400" />
+                                                    )
+                                                  ) : (
+                                                    <div className="w-3 h-3" />
+                                                  )}
+                                                </div>
+                                                {/* Folder Icon */}
+                                                {isCategoryExpanded || subcategories.length === 0 ? (
+                                                  <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                                                ) : (
+                                                  <Folder className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                                                )}
+                                                {/* Category Name */}
+                                                <span className="text-sm text-slate-300 group-hover:text-white flex-1 truncate">
+                                                  {category.nameAr || category.name}
+                                                </span>
+                                              </div>
+                                              
+                                              {/* Subcategories - More Indented */}
+                                              {isCategoryExpanded && subcategories.length > 0 && (
+                                                <div className="mr-6 space-y-0.5">
+                                                  {subcategories.map((subcat) => {
+                                                    const subcatKey = `${category.id}-${subcat.id}`;
+                                                    const isSubcatExpanded = expandedCategories.has(subcatKey);
+                                                    const subSubcategories = getSubcategories(subcat.id);
+                                                    
+                                                    return (
+                                                      <div key={subcat.id}>
+                                                        <div
+                                                          className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-800/50 rounded cursor-pointer group"
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (subSubcategories.length > 0) {
+                                                              const newExpanded = new Set(expandedCategories);
+                                                              if (newExpanded.has(subcatKey)) {
+                                                                newExpanded.delete(subcatKey);
+                                                              } else {
+                                                                newExpanded.add(subcatKey);
+                                                              }
+                                                              setExpandedCategories(newExpanded);
+                                                            } else {
+                                                              handleCategoryClick(subcat);
+                                                            }
+                                                          }}
+                                                        >
+                                                          <div className="w-4 h-4 flex items-center justify-center">
+                                                            {subSubcategories.length > 0 ? (
+                                                              isSubcatExpanded ? (
+                                                                <ChevronDown className="h-3 w-3 text-slate-400" />
+                                                              ) : (
+                                                                <ChevronRight className="h-3 w-3 text-slate-400" />
+                                                              )
+                                                            ) : (
+                                                              <div className="w-3 h-3" />
+                                                            )}
+                                                          </div>
+                                                          {isSubcatExpanded || subSubcategories.length === 0 ? (
+                                                            <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                                                          ) : (
+                                                            <Folder className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                                                          )}
+                                                          <span className="text-sm text-slate-300 group-hover:text-white flex-1 truncate">
+                                                            {subcat.nameAr || subcat.name}
+                                                          </span>
+                                                        </div>
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </ContextMenuTrigger>
+                                          <ContextMenuContent className="w-48 bg-slate-800 border-slate-700">
+                                            <ContextMenuItem
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (subcategories.length > 0) {
+                                                  const newExpanded = new Set(expandedCategories);
+                                                  if (!newExpanded.has(categoryKey)) {
+                                                    newExpanded.add(categoryKey);
+                                                    setExpandedCategories(newExpanded);
+                                                  }
+                                                } else {
+                                                  handleCategoryClick(category);
+                                                }
+                                              }}
+                                              className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                              عرض المحتوى
+                                            </ContextMenuItem>
+                                            <ContextMenuSeparator className="bg-slate-700" />
+                                            <ContextMenuItem
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setCategoryParentBrand(brand.id);
+                                                setCategoryParentCategory(category.id);
+                                                setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
+                                                setShowCreateCategoryDialog(true);
+                                              }}
+                                              className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
+                                              disabled={subcategories.length >= MAX_SUBCATEGORIES}
+                                            >
+                                              <Folder className="h-4 w-4" />
+                                              إضافة فئة فرعية
+                                            </ContextMenuItem>
+                                            <ContextMenuItem
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const params = new URLSearchParams();
+                                                params.set('brandId', brand.id);
+                                                params.set('categoryIds', category.id);
+                                                params.set('openAdd', 'true');
+                                                navigate(`/dashboard/products?${params.toString()}`);
+                                              }}
+                                              className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
+                                              disabled={subcategories.length > 0}
+                                            >
+                                              <Package className="h-4 w-4" />
+                                              إضافة منتج
+                                            </ContextMenuItem>
+                                          </ContextMenuContent>
+                                        </ContextMenu>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                          </ContextMenuTrigger>
-                          <ContextMenuContent className="w-48">
-                            <ContextMenuItem
-                              onClick={() => handleBrandClick(brand.id)}
-                              className="gap-2"
-                            >
-                              <Eye className="h-4 w-4" />
-                              عرض المحتوى
-                            </ContextMenuItem>
-                            <ContextMenuSeparator />
-                            <ContextMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setBrandToDelete(brand);
-                                setShowDeleteBrandDialog(true);
-                              }}
-                              className="gap-2 text-red-500 focus:text-red-500"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              حذف العلامة التجارية
-                            </ContextMenuItem>
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      ))}
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="w-48 bg-slate-800 border-slate-700">
+                              <ContextMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newExpanded = new Set(expandedBrands);
+                                  if (!newExpanded.has(brand.id)) {
+                                    newExpanded.add(brand.id);
+                                    setExpandedBrands(newExpanded);
+                                  }
+                                }}
+                                className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
+                              >
+                                <Eye className="h-4 w-4" />
+                                عرض المحتوى
+                              </ContextMenuItem>
+                              <ContextMenuSeparator className="bg-slate-700" />
+                              <ContextMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCategoryParentBrand(brand.id);
+                                  setCategoryParentCategory(null);
+                                  setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
+                                  setShowCreateCategoryDialog(true);
+                                }}
+                                className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
+                              >
+                                <Folder className="h-4 w-4" />
+                                إضافة فئة
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const params = new URLSearchParams();
+                                  params.set('brandId', brand.id);
+                                  params.set('openAdd', 'true');
+                                  navigate(`/dashboard/products?${params.toString()}`);
+                                }}
+                                className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
+                              >
+                                <Package className="h-4 w-4" />
+                                إضافة منتج
+                              </ContextMenuItem>
+                              <ContextMenuSeparator className="bg-slate-700" />
+                              <ContextMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setBrandToDelete(brand);
+                                  setShowDeleteBrandDialog(true);
+                                }}
+                                className="gap-2 text-red-500 focus:text-red-500 hover:bg-slate-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                حذف العلامة التجارية
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1513,12 +1769,16 @@ export function HierarchicalExplorer({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {currentView === 'subcategories' || currentView === 'products' ? 'إضافة فئة فرعية جديدة' : 'إضافة فئة جديدة'}
+              {categoryParentCategory ? 'إضافة فئة فرعية جديدة' : categoryParentBrand ? 'إضافة فئة جديدة' : (currentView === 'subcategories' || currentView === 'products' ? 'إضافة فئة فرعية جديدة' : 'إضافة فئة جديدة')}
             </DialogTitle>
             <DialogDescription>
-              {categoryPath.length > 0 
-                ? `إضافة فئة فرعية تحت: ${categoryPath.map(c => c.nameAr || c.name).join(' > ')}`
-                : 'إضافة فئة جديدة'}
+              {categoryParentCategory 
+                ? `إضافة فئة فرعية تحت الفئة المحددة`
+                : categoryParentBrand
+                ? `إضافة فئة تحت العلامة التجارية: ${brands.find(b => b.id === categoryParentBrand)?.nameAr || brands.find(b => b.id === categoryParentBrand)?.name || ''}`
+                : categoryPath.length > 0 
+                  ? `إضافة فئة فرعية تحت: ${categoryPath.map(c => c.nameAr || c.name).join(' > ')}`
+                  : 'إضافة فئة جديدة'}
             </DialogDescription>
           </DialogHeader>
           

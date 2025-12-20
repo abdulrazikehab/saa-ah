@@ -19,12 +19,16 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft, Mail, Send, CheckCircle2, Sparkles } from 'lucide-react';
 import { VersionFooter } from '@/components/common/VersionFooter';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
+import { getProfessionalErrorMessage } from '@/lib/toast-errors';
+import { useTranslation } from 'react-i18next';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
 });
 
 export default function ForgotPassword() {
+  const { i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -48,10 +52,15 @@ export default function ForgotPassword() {
         description: 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني',
       });
     } catch (error) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'إرسال' : 'send', resource: isRTL ? 'رابط إعادة التعيين' : 'reset link' },
+        isRTL
+      );
       toast({
         variant: 'destructive',
-        title: 'تعذر إرسال الرابط',
-        description: 'حدث خطأ أثناء إرسال رابط إعادة التعيين. يرجى المحاولة مرة أخرى.',
+        title,
+        description,
       });
     } finally {
       setIsLoading(false);
