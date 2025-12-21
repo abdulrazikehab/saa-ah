@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { authService } from '@/services/auth.service';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
-import { Loader2, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, CheckCircle2, Copy, Key, Shield, Download, MessageSquare, X } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, CheckCircle2, Copy, Key, Shield, Download, MessageSquare, X, Store } from 'lucide-react';
 import { InteractiveFace, FaceState } from '@/components/ui/InteractiveFace';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
 import { VersionFooter } from '@/components/common/VersionFooter';
@@ -23,6 +23,8 @@ export default function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [nationalId, setNationalId] = useState('');
   const [loading, setLoading] = useState(false);
   const [faceState, setFaceState] = useState<FaceState>('excited');
   const [isFocused, setIsFocused] = useState(false);
@@ -88,9 +90,29 @@ export default function Signup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!storeName || !storeName.trim()) {
+      toast({
+        title: isRTL ? 'حقل مطلوب' : 'Required Field',
+        description: isRTL ? 'اسم المتجر مطلوب' : 'Store name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (!nationalId || !nationalId.trim()) {
+      toast({
+        title: isRTL ? 'حقل مطلوب' : 'Required Field',
+        description: isRTL ? 'الهوية الوطنية أو رقم الجواز مطلوب' : 'National ID or Passport ID is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setLoading(true);
     try {
-      const result = await authService.signup({ name, email, password });
+      const result = await authService.signup({ name, email, password, storeName, nationalId });
       setFaceState('happy');
       setSignupEmail(email);
       
@@ -111,9 +133,9 @@ export default function Signup() {
       }
       
       // Show OTP verification modal first (recovery ID will be shown after verification)
-      if (result.verificationCodeSent || result.emailVerified === false || (result as any).verificationCode) {
+      if (result.verificationCodeSent || (result as any).emailVerified === false || (result as any).verificationCode) {
         setShowOtpModal(true);
-      } else if (result.recoveryId) {
+      } else if ((result as any).recoveryId) {
         // Fallback: if no verification needed, show recovery ID directly
         setRecoveryId(result.recoveryId);
         setShowRecoveryModal(true);
@@ -200,14 +222,13 @@ export default function Signup() {
     setShowRecoveryModal(false);
     localStorage.removeItem('setupPending');
     
-    // New users must always create their market first
+    // Tenant was created automatically during signup, redirect to dashboard
     toast({
       title: t('common.success'),
-      description: t('auth.signup.successSetup', 'Account created successfully! Please set up your store.'),
+      description: isRTL ? 'تم إنشاء حسابك ومتجرك بنجاح. مرحباً بك!' : 'Account and store created successfully! Welcome!',
     });
     setTimeout(() => {
-      // Always redirect to setup for new signups - they must create market first
-      navigate('/setup');
+      navigate('/dashboard');
     }, 1000);
   };
 
@@ -233,30 +254,41 @@ export default function Signup() {
         // Close OTP modal
         setShowOtpModal(false);
         
-        // Check if setup is pending (no tenant created)
-        const setupPending = (result as any).setupPending || !(result as any).tenantId;
+        // Check if setup is pending (tenant should be created automatically now)
+        const setupPending = (result as any).setupPending === true;
+        const tenantId = (result as any).tenantId;
         
         // Get recovery ID from verification result (account was just created)
         if ((result as any).recoveryId) {
           setRecoveryId((result as any).recoveryId);
           setShowRecoveryModal(true);
-          // Store setupPending flag for after recovery modal
+          // Store setupPending flag for after recovery modal (should be false now since tenant is auto-created)
           if (setupPending) {
             localStorage.setItem('setupPending', 'true');
+          } else {
+            localStorage.removeItem('setupPending');
           }
         } else {
-          // If no recovery ID, always redirect to setup for new users
-          // New users must create their market first
-          toast({
-            title: 'تم التحقق بنجاح!',
-            description: setupPending 
-              ? 'تم التحقق من بريدك الإلكتروني. يرجى إعداد متجرك الآن.'
-              : 'تم التحقق من بريدك الإلكتروني. يرجى إعداد متجرك الآن.',
-          });
-          setTimeout(() => {
-            // Always redirect to setup for new signups - they must create market first
-            navigate('/setup');
-          }, 1000);
+          // If no recovery ID, check if tenant was created
+          if (tenantId && !setupPending) {
+            // Tenant was created automatically, redirect to dashboard
+            toast({
+              title: 'تم التحقق بنجاح!',
+              description: 'تم إنشاء حسابك ومتجرك بنجاح. مرحباً بك!',
+            });
+            setTimeout(() => {
+              navigate('/dashboard');
+            }, 1000);
+          } else {
+            // Fallback: redirect to dashboard (tenant should be created automatically)
+            toast({
+              title: 'تم التحقق بنجاح!',
+              description: 'تم إنشاء حسابك ومتجرك بنجاح. مرحباً بك!',
+            });
+            setTimeout(() => {
+              navigate('/dashboard');
+            }, 1000);
+          }
         }
       } else {
         const { title, description } = getProfessionalErrorMessage(
@@ -532,7 +564,7 @@ export default function Signup() {
           <div className="relative z-10">
           <Link to="/" className="inline-flex flex-col gap-4 group">
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
+              <div className="w-28 h-28 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
                 <img src={getLogoUrl()} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
               <div className="flex flex-col">
@@ -586,7 +618,7 @@ export default function Signup() {
             {/* Mobile Logo with Bilingual Branding */}
             <Link to="/" className="lg:hidden flex flex-col items-center gap-3 mb-8 group">
               <div className="flex items-center gap-3">
-                <div className="w-16 h-16 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
+                <div className="w-24 h-24 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
                   <img src={getLogoUrl()} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
                 </div>
                 <div className="flex flex-col">
@@ -616,22 +648,6 @@ export default function Signup() {
               </CardHeader>
 
               <CardContent className="space-y-4">
-                {/* Google Sign-In */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-11 border-2 hover:bg-muted/50 transition-colors"
-                  onClick={handleGoogleSignIn}
-                >
-                  <svg className="ml-2 h-5 w-5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  <span className="text-foreground">Google</span>
-                </Button>
-
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
                     <Separator />
@@ -654,6 +670,47 @@ export default function Signup() {
                         placeholder={t('auth.signup.namePlaceholder', 'John Doe')}
                         value={name}
                         onChange={handleInputChange(setName)}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={() => setIsFocused(false)}
+                        required
+                        className="h-11 pr-10 border-border focus:border-primary focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="storeName" className="text-sm font-medium">
+                      {isRTL ? 'اسم المتجر' : 'Store Name'} *
+                    </Label>
+                    <div className="relative">
+                      <Store className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                      <Input
+                        id="storeName"
+                        placeholder={isRTL ? 'اسم المتجر' : 'Store Name'}
+                        value={storeName}
+                        onChange={handleInputChange(setStoreName)}
+                        onFocus={() => setIsFocused(true)}
+                        onBlur={() => setIsFocused(false)}
+                        required
+                        className="h-11 pr-10 border-border focus:border-primary focus:ring-primary"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isRTL ? 'سيتم إنشاء عنوان فرعي تلقائياً من اسم المتجر' : 'Subdomain will be generated automatically from store name'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="nationalId" className="text-sm font-medium">
+                      {isRTL ? 'الهوية الوطنية / رقم الجواز' : 'National ID / Passport ID'} *
+                    </Label>
+                    <div className="relative">
+                      <Shield className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                      <Input
+                        id="nationalId"
+                        placeholder={isRTL ? 'الهوية الوطنية أو رقم الجواز' : 'National ID or Passport ID'}
+                        value={nationalId}
+                        onChange={handleInputChange(setNationalId)}
                         onFocus={() => setIsFocused(true)}
                         onBlur={() => setIsFocused(false)}
                         required

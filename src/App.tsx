@@ -103,6 +103,11 @@ import PartnerWithUs from './pages/PartnerWithUs';
 import CookieConsent from './components/ui/CookieConsent';
 import CookieRequired from './components/ui/CookieRequired';
 import i18n from './i18n';
+import CardsStore from "./pages/dashboard/cards/CardsStore";
+import CardsFavorites from "./pages/dashboard/cards/CardsFavorites";
+import CardsOrders from "./pages/dashboard/cards/CardsOrders";
+import CardsReports from "./pages/dashboard/cards/CardsReports";
+import EmployeesManager from "./pages/dashboard/EmployeesManager";
 
 const queryClient = new QueryClient();
 
@@ -288,6 +293,10 @@ const App = () => {
                 {/* Market Setup (Protected, No Dashboard Layout) */}
                 <Route path="/setup" element={<ProtectedRoute><MarketSetup /></ProtectedRoute>} />
                 
+                {/* Page Builder (Full Screen) */}
+                <Route path="/builder/new" element={<ProtectedRoute><PageBuilderPage /></ProtectedRoute>} />
+                <Route path="/builder/:id" element={<ProtectedRoute><PageBuilderPage /></ProtectedRoute>} />
+                
                 {/* Dashboard Routes (Protected, With Dashboard Layout) */}
                 <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<Dashboard />} />
@@ -301,8 +310,6 @@ const App = () => {
                   <Route path="/dashboard/customers" element={<CustomersManager />} />
                   <Route path="/dashboard/reports" element={<ReportsPage />} />
                   <Route path="/dashboard/pages" element={<PagesManager />} />
-                  <Route path="/dashboard/pages/new" element={<PageBuilderPage />} />
-                  <Route path="/dashboard/pages/:id" element={<PageBuilderPage />} />
                   <Route path="/dashboard/chat" element={<ChatInterface />} />
                   <Route path="/dashboard/storefront" element={<StorefrontEditor />} />
                   <Route path="/dashboard/navigation" element={<NavigationEditor />} />
@@ -320,6 +327,16 @@ const App = () => {
                   <Route path="/dashboard/reports" element={<Reports />} />
                   <Route path="/dashboard/support" element={<SupportPage />} />
                   <Route path="/dashboard/help" element={<Help />} />
+                  
+                  {/* Cards Dashboard Routes */}
+                  <Route path="/dashboard/cards/store" element={<CardsStore />} />
+                  <Route path="/dashboard/cards/favorites" element={<CardsFavorites />} />
+                  <Route path="/dashboard/cards/orders" element={<CardsOrders />} />
+                  <Route path="/dashboard/cards/reports" element={<CardsReports />} />
+                  
+                  {/* Employees Route */}
+                  <Route path="/dashboard/employees" element={<EmployeesManager />} />
+
                   {/* Direct access settings pages (from sidebar) */}
                   <Route path="/dashboard/settings/suppliers" element={<SuppliersPage />} />
                   <Route path="/dashboard/settings/brands" element={<BrandsPage />} />

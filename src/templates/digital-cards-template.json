@@ -33,11 +33,11 @@
           "props": {
             "title": "إجراءات سريعة",
             "actions": [
-              { "label": "شحن الرصيد", "icon": "wallet", "link": "/charge-wallet" },
-              { "label": "إنشاء طلب", "icon": "shopping-cart", "link": "/store" },
-              { "label": "المفضلة", "icon": "heart", "link": "/favorites" },
-              { "label": "إضافة موظف", "icon": "user-plus", "link": "/employees" },
-              { "label": "إضافة تذكرة", "icon": "ticket", "link": "/tickets" }
+              { "label": "إضافة منتج", "icon": "plus", "link": "/dashboard/products" },
+              { "label": "إدارة المنتجات", "icon": "package", "link": "/dashboard/products" },
+              { "label": "إدارة الطلبات", "icon": "shopping-cart", "link": "/dashboard/orders" },
+              { "label": "إعدادات المتجر", "icon": "settings", "link": "/dashboard/settings" },
+              { "label": "التقارير", "icon": "bar-chart-3", "link": "/dashboard/reports" }
             ]
           }
         },

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Store, Plus, Check, Loader2, ChevronDown, Crown, AlertCircle } from 'lucide-react';
+import { Store, Plus, Check, Loader2, ChevronDown, Crown, AlertCircle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,6 +9,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { authService } from '@/services/auth.service';
@@ -38,6 +48,9 @@ export function StoreSwitcher() {
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [canCreate, setCanCreate] = useState({ allowed: false, currentCount: 0, limit: 1 });
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [marketToDelete, setMarketToDelete] = useState<Market | null>(null);
 
   useEffect(() => {
     loadMarkets();
@@ -99,6 +112,59 @@ export function StoreSwitcher() {
 
   const handleCreateStore = () => {
     navigate('/setup');
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, market: Market) => {
+    e.stopPropagation(); // Prevent switching store when clicking delete
+    setMarketToDelete(market);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!marketToDelete) return;
+
+    // Prevent deleting active market
+    if (marketToDelete.id === user?.tenantId) {
+      toast({
+        title: t('common.error'),
+        description: isRTL 
+          ? 'لا يمكن حذف المتجر النشط. يرجى التبديل إلى متجر آخر أولاً.'
+          : 'Cannot delete the active market. Please switch to another market first.',
+        variant: 'destructive',
+      });
+      setDeleteDialogOpen(false);
+      setMarketToDelete(null);
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      await authService.deleteMarket(marketToDelete.id);
+      
+      toast({
+        title: t('common.success'),
+        description: isRTL 
+          ? `تم حذف المتجر "${marketToDelete.name}" بنجاح`
+          : `Market "${marketToDelete.name}" deleted successfully`,
+      });
+
+      // Reload markets list
+      await loadMarkets();
+      
+      // Refresh user data
+      await refreshUser();
+    } catch (error: any) {
+      console.error('Failed to delete market:', error);
+      toast({
+        title: t('common.error'),
+        description: error.message || (isRTL ? 'فشل حذف المتجر' : 'Failed to delete market'),
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setMarketToDelete(null);
+    }
   };
 
   const currentMarket = markets.find(m => m.id === user?.tenantId);
@@ -181,49 +247,71 @@ export function StoreSwitcher() {
           <div className="py-1">
             {markets.map((market) => {
               const isActive = market.id === user?.tenantId;
+              const canDelete = market.isOwner && !isActive;
               return (
-                <DropdownMenuItem
+                <div
                   key={market.id}
-                  onClick={() => handleSwitchStore(market.id)}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer mx-1 my-0.5 rounded-md transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-2.5 mx-1 my-0.5 rounded-md transition-colors ${
                     isActive 
                       ? 'bg-primary/10 border border-primary/20' 
                       : 'hover:bg-muted'
                   }`}
-                  disabled={switching}
                 >
-                  {/* Store Icon */}
-                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-muted'
-                  }`}>
-                    <Store className="h-4 w-4" />
-                  </div>
-                  
-                  {/* Store Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{market.name}</span>
-                      {market.isOwner && (
-                        <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" aria-label="مالك" />
-                      )}
+                  <DropdownMenuItem
+                    onClick={() => handleSwitchStore(market.id)}
+                    className={`flex items-center gap-3 flex-1 p-0 cursor-pointer ${
+                      isActive 
+                        ? 'bg-transparent' 
+                        : ''
+                    }`}
+                    disabled={switching}
+                  >
+                    {/* Store Icon */}
+                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${
+                      isActive 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted'
+                    }`}>
+                      <Store className="h-4 w-4" />
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-muted-foreground truncate">
-                        {market.subdomain}
-                      </span>
-                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getPlanBadge(market.plan)}`}>
-                        {market.plan}
-                      </Badge>
+                    
+                    {/* Store Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{market.name}</span>
+                        {market.isOwner && (
+                          <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" aria-label="مالك" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground truncate">
+                          {market.subdomain}
+                        </span>
+                        <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getPlanBadge(market.plan)}`}>
+                          {market.plan}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
+                    
+                    {/* Active Indicator */}
+                    {isActive && (
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                    )}
+                  </DropdownMenuItem>
                   
-                  {/* Active Indicator */}
-                  {isActive && (
-                    <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                  {/* Delete Button */}
+                  {canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={(e) => handleDeleteClick(e, market)}
+                      disabled={deleting}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
-                </DropdownMenuItem>
+                </div>
               );
             })}
           </div>
@@ -256,6 +344,41 @@ export function StoreSwitcher() {
           </div>
         )}
       </DropdownMenuContent>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isRTL ? 'حذف المتجر' : 'Delete Market'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {isRTL 
+                ? `هل أنت متأكد من حذف المتجر "${marketToDelete?.name}"؟ هذا الإجراء لا يمكن التراجع عنه وسيتم حذف جميع البيانات المرتبطة به.`
+                : `Are you sure you want to delete the market "${marketToDelete?.name}"? This action cannot be undone and will delete all associated data.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>
+              {isRTL ? 'إلغاء' : 'Cancel'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {isRTL ? 'جاري الحذف...' : 'Deleting...'}
+                </>
+              ) : (
+                isRTL ? 'حذف' : 'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DropdownMenu>
   );
 }

@@ -4,7 +4,7 @@ import { coreApi } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { 
   Search, Loader2, Filter, SlidersHorizontal, Grid3x3, List,
-  X, Package, Sparkles, TrendingUp
+  X, Package, Sparkles, TrendingUp, ChevronRight
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Product, Category } from '@/services/types';
+import { cn } from '@/lib/utils';
 
 export default function Products() {
   const { t } = useTranslation();
@@ -80,10 +81,8 @@ export default function Products() {
       ((product as any).categories && (product as any).categories.some((cat: any) => selectedCategories.includes(cat.id || cat.category?.id))) ||
       (product.categoryId && selectedCategories.includes(product.categoryId));
     return matchesSearch && matchesPrice && matchesCategory;
-});
+  });
 
-
-  // Sort products
   filteredProducts = [...filteredProducts].sort((a: Product, b: Product) => {
     switch (sortBy) {
       case 'price-asc':
@@ -99,20 +98,24 @@ export default function Products() {
     }
   });
 
-
-
   const FilterSidebar = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Categories */}
       <div>
-        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <Filter className="h-5 w-5 text-indigo-600" />
-          الفئات
+        <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+          <div className="p-2 rounded-lg gradient-primary">
+            <Filter className="h-4 w-4 text-white" />
+          </div>
+          <span className="gradient-text">{t('storefront.products.categories')}</span>
         </h3>
         <div className="space-y-3">
-          {categories.map((category) => (
-            <div key={category.id} className="flex items-center justify-between group">
-              <div className="flex items-center gap-2">
+          {categories.map((category, index) => (
+            <div 
+              key={category.id} 
+              className="flex items-center justify-between group animate-slide-up"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <div className="flex items-center gap-3">
                 <Checkbox
                   id={category.id}
                   checked={selectedCategories.includes(category.id)}
@@ -123,15 +126,17 @@ export default function Products() {
                       setSelectedCategories(selectedCategories.filter(id => id !== category.id));
                     }
                   }}
-                  className="data-[state=checked]:bg-indigo-600"
+                  className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                 />
-                <Label htmlFor={category.id} className="cursor-pointer group-hover:text-indigo-600 transition-colors">
+                <Label 
+                  htmlFor={category.id} 
+                  className="cursor-pointer group-hover:text-primary transition-colors font-medium"
+                >
                   {category.name}
                 </Label>
               </div>
-              {/* Only show count if available */}
               {(category as any).count !== undefined && (
-                <Badge variant="secondary" className="text-xs bg-indigo-50 text-indigo-700">
+                <Badge variant="outline" className="text-xs border-primary/30 text-primary">
                   {(category as any).count}
                 </Badge>
               )}
@@ -142,31 +147,44 @@ export default function Products() {
 
       {/* Price Range */}
       <div>
-        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-indigo-600" />
-          نطاق السعر
+        <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+          <div className="p-2 rounded-lg gradient-secondary">
+            <TrendingUp className="h-4 w-4 text-white" />
+          </div>
+          <span className="gradient-text-secondary">{t('storefront.products.priceRange')}</span>
         </h3>
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Input
-              type="number"
-              placeholder="من"
-              value={priceRange[0]}
-              onChange={(e) => setPriceRange([Number(e.target.value), priceRange[1]])}
-              className="flex-1 border-2 focus:border-indigo-600"
-            />
-            <span className="text-gray-500 font-bold">-</span>
-            <Input
-              type="number"
-              placeholder="إلى"
-              value={priceRange[1]}
-              onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value)])}
-              className="flex-1 border-2 focus:border-indigo-600"
-            />
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">{t('storefront.products.from')}</Label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={priceRange[0]}
+                onChange={(e) => setPriceRange([Number(e.target.value), priceRange[1]])}
+                className="border-2 focus:border-primary/50 rounded-xl"
+              />
+            </div>
+            <span className="text-muted-foreground font-bold mt-5">-</span>
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">{t('storefront.products.to')}</Label>
+              <Input
+                type="number"
+                placeholder="10000"
+                value={priceRange[1]}
+                onChange={(e) => setPriceRange([priceRange[0], Number(e.target.value)])}
+                className="border-2 focus:border-primary/50 rounded-xl"
+              />
+            </div>
           </div>
-          <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-semibold">{priceRange[0]} ر.س</span>
-            <span className="font-semibold">{priceRange[1]} ر.س</span>
+          <div className="flex items-center justify-between text-sm">
+            <span className="px-2 py-1 rounded-lg bg-primary/10 text-primary font-semibold">
+              {priceRange[0]} {t('common.currency')}
+            </span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <span className="px-2 py-1 rounded-lg bg-secondary/10 text-secondary font-semibold">
+              {priceRange[1]} {t('common.currency')}
+            </span>
           </div>
         </div>
       </div>
@@ -175,56 +193,85 @@ export default function Products() {
       {(selectedCategories.length > 0 || priceRange[0] > 0 || priceRange[1] < 10000) && (
         <Button
           variant="outline"
-          className="w-full border-2 hover:bg-red-50 hover:text-red-600 hover:border-red-600 transition-all"
+          className="w-full rounded-xl border-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:border-destructive transition-all"
           onClick={() => {
             setSelectedCategories([]);
             setPriceRange([0, 10000]);
           }}
         >
           <X className="ml-2 h-4 w-4" />
-          مسح الفلاتر
+          {t('storefront.products.clearFilters')}
         </Button>
       )}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50/30 dark:from-gray-900 dark:via-gray-900 dark:to-indigo-950/30">
+    <div className="min-h-screen bg-background">
+      {/* Page Header */}
+      <div className="relative overflow-hidden">
+        <div className="absolute inset-0 gradient-mesh opacity-30" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+        
+        <div className="container relative py-12">
+          <div className="flex items-center gap-2 text-muted-foreground mb-4 animate-fade-in">
+            <span>{t('storefront.products.home')}</span>
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-foreground font-medium">{t('storefront.products.title')}</span>
+          </div>
+          
+          <div className="flex items-center gap-4 mb-2 animate-slide-up">
+            <div className="p-3 rounded-xl gradient-primary shadow-glow">
+              <Package className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold gradient-text">
+              {t('storefront.products.title')}
+            </h1>
+          </div>
+          <p className="text-muted-foreground text-lg animate-slide-up animation-delay-200">
+            {t('storefront.products.subtitle')}
+          </p>
+        </div>
+      </div>
+
       <div className="container py-8">
         {/* Search and Controls */}
-        <div className="mb-8 flex flex-col lg:flex-row gap-4">
+        <div className="mb-8 flex flex-col lg:flex-row gap-4 animate-slide-up animation-delay-400">
           {/* Search */}
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
-              placeholder="ابحث عن المنتجات..."
+              placeholder={t('storefront.products.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pr-12 h-14 border-2 rounded-xl shadow-sm focus:shadow-md transition-all text-lg"
+              className="pr-12 h-14 border-2 border-border/50 focus:border-primary/50 rounded-xl shadow-sm text-lg bg-card"
             />
           </div>
 
           <div className="flex gap-3">
             {/* Sort */}
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[200px] h-14 border-2 rounded-xl shadow-sm">
-                <SelectValue placeholder="ترتيب حسب" />
+              <SelectTrigger className="w-[200px] h-14 border-2 border-border/50 rounded-xl shadow-sm bg-card">
+                <SelectValue placeholder={t('storefront.products.sortBy')} />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">الأحدث</SelectItem>
-                <SelectItem value="price-asc">السعر: من الأقل</SelectItem>
-                <SelectItem value="price-desc">السعر: من الأعلى</SelectItem>
-                <SelectItem value="name-asc">الاسم: أ-ي</SelectItem>
-                <SelectItem value="name-desc">الاسم: ي-أ</SelectItem>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="newest">{t('storefront.products.newest')}</SelectItem>
+                <SelectItem value="price-asc">{t('storefront.products.priceAsc')}</SelectItem>
+                <SelectItem value="price-desc">{t('storefront.products.priceDesc')}</SelectItem>
+                <SelectItem value="name-asc">{t('storefront.products.nameAsc')}</SelectItem>
+                <SelectItem value="name-desc">{t('storefront.products.nameDesc')}</SelectItem>
               </SelectContent>
             </Select>
 
             {/* View Mode */}
-            <div className="hidden md:flex border-2 rounded-xl overflow-hidden shadow-sm">
+            <div className="hidden md:flex border-2 border-border/50 rounded-xl overflow-hidden shadow-sm bg-card">
               <Button
                 variant={viewMode === 'grid' ? 'default' : 'ghost'}
                 size="icon"
-                className="rounded-none h-14 w-14"
+                className={cn(
+                  "rounded-none h-14 w-14 transition-all",
+                  viewMode === 'grid' && "gradient-primary text-white"
+                )}
                 onClick={() => setViewMode('grid')}
               >
                 <Grid3x3 className="h-5 w-5" />
@@ -232,7 +279,10 @@ export default function Products() {
               <Button
                 variant={viewMode === 'list' ? 'default' : 'ghost'}
                 size="icon"
-                className="rounded-none h-14 w-14"
+                className={cn(
+                  "rounded-none h-14 w-14 transition-all",
+                  viewMode === 'list' && "gradient-primary text-white"
+                )}
                 onClick={() => setViewMode('list')}
               >
                 <List className="h-5 w-5" />
@@ -244,17 +294,22 @@ export default function Products() {
               <SheetTrigger asChild>
                 <Button variant="outline" className="lg:hidden h-14 border-2 rounded-xl shadow-sm">
                   <SlidersHorizontal className="ml-2 h-5 w-5" />
-                  فلتر
+                  {t('storefront.products.filter')}
+                  {selectedCategories.length > 0 && (
+                    <Badge className="mr-2 gradient-primary text-white">
+                      {selectedCategories.length}
+                    </Badge>
+                  )}
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[320px]">
+              <SheetContent side="right" className="w-[320px] glass-effect-strong">
                 <SheetHeader>
-                  <SheetTitle className="text-2xl">الفلاتر</SheetTitle>
+                  <SheetTitle className="text-2xl gradient-text">{t('storefront.products.filters')}</SheetTitle>
                   <SheetDescription>
-                    اختر الفلاتر لتضييق نطاق البحث
+                    {t('storefront.products.filterDesc')}
                   </SheetDescription>
                 </SheetHeader>
-                <div className="mt-6">
+                <div className="mt-8">
                   <FilterSidebar />
                 </div>
               </SheetContent>
@@ -264,8 +319,8 @@ export default function Products() {
 
         <div className="flex gap-8">
           {/* Desktop Filters Sidebar */}
-          <aside className="hidden lg:block w-72 flex-shrink-0">
-            <Card className="p-6 sticky top-4 border-2 shadow-lg rounded-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+          <aside className="hidden lg:block w-80 flex-shrink-0">
+            <Card className="p-6 sticky top-24 border-2 border-border/30 shadow-xl rounded-2xl glass-effect">
               <FilterSidebar />
             </Card>
           </aside>
@@ -273,72 +328,82 @@ export default function Products() {
           {/* Products Grid */}
           <div className="flex-1">
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-32">
-                <Loader2 className="h-16 w-16 animate-spin text-indigo-600 mb-4" />
-                <p className="text-gray-600 dark:text-gray-400 text-lg">جاري تحميل المنتجات...</p>
+              <div className="flex flex-col items-center justify-center py-32 animate-fade-in">
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full gradient-primary blur-2xl opacity-30 animate-pulse" />
+                  <Loader2 className="relative h-16 w-16 animate-spin text-primary mb-6" />
+                </div>
+                <p className="text-muted-foreground text-lg font-medium">{t('storefront.products.loading')}</p>
               </div>
             ) : filteredProducts.length > 0 ? (
               <>
-                <div className="mb-6 flex items-center justify-between p-4 bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl border-2">
-                  <p className="text-gray-600 dark:text-gray-400 text-lg">
-                    <span className="font-bold text-2xl text-indigo-600 dark:text-indigo-400">
+                {/* Results Header */}
+                <div className="mb-6 flex items-center justify-between p-5 glass-card rounded-2xl animate-slide-up">
+                  <p className="text-muted-foreground text-lg flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                    <span className="font-bold text-2xl gradient-text">
                       {filteredProducts.length}
-                    </span>{' '}
-                    منتج متاح
+                    </span>
+                    {t('storefront.products.availableProducts')}
                   </p>
                   {(selectedCategories.length > 0 || searchQuery) && (
                     <div className="flex items-center gap-2 flex-wrap">
                       {searchQuery && (
-                        <Badge variant="secondary" className="gap-2 px-3 py-1 text-sm">
-                          بحث: {searchQuery}
-                          <X
-                            className="h-3 w-3 cursor-pointer hover:text-red-600"
-                            onClick={() => setSearchQuery('')}
-                          />
+                        <Badge 
+                          variant="outline" 
+                          className="gap-2 px-3 py-1.5 text-sm rounded-lg border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+                          onClick={() => setSearchQuery('')}
+                        >
+                          {t('storefront.products.search')}: {searchQuery}
+                          <X className="h-3 w-3 hover:text-destructive" />
                         </Badge>
                       )}
                       {selectedCategories.length > 0 && (
-                        <Badge variant="secondary" className="px-3 py-1 text-sm">
-                          {selectedCategories.length} فئة محددة
+                        <Badge 
+                          variant="outline" 
+                          className="px-3 py-1.5 text-sm rounded-lg border-secondary/30 bg-secondary/5"
+                        >
+                          {selectedCategories.length} {t('storefront.products.selectedCategories')}
                         </Badge>
                       )}
                     </div>
                   )}
                 </div>
 
+                {/* Products Grid */}
                 <div className={
                   viewMode === 'grid'
-                    ? 'grid sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6'
-                    : 'space-y-4'
+                    ? 'grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6'
+                    : 'space-y-6'
                 }>
                   {filteredProducts.map((product: Product, index: number) => (
-                    <div
-                      key={product.id}
-                      className="animate-fade-in-up"
-                      style={{
-                        animationDelay: `${index * 50}ms`,
-                        animationFillMode: 'both'
-                      }}
-                    >
-                      <ProductCard product={product} viewMode={viewMode} />
-                    </div>
+                    <ProductCard 
+                      key={product.id} 
+                      product={product} 
+                      viewMode={viewMode}
+                      index={index}
+                    />
                   ))}
                 </div>
               </>
             ) : (
-              <Card className="p-16 text-center border-2 shadow-xl rounded-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
-                <Package className="h-24 w-24 mx-auto text-gray-300 dark:text-gray-700 mb-6" />
-                <h3 className="text-3xl font-bold mb-3 text-gray-900 dark:text-white">لا توجد منتجات</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto text-lg">
+              <Card className="p-16 text-center border-2 border-dashed border-border shadow-xl rounded-3xl glass-card animate-scale-in">
+                <div className="relative inline-block mb-6">
+                  <div className="absolute inset-0 rounded-full gradient-mesh blur-2xl opacity-50" />
+                  <div className="relative p-6 rounded-full bg-muted/50">
+                    <Package className="h-20 w-20 text-muted-foreground/30" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-bold mb-3">{t('storefront.products.noProducts')}</h3>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto text-lg">
                   {searchQuery
-                    ? 'لم نجد أي منتجات تطابق بحثك. جرب كلمات مختلفة أو امسح الفلاتر.'
-                    : 'لا توجد منتجات متاحة حالياً. تحقق مرة أخرى قريباً!'}
+                    ? t('storefront.products.noProductsDesc')
+                    : t('storefront.products.noProductsEmpty')}
                 </p>
                 {(searchQuery || selectedCategories.length > 0) && (
                   <Button
                     size="lg"
-                    variant="outline"
-                    className="border-2"
+                    className="rounded-xl gradient-primary text-white hover:shadow-glow transition-shadow"
                     onClick={() => {
                       setSearchQuery('');
                       setSelectedCategories([]);
@@ -346,7 +411,7 @@ export default function Products() {
                     }}
                   >
                     <X className="ml-2 h-5 w-5" />
-                    مسح جميع الفلاتر
+                    {t('storefront.products.clearFilters')}
                   </Button>
                 )}
               </Card>
@@ -354,37 +419,6 @@ export default function Products() {
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes fade-in-up {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fade-in-up {
-          animation: fade-in-up 0.6s ease-out;
-        }
-
-        @keyframes gradient {
-          0%, 100% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-        }
-
-        .animate-gradient {
-          background-size: 200% auto;
-          animation: gradient 3s ease infinite;
-        }
-      `}</style>
     </div>
   );
 }

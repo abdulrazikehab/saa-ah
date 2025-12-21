@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { coreApi, reportService, orderService } from '@/lib/api';
+import { useTranslation } from 'react-i18next';
+import { coreApi, reportService } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Download, Search, TrendingUp, DollarSign, Receipt, Calendar } from 'lucide-react';
 import { writeFile, utils } from 'xlsx';
 import { formatCurrency } from '@/lib/currency-utils';
-// PDF export will be implemented after installing jspdf package
 
 interface ProductReportItem {
   id: string;
@@ -45,6 +45,7 @@ interface Brand {
 }
 
 export default function Reports() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'orderDetails'>('products');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,7 +56,6 @@ export default function Reports() {
   // Data states
   const [productReport, setProductReport] = useState<ProductReportItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [orderDetails, setOrderDetails] = useState<Order[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   
   // Metrics
@@ -112,7 +112,6 @@ export default function Reports() {
       }
       
       setOrders(filteredOrders);
-      setOrderDetails(filteredOrders);
       
       // Calculate metrics
       const price = filteredOrders.reduce((sum: number, order: Order) => sum + (order.subtotal || 0), 0);
@@ -125,7 +124,6 @@ export default function Reports() {
     } catch (error) {
       console.error('Failed to load orders:', error);
       setOrders([]);
-      setOrderDetails([]);
     }
   }, [startDate, endDate, searchTerm]);
 
@@ -141,7 +139,7 @@ export default function Reports() {
       setLoading(false);
     };
     loadData();
-  }, [loadBrands, loadProductsReport]);
+  }, [loadBrands, loadProductsReport, loadOrders]);
 
   // Reload orders when filters change
   useEffect(() => {
@@ -152,10 +150,6 @@ export default function Reports() {
 
   // Filter products by brand and search
   const filteredProducts = productReport.filter(product => {
-    if (selectedBrand !== 'all') {
-      // Filter by brand if needed (assuming product has brandId)
-      // For now, we'll filter by search term only
-    }
     if (searchTerm) {
       return product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
              (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -169,28 +163,28 @@ export default function Reports() {
     
     if (activeTab === 'products') {
       const productsData = filteredProducts.map(product => ({
-        'Product Name': product.name,
-        'SKU': product.sku || '',
-        'Stock': product.stock,
-        'Sales Count': product.salesCount,
-        'Revenue': product.revenue,
+        [t('dashboard.reports.productName')]: product.name,
+        [t('dashboard.reports.sku')]: product.sku || '',
+        [t('dashboard.reports.stock')]: product.stock,
+        [t('dashboard.reports.salesCount')]: product.salesCount,
+        [t('dashboard.reports.revenue')]: product.revenue,
       }));
       const ws = utils.json_to_sheet(productsData);
-      utils.book_append_sheet(wb, ws, 'Products Report');
+      utils.book_append_sheet(wb, ws, t('dashboard.reports.productReport'));
     } else if (activeTab === 'orders' || activeTab === 'orderDetails') {
       const ordersData = orders.map(order => ({
-        'Order Number': order.orderNumber,
-        'Customer': order.customerName || order.customerEmail,
-        'Email': order.customerEmail,
-        'Subtotal': order.subtotal || 0,
-        'Tax': order.taxAmount || 0,
-        'Total': order.totalAmount,
-        'Status': order.status,
-        'Payment Status': order.paymentStatus,
-        'Date': new Date(order.createdAt).toLocaleDateString(),
+        [t('dashboard.reports.orderNo')]: order.orderNumber,
+        [t('dashboard.orders.customer')]: order.customerName || order.customerEmail,
+        [t('dashboard.reports.email')]: order.customerEmail,
+        [t('dashboard.reports.subtotal')]: order.subtotal || 0,
+        [t('dashboard.reports.tax')]: order.taxAmount || 0,
+        [t('dashboard.reports.total')]: order.totalAmount,
+        [t('dashboard.orders.status')]: order.status,
+        [t('dashboard.orders.paymentStatus')]: order.paymentStatus,
+        [t('dashboard.reports.orderDate')]: new Date(order.createdAt).toLocaleDateString(),
       }));
       const ws = utils.json_to_sheet(ordersData);
-      utils.book_append_sheet(wb, ws, 'Orders Report');
+      utils.book_append_sheet(wb, ws, t('dashboard.reports.orderReport'));
     }
     
     const filename = `reports_${activeTab}_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -199,38 +193,7 @@ export default function Reports() {
 
   // Export to PDF (simplified version - opens print dialog)
   const handleExportPDF = () => {
-    // For now, we'll use window.print() which allows users to save as PDF
-    // TODO: Install jspdf and jspdf-autotable for proper PDF generation
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    
-    let content = '<html><head><title>Reports</title><style>';
-    content += 'table { border-collapse: collapse; width: 100%; }';
-    content += 'th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }';
-    content += 'th { background-color: #f2f2f2; }';
-    content += '</style></head><body>';
-    content += '<h1>Reports</h1>';
-    
-    if (activeTab === 'products') {
-      content += '<h2>Products Report</h2><table>';
-      content += '<tr><th>Product Name</th><th>SKU</th><th>Stock</th><th>Sales Count</th><th>Revenue</th></tr>';
-      filteredProducts.forEach(product => {
-        content += `<tr><td>${product.name}</td><td>${product.sku || ''}</td><td>${product.stock}</td><td>${product.salesCount}</td><td>${product.revenue.toFixed(2)}</td></tr>`;
-      });
-      content += '</table>';
-    } else if (activeTab === 'orders' || activeTab === 'orderDetails') {
-      content += '<h2>Orders Report</h2><table>';
-      content += '<tr><th>Order Number</th><th>Customer</th><th>Subtotal</th><th>Tax</th><th>Total</th><th>Status</th></tr>';
-      orders.forEach(order => {
-        content += `<tr><td>${order.orderNumber}</td><td>${order.customerName || order.customerEmail}</td><td>${(order.subtotal || 0).toFixed(2)}</td><td>${(order.taxAmount || 0).toFixed(2)}</td><td>${order.totalAmount.toFixed(2)}</td><td>${order.status}</td></tr>`;
-      });
-      content += '</table>';
-    }
-    
-    content += '</body></html>';
-    printWindow.document.write(content);
-    printWindow.document.close();
-    printWindow.print();
+    window.print();
   };
 
   if (loading) {
@@ -238,7 +201,7 @@ export default function Reports() {
       <div className="flex items-center justify-center min-h-[600px]">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto" />
-          <p className="text-muted-foreground">جاري التحميل…</p>
+          <p className="text-muted-foreground">{t('dashboard.reports.loading')}</p>
         </div>
       </div>
     );
@@ -248,16 +211,16 @@ export default function Reports() {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">التقارير</h2>
+        <h2 className="text-3xl font-bold tracking-tight">{t('dashboard.reports.title')}</h2>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">تصدير:</span>
+          <span className="text-sm font-medium">{t('dashboard.reports.export')}:</span>
           <Button variant="outline" size="sm" onClick={handleExportPDF}>
             <Download className="h-4 w-4 mr-2" />
-            PDF
+            {t('dashboard.reports.pdf')}
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportExcel}>
             <Download className="h-4 w-4 mr-2" />
-            Excel
+            {t('dashboard.reports.excel')}
           </Button>
         </div>
       </div>
@@ -268,7 +231,7 @@ export default function Reports() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="بحث..."
+              placeholder={t('dashboard.reports.search')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -282,7 +245,6 @@ export default function Reports() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="w-[150px]"
-            placeholder="mm/dd/yyyy"
           />
           <span className="text-muted-foreground">-</span>
           <Input
@@ -290,15 +252,14 @@ export default function Reports() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="w-[150px]"
-            placeholder="mm/dd/yyyy"
           />
         </div>
         <Select value={selectedBrand} onValueChange={setSelectedBrand}>
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="اختر العلامة التجارية" />
+            <SelectValue placeholder={t('dashboard.reports.selectBrand')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">جميع العلامات التجارية</SelectItem>
+            <SelectItem value="all">{t('dashboard.reports.allBrands')}</SelectItem>
             {brands.map((brand) => (
               <SelectItem key={brand.id} value={brand.id}>
                 {brand.nameAr || brand.name}
@@ -312,7 +273,7 @@ export default function Reports() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">إجمالي السعر</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.reports.totalPrice')}</CardTitle>
             <TrendingUp className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
@@ -321,7 +282,7 @@ export default function Reports() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">إجمالي الضريبة</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.reports.totalTax')}</CardTitle>
             <DollarSign className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
@@ -330,7 +291,7 @@ export default function Reports() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">الإجمالي بعد الضريبة</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.reports.totalAfterTax')}</CardTitle>
             <Receipt className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
@@ -342,27 +303,27 @@ export default function Reports() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
         <TabsList>
-          <TabsTrigger value="products">المنتجات</TabsTrigger>
-          <TabsTrigger value="orders">الطلبات</TabsTrigger>
-          <TabsTrigger value="orderDetails">تفاصيل الطلب</TabsTrigger>
+          <TabsTrigger value="products">{t('dashboard.reports.products')}</TabsTrigger>
+          <TabsTrigger value="orders">{t('dashboard.reports.orders')}</TabsTrigger>
+          <TabsTrigger value="orderDetails">{t('dashboard.reports.orderDetails')}</TabsTrigger>
         </TabsList>
 
         {/* Products Tab */}
         <TabsContent value="products" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>تقرير المنتجات</CardTitle>
+              <CardTitle>{t('dashboard.reports.productReport')}</CardTitle>
             </CardHeader>
             <CardContent>
               {filteredProducts.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>اسم المنتج</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>المخزون</TableHead>
-                      <TableHead>عدد المبيعات</TableHead>
-                      <TableHead>الإيرادات</TableHead>
+                      <TableHead>{t('dashboard.reports.productName')}</TableHead>
+                      <TableHead>{t('dashboard.reports.sku')}</TableHead>
+                      <TableHead>{t('dashboard.reports.stock')}</TableHead>
+                      <TableHead>{t('dashboard.reports.salesCount')}</TableHead>
+                      <TableHead>{t('dashboard.reports.revenue')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -379,7 +340,7 @@ export default function Reports() {
                 </Table>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>لا توجد بيانات</p>
+                  <p>{t('dashboard.reports.noData')}</p>
                 </div>
               )}
             </CardContent>
@@ -390,21 +351,21 @@ export default function Reports() {
         <TabsContent value="orders" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>تقرير الطلبات</CardTitle>
+              <CardTitle>{t('dashboard.reports.orderReport')}</CardTitle>
             </CardHeader>
             <CardContent>
               {orders.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>رقم الطلب</TableHead>
-                      <TableHead>العميل</TableHead>
-                      <TableHead>البريد الإلكتروني</TableHead>
-                      <TableHead>المجموع الفرعي</TableHead>
-                      <TableHead>الضريبة</TableHead>
-                      <TableHead>الإجمالي</TableHead>
-                      <TableHead>الحالة</TableHead>
-                      <TableHead>تاريخ الطلب</TableHead>
+                      <TableHead>{t('dashboard.reports.orderNo')}</TableHead>
+                      <TableHead>{t('dashboard.orders.customer')}</TableHead>
+                      <TableHead>{t('dashboard.reports.email')}</TableHead>
+                      <TableHead>{t('dashboard.reports.subtotal')}</TableHead>
+                      <TableHead>{t('dashboard.reports.tax')}</TableHead>
+                      <TableHead>{t('dashboard.reports.total')}</TableHead>
+                      <TableHead>{t('dashboard.orders.status')}</TableHead>
+                      <TableHead>{t('dashboard.reports.orderDate')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -425,14 +386,14 @@ export default function Reports() {
                             {order.status}
                           </span>
                         </TableCell>
-                        <TableCell>{new Date(order.createdAt).toLocaleDateString('ar-SA')}</TableCell>
+                        <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>لا توجد بيانات</p>
+                  <p>{t('dashboard.reports.noData')}</p>
                 </div>
               )}
             </CardContent>
@@ -443,37 +404,37 @@ export default function Reports() {
         <TabsContent value="orderDetails" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>تفاصيل الطلب</CardTitle>
+              <CardTitle>{t('dashboard.reports.orderDetails')}</CardTitle>
             </CardHeader>
             <CardContent>
-              {orderDetails.length > 0 ? (
+              {orders.length > 0 ? (
                 <div className="space-y-4">
-                  {orderDetails.map((order) => (
+                  {orders.map((order) => (
                     <Card key={order.id} className="p-4">
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <h3 className="font-bold">طلب رقم: {order.orderNumber}</h3>
+                          <h3 className="font-bold">{t('dashboard.reports.orderNo')}: {order.orderNumber}</h3>
                           <p className="text-sm text-muted-foreground">
                             {order.customerName || order.customerEmail}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleDateString('ar-SA')}
+                            {new Date(order.createdAt).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="font-bold">{formatCurrency(order.totalAmount, 'SAR')}</p>
-                          <p className="text-sm text-muted-foreground">الحالة: {order.status}</p>
-                          <p className="text-sm text-muted-foreground">دفع: {order.paymentStatus}</p>
+                          <p className="text-sm text-muted-foreground">{t('dashboard.orders.status')}: {order.status}</p>
+                          <p className="text-sm text-muted-foreground">{t('dashboard.reports.payment')}: {order.paymentStatus}</p>
                         </div>
                       </div>
                       {order.items && order.items.length > 0 && (
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>المنتج</TableHead>
-                              <TableHead>الكمية</TableHead>
-                              <TableHead>السعر</TableHead>
-                              <TableHead>الإجمالي</TableHead>
+                              <TableHead>{t('dashboard.reports.products')}</TableHead>
+                              <TableHead>{t('dashboard.reports.quantity')}</TableHead>
+                              <TableHead>{t('dashboard.products.price')}</TableHead>
+                              <TableHead>{t('dashboard.reports.itemTotal')}</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -490,9 +451,9 @@ export default function Reports() {
                       )}
                       <div className="mt-4 pt-4 border-t flex justify-end gap-4">
                         <div className="text-right">
-                          <p className="text-sm">المجموع الفرعي: {formatCurrency(order.subtotal || 0, 'SAR')}</p>
-                          <p className="text-sm">الضريبة: {formatCurrency(order.taxAmount || 0, 'SAR')}</p>
-                          <p className="font-bold">الإجمالي: {formatCurrency(order.totalAmount, 'SAR')}</p>
+                          <p className="text-sm">{t('dashboard.reports.subtotal')}: {formatCurrency(order.subtotal || 0, 'SAR')}</p>
+                          <p className="text-sm">{t('dashboard.reports.tax')}: {formatCurrency(order.taxAmount || 0, 'SAR')}</p>
+                          <p className="font-bold">{t('dashboard.reports.total')}: {formatCurrency(order.totalAmount, 'SAR')}</p>
                         </div>
                       </div>
                     </Card>
@@ -500,7 +461,7 @@ export default function Reports() {
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>لا توجد بيانات</p>
+                  <p>{t('dashboard.reports.noData')}</p>
                 </div>
               )}
             </CardContent>

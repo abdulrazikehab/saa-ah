@@ -6,14 +6,21 @@ import {
   ShoppingCart, 
   Wallet, 
   CreditCard, 
-  Heart, 
-  UserPlus, 
-  Ticket,
   Package,
-  ArrowUpRight
+  Plus,
+  Settings,
+  BarChart3
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { walletService } from '@/services/wallet.service';
+
+interface CardsDashboardProps {
+  stats?: {
+    orderCount: number;
+    revenue: number;
+  } | null;
+}
 
 interface StatsCard {
   label: string;
@@ -30,63 +37,91 @@ interface QuickAction {
   link: string;
 }
 
-export default function CardsDashboard() {
+export default function CardsDashboard({ stats }: CardsDashboardProps) {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const navigate = useNavigate();
+  const [walletBalance, setWalletBalance] = useState<string | number>(0);
+  const [pendingTopUps, setPendingTopUps] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchWalletData = async () => {
+      try {
+        const [balanceData, topUpsData] = await Promise.all([
+          walletService.getBalance(),
+          walletService.getTopUpRequests('PENDING')
+        ]);
+        
+        if (balanceData) {
+          setWalletBalance(balanceData.balance);
+        }
+        
+        if (topUpsData) {
+          setPendingTopUps(topUpsData);
+        }
+      } catch (error) {
+        console.error('Failed to fetch wallet data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWalletData();
+  }, []);
 
   const statsCards: StatsCard[] = [
     {
       label: isRTL ? 'عدد الطلبات' : 'Orders Count',
-      value: '0',
-      suffix: isRTL ? 'دولار' : 'USD',
+      value: stats?.orderCount?.toString() || '0',
+      suffix: isRTL ? 'طلب' : 'Orders',
       icon: <ShoppingCart className="h-8 w-8" />,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50 dark:bg-amber-950/20',
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
     },
     {
       label: isRTL ? 'إجمالي قيمة الطلبات' : 'Total Orders Value',
-      value: '0',
-      suffix: isRTL ? 'دولار' : 'USD',
+      value: stats?.revenue?.toFixed(2) || '0.00',
+      suffix: isRTL ? 'ريال' : 'SAR',
       icon: <Wallet className="h-8 w-8" />,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50 dark:bg-emerald-950/20',
+      color: 'text-success',
+      bgColor: 'bg-success/10',
     },
     {
       label: isRTL ? 'رصيد المحفظة' : 'Wallet Balance',
-      value: '0.00',
-      suffix: isRTL ? 'دولار' : 'USD',
+      value: Number(walletBalance).toFixed(2),
+      suffix: isRTL ? 'ريال' : 'SAR',
       icon: <CreditCard className="h-8 w-8" />,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50 dark:bg-blue-950/20',
+      color: 'text-[hsl(var(--teal))]',
+      bgColor: 'bg-[hsl(var(--teal)/0.1)]',
     },
   ];
 
   const quickActions: QuickAction[] = [
     {
-      label: isRTL ? 'شحن الرصيد' : 'Charge Wallet',
-      icon: <Wallet className="h-6 w-6" />,
-      link: '/dashboard/cards/charge-wallet',
+      label: isRTL ? 'إضافة منتج' : 'Add Product',
+      icon: <Plus className="h-6 w-6" />,
+      link: '/dashboard/products',
     },
     {
-      label: isRTL ? 'إنشاء طلب' : 'Create Order',
+      label: isRTL ? 'إدارة المنتجات' : 'Manage Products',
+      icon: <Package className="h-6 w-6" />,
+      link: '/dashboard/products',
+    },
+    {
+      label: isRTL ? 'إدارة الطلبات' : 'Manage Orders',
       icon: <ShoppingCart className="h-6 w-6" />,
-      link: '/dashboard/cards/store',
+      link: '/dashboard/orders',
     },
     {
-      label: isRTL ? 'المفضلة' : 'Favorites',
-      icon: <Heart className="h-6 w-6" />,
-      link: '/dashboard/cards/favorites',
+      label: isRTL ? 'إعدادات المتجر' : 'Store Settings',
+      icon: <Settings className="h-6 w-6" />,
+      link: '/dashboard/settings',
     },
     {
-      label: isRTL ? 'إضافة موظف' : 'Add Employee',
-      icon: <UserPlus className="h-6 w-6" />,
-      link: '/dashboard/employees',
-    },
-    {
-      label: isRTL ? 'إضافة تذكرة' : 'Add Ticket',
-      icon: <Ticket className="h-6 w-6" />,
-      link: '/dashboard/support',
+      label: isRTL ? 'التقارير' : 'Reports',
+      icon: <BarChart3 className="h-6 w-6" />,
+      link: '/dashboard/reports',
     },
   ];
 
@@ -168,14 +203,30 @@ export default function CardsDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td colSpan={5} className="text-center py-12">
-                      <Package className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-                      <p className="text-muted-foreground">
-                        {isRTL ? 'لا توجد بيانات' : 'No data'}
-                      </p>
-                    </td>
-                  </tr>
+                  {pendingTopUps.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-12">
+                        <Package className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                        <p className="text-muted-foreground">
+                          {isRTL ? 'لا توجد بيانات' : 'No data'}
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    pendingTopUps.map((topup) => (
+                      <tr key={topup.id} className="border-b last:border-0 hover:bg-muted/50">
+                        <td className="py-3 px-4 text-sm">
+                          {new Date(topup.createdAt).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}
+                        </td>
+                        <td className="py-3 px-4 text-sm font-mono">{topup.id.slice(0, 8)}</td>
+                        <td className="py-3 px-4 text-sm">{topup.bank?.name || '-'}</td>
+                        <td className="py-3 px-4 text-sm">{topup.senderName || '-'}</td>
+                        <td className="py-3 px-4 text-sm font-bold">
+                          {Number(topup.amount).toFixed(2)} {topup.currency}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

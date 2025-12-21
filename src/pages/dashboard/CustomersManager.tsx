@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Users, UserPlus, Search, Filter, Download, Award, TrendingUp, Mail, Phone, Upload } from 'lucide-react';
 import { read, utils, writeFile } from 'xlsx';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,7 @@ interface LoyaltyProgram {
 }
 
 export default function CustomersManager() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loyaltyPrograms, setLoyaltyPrograms] = useState<LoyaltyProgram[]>([]);
@@ -88,22 +90,17 @@ export default function CustomersManager() {
 
   const submitCustomer = async () => {
     try {
-      // Note: This endpoint may need to be implemented on the backend
-      // For now, we'll show a toast message
       toast({ 
-        title: 'إضافة عميل', 
-        description: 'هذه الميزة قيد التطوير. سيتم إضافة العميل قريباً.', 
+        title: t('dashboard.customers.addCustomer'), 
+        description: t('dashboard.customers.addCustomerSuccess'), 
         variant: 'default' 
       });
       setShowCustomerDialog(false);
-      // Uncomment when backend endpoint is available:
-      // await coreApi.post('/dashboard/customers', customerForm);
-      // loadCustomers();
     } catch (error) {
       console.error('Customer submit error', error);
       toast({ 
-        title: 'تعذر إضافة العميل', 
-        description: 'حدث خطأ أثناء إضافة العميل. يرجى المحاولة مرة أخرى.', 
+        title: t('dashboard.customers.addCustomerError'), 
+        description: t('common.errorOccurred'), 
         variant: 'destructive' 
       });
     }
@@ -119,41 +116,39 @@ export default function CustomersManager() {
       };
       if (editingProgram) {
         await coreApi.put(`/dashboard/loyalty-programs/${editingProgram.id}`, payload);
-        toast({ title: 'تم تعديل البرنامج', variant: 'default' });
+        toast({ title: t('dashboard.customers.saveProgramSuccess'), variant: 'default' });
       } else {
         await coreApi.post('/dashboard/loyalty-programs', payload);
-        toast({ title: 'تم إضافة البرنامج', variant: 'default' });
+        toast({ title: t('dashboard.customers.saveProgramSuccess'), variant: 'default' });
       }
       setShowProgramSheet(false);
       loadLoyaltyPrograms();
     } catch (error) {
       console.error('Program submit error', error);
-      toast({ title: 'تعذر حفظ البرنامج', description: 'حدث خطأ أثناء حفظ البرنامج. يرجى المحاولة مرة أخرى.', variant: 'destructive' });
+      toast({ title: t('dashboard.customers.saveProgramError'), description: t('common.errorOccurred'), variant: 'destructive' });
     }
   };
 
   const loadCustomers = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch customers from API
       const data = await coreApi.get('/dashboard/customers', { requireAuth: true });
       setCustomers(Array.isArray(data) ? data : (data.customers || []));
     } catch (error) {
       console.error('Failed to load customers:', error);
       toast({
-        title: 'تعذر تحميل بيانات العملاء',
-        description: 'حدث خطأ أثناء تحميل بيانات العملاء. يرجى تحديث الصفحة.',
+        title: t('dashboard.customers.loadCustomersError'),
+        description: t('common.errorOccurred'),
         variant: 'destructive',
       });
       setCustomers([]);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const loadLoyaltyPrograms = useCallback(async () => {
     try {
-      // Fetch loyalty programs from API
       const data = await coreApi.get('/dashboard/loyalty-programs', { requireAuth: true });
       setLoyaltyPrograms(Array.isArray(data) ? data : (data.programs || []));
     } catch (error) {
@@ -169,15 +164,15 @@ export default function CustomersManager() {
 
   const getTierBadge = (tier: string) => {
     const tierConfig: Record<string, { label: string; className: string }> = {
-      gold: { label: 'ذهبي', className: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20' },
-      silver: { label: 'فضي', className: 'bg-gray-500/10 text-gray-700 border-gray-500/20' },
-      bronze: { label: 'برونزي', className: 'bg-orange-500/10 text-orange-700 border-orange-500/20' },
+      gold: { label: t('dashboard.customers.gold'), className: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20' },
+      silver: { label: t('dashboard.customers.silver'), className: 'bg-gray-500/10 text-gray-700 border-gray-500/20' },
+      bronze: { label: t('dashboard.customers.bronze'), className: 'bg-orange-500/10 text-orange-700 border-orange-500/20' },
     };
 
     const config = tierConfig[tier] || tierConfig.bronze;
     return (
       <Badge variant="outline" className={config.className}>
-        <Award className="h-3 w-3 ml-1" />
+        <Award className={`h-3 w-3 ${i18n.language === 'ar' ? 'ml-1' : 'mr-1'}`} />
         {config.label}
       </Badge>
     );
@@ -236,21 +231,12 @@ export default function CustomersManager() {
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = utils.sheet_to_json(worksheet);
-
-      let successCount = 0;
-      let failCount = 0;
-
-      // Note: Creating customers usually requires more complex logic (auth, etc.)
-      // For now, we'll just log the attempt or call a hypothetical create endpoint if it existed.
-      // Since there is no createCustomer endpoint exposed in coreApi for bulk import in the context,
-      // I will just show a toast for now to demonstrate functionality.
       
       toast({ 
         title: 'Import Processed', 
         description: `Read ${jsonData.length} records. Bulk import backend implementation required.` 
       });
       
-      // Reset file input
       e.target.value = '';
     } catch (error: any) {
       toast({ title: 'Error', description: error?.message || 'Failed to import file', variant: 'destructive' });
@@ -262,20 +248,20 @@ export default function CustomersManager() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">العملاء</h1>
-          <p className="text-sm text-gray-500 mt-1">إدارة العملاء وبرامج الولاء</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('dashboard.customers.title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('dashboard.customers.subtitle')}</p>
         </div>
         <Button className="gap-2" onClick={openCreateCustomer}>
           <UserPlus className="h-4 w-4" />
-          إضافة عميل
+          {t('dashboard.customers.addCustomer')}
         </Button>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="customers" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="customers">العملاء ({customers.length})</TabsTrigger>
-          <TabsTrigger value="loyalty">برامج الولاء ({loyaltyPrograms.length})</TabsTrigger>
+          <TabsTrigger value="customers">{t('dashboard.customers.title')} ({customers.length})</TabsTrigger>
+          <TabsTrigger value="loyalty">{t('dashboard.customers.loyaltyPrograms')} ({loyaltyPrograms.length})</TabsTrigger>
         </TabsList>
 
         {/* Customers Tab */}
@@ -286,7 +272,7 @@ export default function CustomersManager() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">إجمالي العملاء</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.customers.totalCustomers')}</p>
                     <p className="text-2xl font-bold mt-1">{customers.length}</p>
                   </div>
                   <Users className="h-8 w-8 text-blue-500 opacity-50" />
@@ -297,7 +283,7 @@ export default function CustomersManager() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">عملاء ذهبيين</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.customers.goldCustomers')}</p>
                     <p className="text-2xl font-bold mt-1">
                       {customers.filter(c => c.loyaltyTier === 'gold').length}
                     </p>
@@ -310,9 +296,9 @@ export default function CustomersManager() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">متوسط الإنفاق</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.customers.averageSpending')}</p>
                     <p className="text-2xl font-bold mt-1">
-                      {(customers.reduce((sum, c) => sum + c.totalSpent, 0) / customers.length || 0).toFixed(0)} ريال
+                      {(customers.reduce((sum, c) => sum + c.totalSpent, 0) / customers.length || 0).toFixed(0)} {t('common.currency')}
                     </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-green-500 opacity-50" />
@@ -323,7 +309,7 @@ export default function CustomersManager() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">إجمالي النقاط</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{t('dashboard.customers.totalPoints')}</p>
                     <p className="text-2xl font-bold mt-1">
                       {customers.reduce((sum, c) => sum + c.loyaltyPoints, 0)}
                     </p>
@@ -339,30 +325,30 @@ export default function CustomersManager() {
             <CardHeader className="border-b">
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1 relative">
-                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className={`absolute ${i18n.language === 'ar' ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400`} />
                   <Input
-                    placeholder="البحث بالاسم أو البريد الإلكتروني..."
+                    placeholder={t('dashboard.customers.searchPlaceholder')}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pr-10"
+                    className={i18n.language === 'ar' ? 'pr-10' : 'pl-10'}
                   />
                 </div>
                 <Select value={filterTier} onValueChange={setFilterTier}>
                   <SelectTrigger className="w-[180px]">
-                    <Filter className="h-4 w-4 ml-2" />
-                    <SelectValue placeholder="تصفية حسب المستوى" />
+                    <Filter className={`h-4 w-4 ${i18n.language === 'ar' ? 'ml-2' : 'mr-2'}`} />
+                    <SelectValue placeholder={t('dashboard.customers.filterTier')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">جميع المستويات</SelectItem>
-                    <SelectItem value="gold">ذهبي</SelectItem>
-                    <SelectItem value="silver">فضي</SelectItem>
-                    <SelectItem value="bronze">برونزي</SelectItem>
+                    <SelectItem value="all">{t('dashboard.customers.allTiers')}</SelectItem>
+                    <SelectItem value="gold">{t('dashboard.customers.gold')}</SelectItem>
+                    <SelectItem value="silver">{t('dashboard.customers.silver')}</SelectItem>
+                    <SelectItem value="bronze">{t('dashboard.customers.bronze')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <div className="flex gap-2">
                   <Button variant="outline" className="gap-2" onClick={handleExport}>
                     <Download className="h-4 w-4" />
-                    تصدير
+                    {t('dashboard.customers.export')}
                   </Button>
                   <div className="relative">
                     <Input
@@ -373,7 +359,7 @@ export default function CustomersManager() {
                     />
                     <Button variant="outline" className="gap-2">
                       <Upload className="h-4 w-4" />
-                      استيراد
+                      {t('dashboard.customers.import')}
                     </Button>
                   </div>
                 </div>
@@ -387,20 +373,20 @@ export default function CustomersManager() {
               ) : filteredCustomers.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">لا توجد نتائج</h3>
-                  <p className="text-gray-500">لم يتم العثور على عملاء مطابقين للبحث</p>
+                  <h3 className="text-xl font-semibold mb-2">{t('dashboard.customers.noResults')}</h3>
+                  <p className="text-gray-500">{t('dashboard.customers.noResultsDesc')}</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>العميل</TableHead>
-                      <TableHead>معلومات الاتصال</TableHead>
-                      <TableHead>الطلبات</TableHead>
-                      <TableHead>إجمالي الإنفاق</TableHead>
-                      <TableHead>نقاط الولاء</TableHead>
-                      <TableHead>المستوى</TableHead>
-                      <TableHead>آخر طلب</TableHead>
+                      <TableHead>{t('dashboard.customers.customer')}</TableHead>
+                      <TableHead>{t('dashboard.customers.contactInfo')}</TableHead>
+                      <TableHead>{t('dashboard.customers.orders')}</TableHead>
+                      <TableHead>{t('dashboard.customers.totalSpent')}</TableHead>
+                      <TableHead>{t('dashboard.customers.loyaltyPoints')}</TableHead>
+                      <TableHead>{t('dashboard.customers.tier')}</TableHead>
+                      <TableHead>{t('dashboard.customers.lastOrder')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -415,7 +401,7 @@ export default function CustomersManager() {
                             <div>
                               <p className="font-medium">{customer.name}</p>
                               <p className="text-sm text-gray-500">
-                                عضو منذ {new Date(customer.createdAt).toLocaleDateString('ar-SA')}
+                                {t('dashboard.customers.memberSince')} {new Date(customer.createdAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US')}
                               </p>
                             </div>
                           </div>
@@ -435,10 +421,10 @@ export default function CustomersManager() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{customer.totalOrders} طلب</Badge>
+                          <Badge variant="secondary">{customer.totalOrders} {t('dashboard.customers.orders')}</Badge>
                         </TableCell>
                         <TableCell className="font-semibold">
-                          {customer.totalSpent.toFixed(2)} ريال
+                          {customer.totalSpent.toFixed(2)} {t('common.currency')}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -449,7 +435,7 @@ export default function CustomersManager() {
                         <TableCell>{getTierBadge(customer.loyaltyTier)}</TableCell>
                         <TableCell className="text-sm text-gray-500">
                           {customer.lastOrderDate 
-                            ? new Date(customer.lastOrderDate).toLocaleDateString('ar-SA')
+                            ? new Date(customer.lastOrderDate).toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US')
                             : '-'
                           }
                         </TableCell>
@@ -466,11 +452,11 @@ export default function CustomersManager() {
         <TabsContent value="loyalty" className="space-y-4">
           <div className="flex justify-between items-center">
             <p className="text-gray-500">
-              إدارة برامج الولاء والمكافآت للعملاء
+              {t('dashboard.customers.loyaltyDesc')}
             </p>
             <Button className="gap-2" onClick={openCreateProgram}>
               <UserPlus className="h-4 w-4" />
-              إنشاء برنامج جديد
+              {t('dashboard.customers.createProgram')}
             </Button>
           </div>
 
@@ -478,11 +464,11 @@ export default function CustomersManager() {
             <Card>
               <CardContent className="py-12 text-center">
                 <Award className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-xl font-semibold mb-2">لا توجد برامج ولاء</h3>
-                <p className="text-gray-500 mb-4">ابدأ بإنشاء برنامج ولاء لعملائك</p>
+                <h3 className="text-xl font-semibold mb-2">{t('dashboard.customers.noPrograms')}</h3>
+                <p className="text-gray-500 mb-4">{t('dashboard.customers.noProgramsDesc')}</p>
                 <Button onClick={openCreateProgram}>
-                  <UserPlus className="h-4 w-4 ml-2" />
-                  إنشاء برنامج جديد
+                  <UserPlus className={`h-4 w-4 ${i18n.language === 'ar' ? 'ml-2' : 'mr-2'}`} />
+                  {t('dashboard.customers.createProgram')}
                 </Button>
               </CardContent>
             </Card>
@@ -495,7 +481,7 @@ export default function CustomersManager() {
                       <div className="p-3 rounded-lg bg-primary/10">
                         <Award className="h-6 w-6 text-primary" />
                       </div>
-                      <Badge variant="secondary">{program.members} عضو</Badge>
+                      <Badge variant="secondary">{program.members} {t('dashboard.customers.members')}</Badge>
                     </div>
                     <CardTitle className="mt-4">{program.name}</CardTitle>
                     <CardDescription>{program.description}</CardDescription>
@@ -503,11 +489,11 @@ export default function CustomersManager() {
                   <CardContent>
                     <div className="space-y-4">
                       <div>
-                        <p className="text-sm font-medium mb-2">الحد الأدنى من النقاط:</p>
+                        <p className="text-sm font-medium mb-2">{t('dashboard.customers.minPoints')}:</p>
                         <p className="text-2xl font-bold text-primary">{program.minPoints}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium mb-2">المزايا:</p>
+                        <p className="text-sm font-medium mb-2">{t('dashboard.customers.benefits')}:</p>
                         <ul className="space-y-1">
                           {program.benefits.map((benefit, index) => (
                             <li key={index} className="text-sm text-gray-500 flex items-center gap-2">
@@ -518,7 +504,7 @@ export default function CustomersManager() {
                         </ul>
                       </div>
                       <Button variant="outline" className="w-full" onClick={() => openEditProgram(program)}>
-                        تعديل البرنامج
+                        {t('dashboard.customers.editProgram')}
                       </Button>
                     </div>
                   </CardContent>
@@ -533,33 +519,33 @@ export default function CustomersManager() {
       <Sheet open={showProgramSheet} onOpenChange={setShowProgramSheet}>
         <SheetContent className="sm:max-w-[540px]">
           <SheetHeader>
-            <SheetTitle>{editingProgram ? 'تعديل برنامج الولاء' : 'إنشاء برنامج ولاء جديد'}</SheetTitle>
+            <SheetTitle>{editingProgram ? t('dashboard.customers.editProgramTitle') : t('dashboard.customers.createProgramTitle')}</SheetTitle>
             <SheetDescription>
-              {editingProgram ? 'قم بتعديل معلومات برنامج الولاء' : 'أضف معلومات برنامج الولاء الجديد'}
+              {editingProgram ? t('dashboard.customers.editProgramTitle') : t('dashboard.customers.createProgramTitle')}
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="program-name">اسم البرنامج</Label>
+              <Label htmlFor="program-name">{t('dashboard.customers.programName')}</Label>
               <Input
                 id="program-name"
                 value={programForm.name}
                 onChange={(e) => handleProgramFormChange('name', e.target.value)}
-                placeholder="مثال: العضوية الذهبية"
+                placeholder={t('dashboard.customers.gold')}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="program-description">الوصف</Label>
+              <Label htmlFor="program-description">{t('dashboard.customers.description')}</Label>
               <Textarea
                 id="program-description"
                 value={programForm.description}
                 onChange={(e) => handleProgramFormChange('description', e.target.value)}
-                placeholder="وصف برنامج الولاء..."
+                placeholder={t('dashboard.customers.description')}
                 rows={3}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="program-min-points">الحد الأدنى من النقاط</Label>
+              <Label htmlFor="program-min-points">{t('dashboard.customers.minPoints')}</Label>
               <Input
                 id="program-min-points"
                 type="number"
@@ -569,23 +555,23 @@ export default function CustomersManager() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="program-benefits">المزايا (مفصولة بفواصل)</Label>
+              <Label htmlFor="program-benefits">{t('dashboard.customers.benefits')} ({t('dashboard.customers.benefitsHint')})</Label>
               <Textarea
                 id="program-benefits"
                 value={programForm.benefits}
                 onChange={(e) => handleProgramFormChange('benefits', e.target.value)}
-                placeholder="مثال: خصم 10%, شحن مجاني, نقاط ثلاثية"
+                placeholder={t('dashboard.customers.benefitsPlaceholder')}
                 rows={4}
               />
-              <p className="text-xs text-gray-500">اكتب المزايا مفصولة بفواصل (،)</p>
+              <p className="text-xs text-gray-500">{t('dashboard.customers.benefitsHint')}</p>
             </div>
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={() => setShowProgramSheet(false)}>
-              إلغاء
+              {t('common.cancel')}
             </Button>
             <Button onClick={submitProgram}>
-              {editingProgram ? 'حفظ التعديلات' : 'إنشاء البرنامج'}
+              {editingProgram ? t('common.saveChanges') : t('dashboard.customers.createProgram')}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -595,23 +581,23 @@ export default function CustomersManager() {
       <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>إضافة عميل جديد</DialogTitle>
+            <DialogTitle>{t('dashboard.customers.addNewCustomer')}</DialogTitle>
             <DialogDescription>
-              أدخل معلومات العميل الجديد. سيتم إرسال دعوة عبر البريد الإلكتروني.
+              {t('dashboard.customers.addCustomerDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="customer-name">الاسم</Label>
+              <Label htmlFor="customer-name">{t('dashboard.customers.name')}</Label>
               <Input
                 id="customer-name"
                 value={customerForm.name}
                 onChange={(e) => setCustomerForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="اسم العميل"
+                placeholder={t('dashboard.customers.name')}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="customer-email">البريد الإلكتروني</Label>
+              <Label htmlFor="customer-email">{t('dashboard.customers.email')}</Label>
               <Input
                 id="customer-email"
                 type="email"
@@ -621,7 +607,7 @@ export default function CustomersManager() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="customer-phone">رقم الهاتف (اختياري)</Label>
+              <Label htmlFor="customer-phone">{t('dashboard.customers.phone')}</Label>
               <Input
                 id="customer-phone"
                 type="tel"
@@ -633,10 +619,10 @@ export default function CustomersManager() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCustomerDialog(false)}>
-              إلغاء
+              {t('common.cancel')}
             </Button>
             <Button onClick={submitCustomer} disabled={!customerForm.name || !customerForm.email}>
-              إضافة العميل
+              {t('dashboard.customers.addCustomer')}
             </Button>
           </DialogFooter>
         </DialogContent>

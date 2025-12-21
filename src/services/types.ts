@@ -5,8 +5,9 @@ export interface RegisterData {
   email: string;
   password: string;
   name?: string;
-  storeName?: string;
-  subdomain?: string;
+  storeName: string; // Required - store name for automatic tenant creation
+  nationalId: string; // Required - national ID or passport ID
+  subdomain?: string; // Optional - will be auto-generated from storeName if not provided
   fingerprint?: DeviceFingerprint;
 }
 
@@ -65,6 +66,17 @@ export interface Product {
   dimensions?: string;
   metaTitle?: string;
   metaDescription?: string;
+  brandId?: string;
+  brand?: Brand;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  nameAr?: string;
+  description?: string;
+  logo?: string;
+  code?: string;
 }
 
 export interface CreateProductData {

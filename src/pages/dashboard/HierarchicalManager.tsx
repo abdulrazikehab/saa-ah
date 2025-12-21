@@ -58,7 +58,7 @@ export default function HierarchicalManager() {
         id: c.id,
         name: c.name,
         nameAr: c.nameAr || c.name,
-        parentId: c.parentId,
+        parentId: typeof c.parentId === 'object' ? c.parentId?.id : c.parentId,
       })));
 
       const productsList = Array.isArray(productsData) 
@@ -184,7 +184,7 @@ export default function HierarchicalManager() {
                     id: newCategory.id || (newCategory as any).category?.id || (newCategory as any).id,
                     name: newCategory.name || (newCategory as any).category?.name || categoryData.name,
                     nameAr: newCategory.nameAr || (newCategory as any).category?.nameAr || categoryData.nameAr || categoryData.name,
-                    parentId: newCategory.parentId || (newCategory as any).category?.parentId || categoryData.parentId,
+                    parentId: typeof newCategory.parentId === 'object' ? newCategory.parentId?.id : (newCategory.parentId || (newCategory as any).category?.parentId || categoryData.parentId),
                   };
                   
                   // Add to local state immediately for instant UI update

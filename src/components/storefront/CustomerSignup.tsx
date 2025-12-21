@@ -2,14 +2,13 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight, Download } from 'lucide-react';
-import { coreApi } from '@/lib/api';
+import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight, Download, Sparkles } from 'lucide-react';
 import { apiClient } from '@/services/core/api-client';
 import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 import { useTranslation } from 'react-i18next';
+import { cn } from '@/lib/utils';
+import { getTenantContext } from '@/lib/storefront-utils';
 
 interface CustomerSignupProps {
   onClose: () => void;
@@ -58,9 +57,9 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
   };
 
   const getPasswordStrengthText = () => {
-    if (passwordStrength < 40) return 'ضعيفة';
-    if (passwordStrength < 70) return 'متوسطة';
-    return 'قوية';
+    if (passwordStrength < 40) return isRTL ? 'ضعيفة' : 'Weak';
+    if (passwordStrength < 70) return isRTL ? 'متوسطة' : 'Medium';
+    return isRTL ? 'قوية' : 'Strong';
   };
 
   const copyRecoveryId = () => {
@@ -68,8 +67,8 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
       navigator.clipboard.writeText(recoveryId);
       setCopiedRecovery(true);
       toast({
-        title: 'تم النسخ!',
-        description: 'تم نسخ رمز الاسترداد إلى الحافظة',
+        title: isRTL ? 'تم النسخ!' : 'Copied!',
+        description: isRTL ? 'تم نسخ رمز الاسترداد إلى الحافظة' : 'Recovery ID copied to clipboard',
       });
       setTimeout(() => setCopiedRecovery(false), 2000);
     }
@@ -89,11 +88,10 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
       URL.revokeObjectURL(url);
       
       toast({
-        title: 'تم التنزيل!',
-        description: 'تم تنزيل رمز الاسترداد',
+        title: isRTL ? 'تم التنزيل!' : 'Downloaded!',
+        description: isRTL ? 'تم تنزيل رمز الاسترداد' : 'Recovery ID downloaded',
       });
       
-      // Mark as copied since user has downloaded it
       setCopiedRecovery(true);
     }
   };
@@ -120,15 +118,30 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
     setLoading(true);
     
     try {
-      const response = await apiClient.post(`${apiClient.authUrl}/customers/signup`, {
-        email,
-        password,
-        firstName,
-        lastName,
-        phone,
-      });
+      // Get tenant context from current store to ensure customer is created in the correct merchant's table
+      const tenantContext = getTenantContext();
       
-      // Store customer token
+      // Add tenant headers to ensure customer is created in the correct merchant's table
+      const headers: Record<string, string> = {};
+      if (tenantContext.subdomain) {
+        headers['X-Tenant-Domain'] = tenantContext.domain;
+      }
+      
+      const response = await apiClient.post(
+        `${apiClient.authUrl}/customers/signup`, 
+        {
+          email,
+          password,
+          firstName,
+          lastName,
+          phone,
+        },
+        {
+          requireAuth: false,
+          headers,
+        }
+      );
+      
       localStorage.setItem('customerToken', response.token);
       localStorage.setItem('customerData', JSON.stringify(response.customer));
       
@@ -137,8 +150,8 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
         setShowRecoveryModal(true);
       } else {
         toast({
-          title: 'تم إنشاء الحساب بنجاح',
-          description: 'مرحباً بك في متجرنا',
+          title: isRTL ? 'تم إنشاء الحساب بنجاح' : 'Account created successfully',
+          description: isRTL ? 'مرحباً بك في متجرنا' : 'Welcome to our store!',
         });
         
         onSignupSuccess?.();
@@ -161,54 +174,44 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      {/* Recovery ID Modal */}
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto animate-fade-in">
       {showRecoveryModal && recoveryId ? (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-auto overflow-hidden animate-in fade-in zoom-in duration-300">
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white text-center">
-            <div className="mx-auto w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
-              <Shield className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-bold">رمز الاسترداد السري</h2>
-            <p className="text-sm text-white/80 mt-1">Secret Recovery ID</p>
-          </div>
-          
-          <div className="p-6 space-y-4">
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <Key className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-yellow-800 dark:text-yellow-200 text-right">
-                  <p className="font-semibold mb-1">هام جداً!</p>
-                  <p>احفظ هذا الرمز في مكان آمن. يمكنك استخدامه لاسترداد حسابك إذا نسيت بريدك الإلكتروني أو تعرض للاختراق.</p>
-                </div>
-              </div>
-            </div>
+        <div className="w-full max-w-md relative animate-scale-in">
+          <div className="relative overflow-hidden rounded-3xl glass-effect-strong border border-border/50 shadow-2xl">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-600" />
             
-            <div className="bg-gray-100 dark:bg-gray-700 rounded-xl p-4">
-              <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">رمز الاسترداد | Recovery ID</p>
-                <p className="text-2xl font-mono font-bold text-indigo-600 dark:text-indigo-400 tracking-wider dir-ltr">
+            <div className="p-8 text-center">
+              <div className="mx-auto w-20 h-20 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
+                <Shield className="w-10 h-10 text-green-500" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">
+                {isRTL ? 'رمز الاسترداد السري' : 'Secret Recovery ID'}
+              </h2>
+              <p className="text-muted-foreground text-sm mb-6">
+                {isRTL ? 'هام جداً! احفظ هذا الرمز في مكان آمن.' : 'Very important! Save this ID in a safe place.'}
+              </p>
+              
+              <div className="bg-muted/50 rounded-2xl p-6 mb-8 border border-border/50">
+                <p className="text-2xl font-mono font-bold text-primary tracking-wider select-all">
                   {recoveryId}
                 </p>
               </div>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex gap-3">
+              
+              <div className="grid grid-cols-2 gap-4 mb-6">
                 <Button
                   onClick={copyRecoveryId}
                   variant="outline"
-                  className="flex-1 h-12"
+                  className="h-12 rounded-xl border-2"
                 >
                   {copiedRecovery ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 ml-2 text-green-500" />
-                      تم النسخ
+                      {isRTL ? 'تم النسخ' : 'Copied'}
                     </>
                   ) : (
                     <>
                       <Copy className="w-4 h-4 ml-2" />
-                      نسخ الرمز
+                      {isRTL ? 'نسخ الرمز' : 'Copy ID'}
                     </>
                   )}
                 </Button>
@@ -216,198 +219,209 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
                 <Button
                   onClick={downloadRecoveryId}
                   variant="outline"
-                  className="flex-1 h-12"
+                  className="h-12 rounded-xl border-2"
                 >
                   <Download className="w-4 h-4 ml-2" />
-                  تحميل الرمز
+                  {isRTL ? 'تحميل الرمز' : 'Download'}
                 </Button>
               </div>
               
               <Button
                 onClick={handleClose}
-                className="w-full h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                className="w-full h-12 text-base font-semibold rounded-xl gradient-primary text-white shadow-lg hover:shadow-glow transition-all"
                 disabled={!copiedRecovery}
               >
-                متابعة
-                <ArrowRight className="w-4 h-4 mr-2" />
+                {isRTL ? 'متابعة' : 'Continue'}
+                <ArrowRight className={cn("w-4 h-4", isRTL ? "mr-2" : "ml-2")} />
               </Button>
+              
+              {!copiedRecovery && (
+                <p className="text-xs text-center text-muted-foreground mt-4">
+                  {isRTL ? 'يرجى نسخ أو تحميل الرمز قبل المتابعة' : 'Please copy or download the ID before continuing'}
+                </p>
+              )}
             </div>
-            
-            {!copiedRecovery && (
-              <p className="text-xs text-center text-gray-500">
-                يرجى نسخ أو تحميل الرمز قبل المتابعة
-              </p>
-            )}
           </div>
         </div>
       ) : (
-      <Card className="w-full max-w-md relative my-8">
-        <button
-          onClick={onClose}
-          className="absolute left-4 top-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors z-10"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="w-full max-w-md relative my-8 animate-scale-in">
+          <div className="relative overflow-hidden rounded-3xl glass-effect-strong border border-border/50 shadow-2xl">
+            <div className="absolute top-0 left-0 right-0 h-1 gradient-aurora animate-gradient bg-[length:200%_auto]" />
+            
+            <button
+              onClick={onClose}
+              className="absolute left-4 top-4 p-2.5 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
 
-        <CardHeader className="text-center pb-4">
-          <CardTitle className="text-2xl font-bold">إنشاء حساب جديد</CardTitle>
-          <CardDescription>انضم إلينا وابدأ التسوق الآن</CardDescription>
-        </CardHeader>
-
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">الاسم الأول</Label>
-                <div className="relative">
-                  <User className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <Input
-                    id="firstName"
-                    placeholder="أحمد"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    required
-                    className="pr-10"
-                  />
-                </div>
+            <div className="relative pt-10 pb-6 px-8 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl gradient-primary shadow-lg">
+                <UserPlus className="h-8 w-8 text-white" />
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="lastName">الاسم الأخير</Label>
-                <Input
-                  id="lastName"
-                  placeholder="محمد"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  required
-                />
-              </div>
+              <h2 className="text-2xl font-bold gradient-text mb-2">
+                {isRTL ? 'إنشاء حساب جديد' : 'Create Account'}
+              </h2>
+              <p className="text-muted-foreground">
+                {isRTL ? 'انضم إلينا وابدأ التسوق الآن' : 'Join us and start shopping now'}
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="signup-email">البريد الإلكتروني</Label>
-              <div className="relative">
-                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  id="signup-email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="pr-10"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="phone">رقم الهاتف (اختياري)</Label>
-              <div className="relative">
-                <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+966 50 123 4567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="pr-10"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="signup-password">كلمة المرور</Label>
-              <div className="relative">
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  id="signup-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="px-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-              
-              {password && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500">قوة كلمة المرور:</span>
-                    <span className={`font-semibold ${
-                      passwordStrength < 40 ? 'text-red-500' : 
-                      passwordStrength < 70 ? 'text-yellow-500' : 
-                      'text-green-500'
-                    }`}>
-                      {getPasswordStrengthText()}
-                    </span>
+            <div className="relative px-8 pb-8">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-sm font-medium">{isRTL ? 'الاسم الأول' : 'First Name'}</Label>
+                    <div className="relative group">
+                      <User className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors", isRTL ? "right-3" : "left-3")} />
+                      <Input
+                        id="firstName"
+                        placeholder={isRTL ? 'أحمد' : 'John'}
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        required
+                        className={cn("h-11 rounded-xl border-2 border-border/50 bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all", isRTL ? "pr-10" : "pl-10")}
+                      />
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${getPasswordStrengthColor()}`}
-                      style={{ width: `${passwordStrength}%` }}
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-sm font-medium">{isRTL ? 'الاسم الأخير' : 'Last Name'}</Label>
+                    <Input
+                      id="lastName"
+                      placeholder={isRTL ? 'محمد' : 'Doe'}
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      required
+                      className="h-11 rounded-xl border-2 border-border/50 bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
                     />
                   </div>
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">تأكيد كلمة المرور</Label>
-              <div className="relative">
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  id="confirmPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="pr-10"
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email" className="text-sm font-medium">{isRTL ? 'البريد الإلكتروني' : 'Email'}</Label>
+                  <div className="relative group">
+                    <Mail className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors", isRTL ? "right-3" : "left-3")} />
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className={cn("h-11 rounded-xl border-2 border-border/50 bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all", isRTL ? "pr-10" : "pl-10")}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-sm font-medium">{isRTL ? 'رقم الهاتف (اختياري)' : 'Phone (Optional)'}</Label>
+                  <div className="relative group">
+                    <Phone className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors", isRTL ? "right-3" : "left-3")} />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+966 50 123 4567"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className={cn("h-11 rounded-xl border-2 border-border/50 bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all", isRTL ? "pr-10" : "pl-10")}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password" className="text-sm font-medium">{isRTL ? 'كلمة المرور' : 'Password'}</Label>
+                  <div className="relative group">
+                    <Lock className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors", isRTL ? "right-3" : "left-3")} />
+                    <Input
+                      id="signup-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className={cn("h-11 rounded-xl border-2 border-border/50 bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all", isRTL ? "pr-10 pl-10" : "pl-10 pr-10")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className={cn("absolute top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors", isRTL ? "left-3" : "right-3")}
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  
+                  {password && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">{isRTL ? 'قوة كلمة المرور:' : 'Strength:'}</span>
+                        <span className={cn("font-semibold", 
+                          passwordStrength < 40 ? 'text-red-500' : 
+                          passwordStrength < 70 ? 'text-yellow-500' : 
+                          'text-green-500'
+                        )}>
+                          {getPasswordStrengthText()}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className={cn("h-full transition-all duration-500", getPasswordStrengthColor())}
+                          style={{ width: `${passwordStrength}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-sm font-medium">{isRTL ? 'تأكيد كلمة المرور' : 'Confirm Password'}</Label>
+                  <div className="relative group">
+                    <Lock className={cn("absolute top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors", isRTL ? "right-3" : "left-3")} />
+                    <Input
+                      id="confirmPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className={cn("h-11 rounded-xl border-2 border-border/50 bg-background focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all", isRTL ? "pr-10" : "pl-10")}
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full h-12 text-base font-semibold rounded-xl gradient-primary text-white shadow-lg hover:shadow-glow transition-all mt-4"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                      <span>{isRTL ? 'جاري الإنشاء...' : 'Creating...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="ml-2 h-5 w-5" />
+                      <span>{isRTL ? 'إنشاء حساب' : 'Create Account'}</span>
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              <div className="mt-6 pt-6 border-t border-border/50">
+                <p className="text-sm text-center text-muted-foreground flex items-center justify-center gap-1">
+                  {isRTL ? 'لديك حساب بالفعل؟' : 'Already have an account?'}
+                  <button 
+                    onClick={onSwitchToLogin}
+                    className="text-primary hover:text-primary/80 font-semibold hover:underline transition-colors"
+                  >
+                    {isRTL ? 'سجل الدخول' : 'Sign In'}
+                  </button>
+                </p>
               </div>
             </div>
-
-            <Button 
-              type="submit" 
-              className="w-full mt-6"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-                  <span>جاري الإنشاء...</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus className="ml-2 h-5 w-5" />
-                  <span>إنشاء حساب</span>
-                </>
-              )}
-            </Button>
-          </form>
-        </CardContent>
-
-        <CardFooter className="flex flex-col gap-3">
-          <Separator />
-          <p className="text-sm text-center text-gray-600 dark:text-gray-400">
-            لديك حساب بالفعل؟{' '}
-            <button 
-              onClick={onSwitchToLogin}
-              className="text-primary hover:underline font-semibold"
-            >
-              سجل الدخول
-            </button>
-          </p>
-        </CardFooter>
-      </Card>
+          </div>
+        </div>
       )}
     </div>
   );

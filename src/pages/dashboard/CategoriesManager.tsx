@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Loader2, FolderOpen, Download, Upload, Users, Gift, Percent, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, FolderOpen, Download, Upload, Users, Gift, Percent, Tag, AlertCircle } from 'lucide-react';
 import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -15,6 +15,8 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { ImageUpload } from '@/components/ui/image-upload';
+import { ImportProgressDialog } from '@/components/ui/import-progress-dialog';
+import { ImportErrorDialog, ImportError } from '@/components/ui/import-error-dialog';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
@@ -78,6 +80,8 @@ export default function CategoriesManager() {
   const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; parentId?: string} | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
+  const [importErrors, setImportErrors] = useState<ImportError[]>([]);
+  const [showImportErrorDialog, setShowImportErrorDialog] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState({
@@ -328,6 +332,29 @@ export default function CategoriesManager() {
     }
   };
 
+  const handleSelectAllCategories = async () => {
+    try {
+      // Fetch all categories
+      const allCategoriesData = await coreApi.getCategories();
+      const allCategories = Array.isArray(allCategoriesData) 
+        ? allCategoriesData 
+        : (allCategoriesData as any).categories || [];
+      const allCategoryIds = allCategories.map((c: any) => c.id);
+      setSelectedCategories(new Set(allCategoryIds));
+      toast({
+        title: 'تم التحديد',
+        description: `تم تحديد ${allCategoryIds.length} فئة`,
+      });
+    } catch (error: any) {
+      console.error('Failed to select all categories:', error);
+      toast({
+        title: 'خطأ',
+        description: 'فشل في تحديد جميع الفئات',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleSelectCategory = (id: string, checked: boolean) => {
     const newSelected = new Set(selectedCategories);
     if (checked) {
@@ -394,9 +421,13 @@ export default function CategoriesManager() {
 
     try {
       setIsImporting(true);
-      setImportProgress({ current: 0, total: 0, currentItem: 'Reading file...' });
+      setImportErrors([]);
+      setShowImportErrorDialog(false);
+      setImportProgress({ current: 0, total: 0, currentItem: 'جاري قراءة الملف...' });
       
       const data = await file.arrayBuffer();
+      setImportProgress({ current: 10, total: 100, currentItem: 'جاري تحليل البيانات...' });
+      
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = utils.sheet_to_json<{ 
@@ -410,11 +441,22 @@ export default function CategoriesManager() {
       }>(worksheet, { defval: '' });
 
       const totalItems = jsonData.length;
-      setImportProgress({ current: 0, total: totalItems, currentItem: `Processing ${totalItems} categories...` });
+      
+      if (totalItems === 0) {
+        setIsImporting(false);
+        toast({
+          title: t('common.error'),
+          description: 'لم يتم العثور على أي بيانات في ملف Excel',
+          variant: 'destructive',
+        });
+        e.target.value = '';
+        return;
+      }
+      
+      setImportProgress({ current: 0, total: totalItems, currentItem: `جاري معالجة ${totalItems} فئة...` });
 
       let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
+      const collectedErrors: ImportError[] = [];
 
       // Helper function to generate slug from name
       const generateSlug = (name: string): string => {
@@ -429,17 +471,23 @@ export default function CategoriesManager() {
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
         const rowNum = i + 2; // Excel row number (1-indexed + header)
+        const itemName = row.Name?.trim() || `الصف ${rowNum}`;
         
         // Update progress
         setImportProgress({ 
           current: i + 1, 
           total: totalItems, 
-          currentItem: `Importing: ${row.Name || `Row ${rowNum}`}...` 
+          currentItem: `جاري استيراد: ${itemName}...` 
         });
 
+        // Validate Name field
         if (!row.Name || !row.Name.trim()) {
-          errors.push(`Row ${rowNum}: Name is required`);
-          errorCount++;
+          collectedErrors.push({
+            row: rowNum,
+            column: 'Name',
+            itemName: itemName,
+            error: 'اسم الفئة مطلوب'
+          });
           continue;
         }
 
@@ -449,12 +497,18 @@ export default function CategoriesManager() {
           if (row.Parent && row.Parent.trim()) {
             const parent = categories.find(c => 
               c.name?.toLowerCase() === row.Parent?.toLowerCase() ||
-              c.nameAr?.toLowerCase() === row.Parent?.toLowerCase() ||
+              (c as any).nameAr?.toLowerCase() === row.Parent?.toLowerCase() ||
               c.slug?.toLowerCase() === row.Parent?.toLowerCase()
             );
             parentId = parent?.id;
             if (!parentId) {
-              errors.push(`Row ${rowNum}: Parent category "${row.Parent}" not found`);
+              collectedErrors.push({
+                row: rowNum,
+                column: 'Parent',
+                itemName: itemName,
+                error: `الفئة الأب "${row.Parent}" غير موجودة`
+              });
+              continue;
             }
           }
 
@@ -468,47 +522,77 @@ export default function CategoriesManager() {
             descriptionAr: row.DescriptionAr?.trim() || undefined,
             slug,
             parentId: parentId || undefined,
-          });
+          } as any);
           successCount++;
+          
+          // Small delay to avoid rate limiting
+          if (i < jsonData.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         } catch (error: any) {
-          const errorMsg = error?.message || 'Unknown error';
-          errors.push(`Row ${rowNum} (${row.Name}): ${errorMsg}`);
-          errorCount++;
+          const errorMsg = error?.message || error?.data?.message || 'خطأ غير معروف';
+          let errorColumn = 'General';
+          
+          // Detect column from error message
+          const errorLower = errorMsg.toLowerCase();
+          if (errorLower.includes('name') || errorLower.includes('اسم')) errorColumn = 'Name';
+          else if (errorLower.includes('slug')) errorColumn = 'Slug';
+          else if (errorLower.includes('parent') || errorLower.includes('أب')) errorColumn = 'Parent';
+          
+          collectedErrors.push({
+            row: rowNum,
+            column: errorColumn,
+            itemName: itemName,
+            error: errorMsg
+          });
         }
       }
 
       // Update progress to 100%
+      const completionMessage = collectedErrors.length > 0 
+        ? `اكتمل الاستيراد! تم استيراد ${successCount} فئة، ورفض ${collectedErrors.length}`
+        : `اكتمل الاستيراد! تم استيراد ${successCount} فئة بنجاح`;
+      
       setImportProgress({ 
         current: totalItems, 
         total: totalItems, 
-        currentItem: 'Import completed!' 
+        currentItem: completionMessage 
       });
 
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const errorText = errors.length > 0 
-        ? `\n\nErrors:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n... and ${errors.length - 10} more errors` : ''}`
-        : '';
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Show error dialog if there were errors
+      if (collectedErrors.length > 0) {
+        setImportErrors(collectedErrors);
+        setIsImporting(false);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setShowImportErrorDialog(true);
+      } else {
+        setIsImporting(false);
+      }
 
       toast({
         title: successCount > 0 ? t('common.success') : t('common.error'),
-        description: `${t('categories.productCategories.importSuccess', { count: successCount })}${
-          errorCount > 0 ? `, ${t('categories.productCategories.importError')} ${errorCount}` : ''
-        }${errorText}`,
-        variant: errorCount > successCount ? 'destructive' : 'default',
+        description: collectedErrors.length > 0 
+          ? `تم استيراد ${successCount} فئة بنجاح، ورفض ${collectedErrors.length} فئة`
+          : `تم استيراد ${successCount} فئة بنجاح`,
+        variant: collectedErrors.length > successCount ? 'destructive' : 'default',
+        duration: 5000,
       });
       
       loadCategories();
       e.target.value = '';
     } catch (error: any) {
+      setIsImporting(false);
       toast({ 
         title: t('common.error'), 
         description: error?.message || t('categories.productCategories.importError'), 
         variant: 'destructive' 
       });
     } finally {
-      setIsImporting(false);
-      setImportProgress({ current: 0, total: 0, currentItem: '' });
+      if (!showImportErrorDialog) {
+        setImportProgress({ current: 0, total: 0, currentItem: '' });
+      }
     }
   };
 
@@ -682,6 +766,15 @@ export default function CategoriesManager() {
         {/* Product Categories Tab */}
         <TabsContent value="categories">
           <div className="flex justify-end gap-2 mb-4">
+            <Button 
+              variant="outline" 
+              className="gap-2" 
+              onClick={handleSelectAllCategories}
+              disabled={loading}
+            >
+              <Tag className="h-4 w-4" />
+              تحديد الكل
+            </Button>
             {selectedCategories.size > 0 && (
               <Button 
                 variant="destructive" 
@@ -1528,38 +1621,30 @@ export default function CategoriesManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Progress Dialog */}
-      <Dialog open={isImporting} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Importing Categories</DialogTitle>
-            <DialogDescription>
-              Please wait while categories are being imported...
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">
-                  {importProgress.currentItem || 'Processing...'}
-                </span>
-                <span className="text-gray-600 dark:text-gray-400">
-                  {importProgress.current} / {importProgress.total}
-                </span>
-              </div>
-              <Progress 
-                value={importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0} 
-                className="w-full"
-              />
-            </div>
-            <p className="text-xs text-gray-500 text-center">
-              {importProgress.total > 0 
-                ? `${Math.round((importProgress.current / importProgress.total) * 100)}% complete`
-                : 'Initializing...'}
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Import Progress Dialog - New Reusable Component */}
+      <ImportProgressDialog
+        open={isImporting}
+        onOpenChange={(open) => {
+          // Only allow closing if import is complete
+          if (!open && importProgress.current < importProgress.total && importProgress.total > 0) {
+            return;
+          }
+          setIsImporting(open);
+        }}
+        progress={importProgress}
+        title="جاري استيراد الفئات"
+        description="يرجى الانتظار أثناء استيراد الفئات من ملف Excel..."
+      />
+
+      {/* Import Errors Dialog - Shows failed rows with details */}
+      <ImportErrorDialog
+        open={showImportErrorDialog}
+        onOpenChange={setShowImportErrorDialog}
+        errors={importErrors}
+        title="تقرير أخطاء استيراد الفئات"
+        description="حدثت الأخطاء التالية أثناء استيراد الفئات. يرجى مراجعة الصفوف التي فشلت وتصحيح البيانات في ملف Excel."
+        itemLabel="اسم الفئة"
+      />
     </div>
   );
 }

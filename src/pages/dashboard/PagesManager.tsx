@@ -33,29 +33,24 @@ export default function PagesManager() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
-  const [tenantSubdomain, setTenantSubdomain] = useState<string>('');
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [newPageTitle, setNewPageTitle] = useState('');
+  const [tenantSubdomain, setTenantSubdomain] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Helper function to generate storefront URL
-  // Always generates subdomain format: subdomain.saeaa.com (e.g., market.saeaa.com)
-  const getStorefrontPageUrl = (slug: string): string => {
-    const hostname = window.location.hostname;
+  const getPageUrl = (slug: string) => {
     const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
     const port = window.location.port;
     const portPart = port ? `:${port}` : '';
-    const subdomain = tenantSubdomain || user?.tenantSubdomain || 'market';
+    const subdomain = tenantSubdomain || 'default';
     
-    // Detect base domain for subdomain generation
-    let baseDomain = 'saeaa.com';
-    if (hostname.includes('saeaa.net')) {
-      baseDomain = 'saeaa.net';
-    } else if (hostname.includes('saeaa.com')) {
-      baseDomain = 'saeaa.com';
-    }
+    // Base domain for production (saeaa.com)
+    const baseDomain = 'saeaa.com';
     
     // For local development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -70,16 +65,12 @@ export default function PagesManager() {
     loadPages();
     loadTemplates();
     loadTenantInfo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  // Check if user has a market/store set up (must be after all hooks)
+  // Check if user has a market/store set up
   const hasMarket = !!(user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system');
   
-  // Show market setup prompt if no market
-  if (!hasMarket) {
-    return <MarketSetupPrompt />;
-  }
-
   const loadTenantInfo = async () => {
     try {
       const config = await coreApi.get('/site-config', { requireAuth: true });
@@ -95,55 +86,30 @@ export default function PagesManager() {
     try {
       setLoading(true);
       const tenantId = user?.tenantId;
-      console.log('🔄 Loading pages...', { 
-        tenantId, 
-        hostname: window.location.hostname, 
-        hasUser: !!user,
-        userTenantId: user?.tenantId 
-      });
       
       // Use pageService which handles the API call properly
       const data = await pageService.getPages();
-      console.log('📄 Pages API response:', { 
-        data, 
-        isArray: Array.isArray(data), 
-        length: Array.isArray(data) ? data.length : 'N/A',
-        type: typeof data 
-      });
       
-      // Handle different response formats
-      let pagesArray: Page[] = [];
-      if (Array.isArray(data)) {
-        pagesArray = data;
-      } else if (data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) {
-        pagesArray = data.data;
-      } else if (data && typeof data === 'object' && 'pages' in data && Array.isArray(data.pages)) {
-        pagesArray = data.pages;
-      }
+      // Handle response - pageService already returns an array
+      let pagesArray: Page[] = Array.isArray(data) ? data : [];
       
       // Filter out any invalid pages
-      pagesArray = pagesArray.filter((page: any) => 
+      pagesArray = pagesArray.filter((page: Page) => 
         page && 
         typeof page === 'object' && 
         page.id && 
-        !('error' in page) && 
-        !('statusCode' in page)
+        !('error' in (page as unknown as Record<string, unknown>)) && 
+        !('statusCode' in (page as unknown as Record<string, unknown>))
       );
       
-      console.log('Processed pages:', pagesArray.length, pagesArray);
       setPages(pagesArray);
-      
-      if (pagesArray.length === 0 && tenantId && tenantId !== 'default' && tenantId !== 'system') {
-        console.warn('No pages found. Tenant ID:', tenantId, 'This might indicate a data loading issue.');
-      }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load pages:', error);
       toast({
-        title: 'تعذر تحميل الصفحات',
-        description: error?.message || 'حدث خطأ أثناء تحميل الصفحات. يرجى المحاولة مرة أخرى.',
+        title: 'خطأ في التحميل',
+        description: 'فشل تحميل الصفحات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
-      setPages([]);
     } finally {
       setLoading(false);
     }
@@ -152,97 +118,159 @@ export default function PagesManager() {
   const loadTemplates = async () => {
     try {
       const data = await templateService.getTemplates();
-      setTemplates(Array.isArray(data) ? data : []);
+      setTemplates(data);
     } catch (error) {
       console.error('Failed to load templates:', error);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه الصفحة؟')) return;
-
+  const handleCreatePage = async () => {
+    if (!newPageTitle.trim()) return;
+    
     try {
-      await coreApi.deletePage(id);
-      toast({ title: 'تم الحذف', description: 'تم حذف الصفحة بنجاح' });
+      setLoading(true);
+      const slug = newPageTitle.toLowerCase().replace(/\s+/g, '-');
+      await coreApi.createPage({
+        title: newPageTitle,
+        slug,
+        content: { sections: [] },
+        isPublished: false
+      });
+      
+      toast({
+        title: 'تم إنشاء الصفحة',
+        description: 'تم إنشاء الصفحة بنجاح.',
+      });
+      
+      setNewPageTitle('');
+      setShowCreateDialog(false);
       loadPages();
-      // Remove from selected pages if it was selected
-      const newSelected = new Set(selectedPages);
-      newSelected.delete(id);
-      setSelectedPages(newSelected);
     } catch (error) {
       toast({
-        title: 'تعذر حذف الصفحة',
-        description: 'حدث خطأ أثناء حذف الصفحة. يرجى المحاولة مرة أخرى.',
+        title: 'خطأ',
+        description: 'فشل إنشاء الصفحة.',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePage = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذه الصفحة؟')) return;
+    
+    try {
+      setLoading(true);
+      await coreApi.deletePage(id);
+      toast({
+        title: 'تم الحذف',
+        description: 'تم حذف الصفحة بنجاح.',
+      });
+      loadPages();
+    } catch (error) {
+      toast({
+        title: 'خطأ',
+        description: 'فشل حذف الصفحة.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedPages.size === 0) return;
+    if (!confirm(`هل أنت متأكد من حذف ${selectedPages.size} صفحة؟`)) return;
     
-    const count = selectedPages.size;
-    if (!confirm(`هل أنت متأكد من حذف ${count} صفحة؟`)) return;
-
     try {
-      const deletePromises = Array.from(selectedPages).map(id => coreApi.deletePage(id));
-      await Promise.all(deletePromises);
-      toast({ 
-        title: 'تم الحذف', 
-        description: `تم حذف ${count} صفحة بنجاح` 
+      setLoading(true);
+      await Promise.all(Array.from(selectedPages).map(id => coreApi.deletePage(id)));
+      toast({
+        title: 'تم الحذف',
+        description: `تم حذف ${selectedPages.size} صفحة بنجاح.`,
       });
       setSelectedPages(new Set());
       loadPages();
     } catch (error) {
       toast({
-        title: 'تعذر حذف الصفحات',
-        description: 'حدث خطأ أثناء حذف الصفحات. يرجى المحاولة مرة أخرى.',
+        title: 'خطأ',
+        description: 'فشل حذف بعض الصفحات.',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const togglePageSelection = (pageId: string) => {
-    const newSelection = new Set(selectedPages);
-    if (newSelection.has(pageId)) {
-      newSelection.delete(pageId);
-    } else {
-      newSelection.add(pageId);
-    }
-    setSelectedPages(newSelection);
-  };
-
-  const selectAll = () => {
-    if (selectedPages.size === filteredPages.length) {
-      setSelectedPages(new Set());
-    } else {
-      setSelectedPages(new Set(filteredPages.map(p => p.id)));
-    }
-  };
-
-  const handleDuplicate = async (page: Page) => {
+  const handleDuplicatePage = async (page: Page) => {
     try {
+      setLoading(true);
       await coreApi.createPage({
         title: `${page.title} (نسخة)`,
         slug: `${page.slug}-copy-${Date.now()}`,
         content: page.content,
-        isPublished: false,
+        isPublished: false
       });
-      toast({ title: 'تم النسخ', description: 'تم نسخ الصفحة بنجاح' });
+      toast({
+        title: 'تم النسخ',
+        description: 'تم نسخ الصفحة بنجاح.',
+      });
       loadPages();
     } catch (error) {
       toast({
-        title: 'تعذر نسخ الصفحة',
-        description: 'حدث خطأ أثناء نسخ الصفحة. يرجى المحاولة مرة أخرى.',
+        title: 'خطأ',
+        description: 'فشل نسخ الصفحة.',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreateFromTemplate = (templateId: string) => {
-    setShowTemplateDialog(false);
-    // Encode templateId to handle special characters like + in base64 IDs
-    navigate(`/dashboard/pages/new?templateId=${encodeURIComponent(templateId)}`);
+  const handleCreateFromTemplate = async (template: Template) => {
+    try {
+      setLoading(true);
+      // Use template ID or name for slug if slug doesn't exist
+      const templateSlug = template.name.toLowerCase().replace(/\s+/g, '-');
+      await coreApi.createPage({
+        title: template.name,
+        slug: `${templateSlug}-${Date.now()}`,
+        content: template.content as unknown as Record<string, unknown>,
+        isPublished: false
+      });
+      toast({
+        title: 'تم الإنشاء',
+        description: 'تم إنشاء الصفحة من القالب بنجاح.',
+      });
+      setShowTemplateDialog(false);
+      loadPages();
+    } catch (error) {
+      toast({
+        title: 'خطأ',
+        description: 'فشل إنشاء الصفحة من القالب.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePageSelection = (id: string) => {
+    const newSelection = new Set(selectedPages);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedPages(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedPages.size === pages.length) {
+      setSelectedPages(new Set());
+    } else {
+      setSelectedPages(new Set(pages.map(p => p.id)));
+    }
   };
 
   const handleAutoGenerateProductPages = async () => {
@@ -266,15 +294,20 @@ export default function PagesManager() {
           {
             type: 'merchant-dashboard',
             props: {
-              title: 'لوحة التحكم',
-              titleAr: 'لوحة التحكم',
-              subtitle: 'نظرة عامة على أداء متجرك',
-              subtitleAr: 'نظرة عامة على أداء متجرك'
+              title: 'لوحة التحكم الذكية',
+              titleAr: 'لوحة التحكم الذكية',
+              subtitle: 'نظرة عامة شاملة على أداء متجرك ونشاطك',
+              subtitleAr: 'نظرة عامة شاملة على أداء متجرك ونشاطك',
+              showStats: true,
+              showQuickActions: true,
+              showRecentActivity: true,
+              theme: 'premium'
             }
           }
         ],
-        backgroundColor: '#f8f9fa',
-        isDarkMode: false
+        backgroundColor: 'transparent',
+        isDarkMode: false,
+        containerClassName: 'bg-grid-pattern'
       };
 
       // 2. Product List Page - Detailed product table with search
@@ -283,8 +316,12 @@ export default function PagesManager() {
           {
             type: 'product-list',
             props: {
-              title: 'قائمة المنتجات',
-              titleAr: 'قائمة المنتجات'
+              title: 'إدارة المنتجات',
+              titleAr: 'إدارة المنتجات',
+              showFilters: true,
+              showSearch: true,
+              showExport: true,
+              layout: 'professional'
             }
           }
         ],
@@ -296,10 +333,29 @@ export default function PagesManager() {
       const storePageContent = {
         sections: [
           {
+            type: 'hero',
+            props: {
+              title: 'متجر البطاقات الرقمية',
+              titleAr: 'متجر البطاقات الرقمية',
+              subtitle: 'أفضل البطاقات الرقمية بأفضل الأسعار',
+              subtitleAr: 'أفضل البطاقات الرقمية بأفضل الأسعار',
+              buttonText: 'تصفح الآن',
+              backgroundImage: 'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=2070&auto=format&fit=crop',
+              overlayOpacity: 0.6,
+              textAlign: 'center',
+              contentPosition: 'center',
+              minHeight: '400px',
+              animationType: 'animate-aurora'
+            }
+          },
+          {
             type: 'store-page',
             props: {
               title: 'منصة التجارة الإلكترونية',
-              titleAr: 'منصة التجارة الإلكترونية'
+              titleAr: 'منصة التجارة الإلكترونية',
+              showCart: true,
+              showCategories: true,
+              layout: 'grid'
             }
           }
         ],
@@ -313,8 +369,10 @@ export default function PagesManager() {
           {
             type: 'support-tickets',
             props: {
-              title: 'الدعم',
-              titleAr: 'الدعم'
+              title: 'مركز الدعم والمساعدة',
+              titleAr: 'مركز الدعم والمساعدة',
+              showNewTicketButton: true,
+              showStatusBadges: true
             }
           }
         ],
@@ -329,7 +387,9 @@ export default function PagesManager() {
             type: 'favorites-page',
             props: {
               title: 'البطاقات المفضلة',
-              titleAr: 'البطاقات المفضلة'
+              titleAr: 'البطاقات المفضلة',
+              emptyStateText: 'لا توجد بطاقات مفضلة حالياً',
+              showAddToCart: true
             }
           }
         ],
@@ -343,8 +403,10 @@ export default function PagesManager() {
           {
             type: 'balance-operations',
             props: {
-              title: 'عمليات شحن الرصيد',
-              titleAr: 'عمليات شحن الرصيد'
+              title: 'سجل العمليات المالية',
+              titleAr: 'سجل العمليات المالية',
+              showFilters: true,
+              showExport: true
             }
           }
         ],
@@ -358,8 +420,10 @@ export default function PagesManager() {
           {
             type: 'employees-page',
             props: {
-              title: 'قائمة الموظفين',
-              titleAr: 'قائمة الموظفين'
+              title: 'إدارة فريق العمل',
+              titleAr: 'إدارة فريق العمل',
+              showGroups: true,
+              showPermissions: true
             }
           }
         ],
@@ -373,8 +437,10 @@ export default function PagesManager() {
           {
             type: 'charge-wallet',
             props: {
-              title: 'شحن الرصيد',
-              titleAr: 'شحن الرصيد'
+              title: 'شحن رصيد المحفظة',
+              titleAr: 'شحن رصيد المحفظة',
+              showBankTransfer: true,
+              showOnlinePayment: true
             }
           }
         ],
@@ -388,8 +454,11 @@ export default function PagesManager() {
           {
             type: 'reports-page',
             props: {
-              title: 'التقارير',
-              titleAr: 'التقارير'
+              title: 'التقارير والتحليلات',
+              titleAr: 'التقارير والتحليلات',
+              showCharts: true,
+              showSummary: true,
+              dateRange: 'last_30_days'
             }
           }
         ],
@@ -403,8 +472,10 @@ export default function PagesManager() {
           {
             type: 'profile-page',
             props: {
-              title: 'الملف الشخصي',
-              titleAr: 'الملف الشخصي'
+              title: 'إعدادات الحساب',
+              titleAr: 'إعدادات الحساب',
+              showSecuritySettings: true,
+              showNotificationSettings: true
             }
           }
         ],
@@ -412,20 +483,21 @@ export default function PagesManager() {
         isDarkMode: false
       };
 
-      // 11. Categories Hierarchy Page - Categories with subcategories and products
+      // 11. Categories Hierarchy Page
       const categoriesHierarchyPageContent = {
         sections: [
           {
             type: 'categories-hierarchy',
             props: {
-              title: 'الفئات والمنتجات',
-              titleAr: 'الفئات والمنتجات',
-              subtitle: 'تصفح الفئات والفئات الفرعية والمنتجات',
-              subtitleAr: 'تصفح الفئات والفئات الفرعية والمنتجات',
+              title: 'تصفح الأقسام والمنتجات',
+              titleAr: 'تصفح الأقسام والمنتجات',
+              subtitle: 'اكتشف مجموعتنا الواسعة من البطاقات الرقمية',
+              subtitleAr: 'اكتشف مجموعتنا الواسعة من البطاقات الرقمية',
               productsPerCategory: 12,
               productsColumns: 4,
               productsLayout: 'grid',
-              showAddToCart: true
+              showAddToCart: true,
+              theme: 'aurora'
             }
           }
         ],
@@ -434,8 +506,8 @@ export default function PagesManager() {
       };
 
       // Check for existing pages to prevent duplicates
-      const existingPages = await coreApi.getPages().catch(() => []);
-      const existingSlugs = new Set((Array.isArray(existingPages) ? existingPages : []).map((p: any) => p.slug));
+      const existingPages = await coreApi.getPages().catch(() => [] as Page[]);
+      const existingSlugs = new Set((Array.isArray(existingPages) ? existingPages : []).map((p: Page) => p.slug));
 
       // Filter out pages that already exist
       const pagesToCreate = [
@@ -477,7 +549,7 @@ export default function PagesManager() {
 
       toast({
         title: 'تم الإنشاء بنجاح',
-        description: `تم إنشاء ${pages.length} صفحة جديدة تلقائياً`,
+        description: `تم إنشاء ${pages.length} صفحة احترافية جديدة تلقائياً`,
         variant: 'default',
       });
 
@@ -513,29 +585,20 @@ export default function PagesManager() {
     drafts: pages.filter(p => !p.isPublished).length,
   };
 
+  // Early return after all hooks
+  if (!hasMarket) {
+    return <MarketSetupPrompt />;
+  }
+
   return (
     <div className="space-y-6">
-      {/* Market Setup Notice - Show when user doesn't have a market */}
-      {!hasMarket && (
-        <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-600">
-          <Store className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-amber-800 dark:text-amber-200">لم تقم بإعداد متجرك بعد</AlertTitle>
-          <AlertDescription className="text-amber-700 dark:text-amber-300">
-            يمكنك إنشاء الصفحات الآن، ولكن لن تكون مرئية للعملاء حتى تقوم بإعداد متجرك.{' '}
-            <Link to="/dashboard/market-setup" className="font-semibold underline hover:no-underline">
-              إعداد المتجر الآن
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary via-orange-500 to-teal-500 bg-clip-text text-transparent">
             إدارة الصفحات
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2 text-lg">
+          <p className="text-muted-foreground mt-2 text-lg">
             أنشئ وأدر صفحات موقعك الإلكتروني
           </p>
         </div>
@@ -547,289 +610,296 @@ export default function PagesManager() {
             onClick={loadPages}
             disabled={loading}
           >
-            {loading ? (
-              <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-            ) : (
-              <RefreshCw className="ml-2 h-5 w-5" />
-            )}
+            <RefreshCw className={`h-5 w-5 ml-2 ${loading ? 'animate-spin' : ''}`} />
             تحديث
           </Button>
+          
           <Button 
             variant="outline" 
             size="lg" 
-            className="border-2 border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+            className="border-2 border-primary/20 hover:border-primary/40 text-primary"
             onClick={handleAutoGenerateProductPages}
             disabled={loading}
           >
-            {loading ? (
-              <Loader2 className="ml-2 h-5 w-5 animate-spin" />
-            ) : (
-              <Zap className="ml-2 h-5 w-5" />
-            )}
+            <Sparkles className="h-5 w-5 ml-2 text-primary" />
             إنشاء صفحات المنتجات تلقائياً
           </Button>
+
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogTrigger asChild>
+              <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
+                <Plus className="h-5 w-5 ml-2" />
+                صفحة جديدة
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>إنشاء صفحة جديدة</DialogTitle>
+                <DialogDescription>
+                  أدخل عنوان الصفحة التي تريد إنشاءها.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">عنوان الصفحة</label>
+                  <Input 
+                    placeholder="مثال: من نحن، اتصل بنا..." 
+                    value={newPageTitle}
+                    onChange={(e) => setNewPageTitle(e.target.value)}
+                  />
+                </div>
+                <Button className="w-full" onClick={handleCreatePage} disabled={loading}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'إنشاء الصفحة'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-card border-2 border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary"></div>
+              إجمالي الصفحات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-primary">{stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-2 border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-success"></div>
+              منشورة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-success">{stats.published}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-2 border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-accent"></div>
+              مسودات
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-accent">{stats.drafts}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-4 rounded-xl border-2 border-border shadow-sm">
+        <div className="relative w-full md:w-96">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Input 
+            placeholder="بحث في الصفحات..." 
+            className="pr-10 h-11 border-border focus:border-primary"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          {selectedPages.size > 0 && (
+            <Button 
+              variant="destructive" 
+              onClick={handleBulkDelete}
+              className="shadow-lg shadow-red-100"
+            >
+              <Trash2 className="h-4 w-4 ml-2" />
+              حذف المختار ({selectedPages.size})
+            </Button>
+          )}
+          
           <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="lg" className="border-2">
-                <LayoutTemplate className="ml-2 h-5 w-5" />
-                من قالب
+              <Button variant="outline" className="border-2">
+                <LayoutTemplate className="h-4 w-4 ml-2" />
+                القوالب الجاهزة
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-2xl">اختر قالباً</DialogTitle>
+                <DialogTitle>اختر من القوالب الجاهزة</DialogTitle>
                 <DialogDescription>
-                  ابدأ بقالب احترافي جاهز وخصصه حسب احتياجاتك
+                  قوالب مصممة باحترافية لتسريع عملية بناء موقعك.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid md:grid-cols-2 gap-4 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
                 {templates.map((template) => (
-                  <Card 
-                    key={template.id} 
-                    className="cursor-pointer hover:shadow-lg transition-all border-2 hover:border-indigo-500"
-                    onClick={() => handleCreateFromTemplate(template.id)}
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{template.name}</CardTitle>
-                          <CardDescription className="mt-1">
-                            {template.description}
-                          </CardDescription>
-                        </div>
-                        <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
-                          {template.category}
-                        </Badge>
+                  <Card key={template.id} className="overflow-hidden hover:border-primary transition-colors cursor-pointer group">
+                    <div className="aspect-video bg-muted flex items-center justify-center relative overflow-hidden">
+                      {template.thumbnail ? (
+                        <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      ) : (
+                        <LayoutTemplate className="h-12 w-12 text-muted-foreground" />
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button onClick={() => handleCreateFromTemplate(template)}>استخدام هذا القالب</Button>
                       </div>
+                    </div>
+                    <CardHeader className="p-4">
+                      <CardTitle className="text-lg">{template.name}</CardTitle>
+                      <CardDescription>{template.description}</CardDescription>
                     </CardHeader>
-                    {template.preview && (
-                      <CardContent>
-                        <img 
-                          src={template.preview} 
-                          alt={template.name}
-                          className="w-full h-40 object-cover rounded-lg"
-                        />
-                      </CardContent>
-                    )}
                   </Card>
                 ))}
               </div>
             </DialogContent>
           </Dialog>
-
-          <Button 
-            size="lg" 
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg"
-            onClick={() => navigate('/dashboard/pages/new')}
-          >
-            <Plus className="ml-2 h-5 w-5" />
-            صفحة جديدة
-          </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-md">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">إجمالي الصفحات</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-              </div>
-              <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl">
-                <FileText className="h-6 w-6 text-indigo-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-md">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">منشورة</p>
-                <p className="text-3xl font-bold text-green-600">{stats.published}</p>
-              </div>
-              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
-                <Globe className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-md">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">مسودات</p>
-                <p className="text-3xl font-bold text-yellow-600">{stats.drafts}</p>
-              </div>
-              <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl">
-                <Edit className="h-6 w-6 text-yellow-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search and Bulk Actions */}
-      <Card className="border-0 shadow-md">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="relative flex-1 w-full sm:w-auto">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <Input
-                placeholder="ابحث عن صفحة..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-10 h-12 border-2"
-              />
-            </div>
-            {filteredPages.length > 0 && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={selectedPages.size === filteredPages.length && filteredPages.length > 0}
-                    onCheckedChange={selectAll}
-                    id="select-all"
+      {/* Pages Table */}
+      <div className="bg-card rounded-xl border-2 border-border shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead className="bg-muted/50 border-b-2 border-border">
+              <tr>
+                <th className="p-4 w-12">
+                  <Checkbox 
+                    checked={selectedPages.size === pages.length && pages.length > 0}
+                    onCheckedChange={toggleSelectAll}
                   />
-                  <label
-                    htmlFor="select-all"
-                    className="text-sm font-medium cursor-pointer"
-                  >
-                    تحديد الكل ({selectedPages.size})
-                  </label>
-                </div>
-                {selectedPages.size > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                  >
-                    <Trash2 className="ml-2 h-4 w-4" />
-                    حذف المحدد ({selectedPages.size})
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                </th>
+                <th className="p-4 font-bold text-foreground">الصفحة</th>
+                <th className="p-4 font-bold text-foreground">الرابط (Slug)</th>
+                <th className="p-4 font-bold text-foreground">الحالة</th>
+                <th className="p-4 font-bold text-foreground">تاريخ التحديث</th>
+                <th className="p-4 font-bold text-foreground text-left">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {loading && pages.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="mt-2 text-muted-foreground">جاري تحميل الصفحات...</p>
+                  </td>
+                </tr>
+              ) : filteredPages.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center">
+                    <div className="bg-muted w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileText className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <p className="text-muted-foreground text-lg">لا توجد صفحات حالياً</p>
+                    <Button 
+                      variant="link" 
+                      className="text-primary mt-2"
+                      onClick={() => setShowCreateDialog(true)}
+                    >
+                      أنشئ صفحتك الأولى الآن
+                    </Button>
+                  </td>
+                </tr>
+              ) : (
+                filteredPages.map((page) => (
+                  <tr key={page.id} className="hover:bg-muted/30 transition-colors group border-b border-border last:border-0">
+                    <td className="p-4">
+                      <Checkbox 
+                        checked={selectedPages.has(page.id)}
+                        onCheckedChange={() => togglePageSelection(page.id)}
+                      />
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-foreground">{page.title}</p>
+                          <p className="text-xs text-muted-foreground">ID: {page.id.substring(0, 8)}...</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <code className="bg-muted px-2 py-1 rounded text-sm text-muted-foreground">
+                        /{page.slug}
+                      </code>
+                    </td>
+                    <td className="p-4">
+                      {page.isPublished ? (
+                        <Badge className="bg-success/10 text-success border-success/20 hover:bg-success/20">منشورة</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-accent border-accent/30 bg-accent/5">مسودة</Badge>
+                      )}
+                    </td>
+                    <td className="p-4 text-muted-foreground text-sm">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        {new Date(page.updatedAt).toLocaleDateString('ar-SA')}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2 justify-start">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="hover:bg-primary/10 hover:text-primary"
+                          onClick={() => navigate(`/builder/${page.id}`)}
+                        >
+                          <Edit className="h-4 w-4 ml-2" />
+                          تعديل
+                        </Button>
+                        
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="hover:bg-[hsl(var(--teal)/0.1)] hover:text-[hsl(var(--teal))]"
+                          asChild
+                        >
+                          <a href={getPageUrl(page.slug)} target="_blank" rel="noopener noreferrer">
+                            <Eye className="h-4 w-4 ml-2" />
+                            عرض
+                          </a>
+                        </Button>
 
-      {/* Pages Grid */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="w-48 p-2">
+                            <div className="flex flex-col gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="justify-start font-normal"
+                                onClick={() => handleDuplicatePage(page)}
+                              >
+                                <Copy className="h-4 w-4 ml-2" />
+                                تكرار
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="justify-start font-normal text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDeletePage(page.id)}
+                              >
+                                <Trash2 className="h-4 w-4 ml-2" />
+                                حذف
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      ) : filteredPages.length === 0 ? (
-        <Card className="border-0 shadow-lg">
-          <CardContent className="py-16 text-center">
-            <FileText className="h-20 w-20 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-2xl font-bold mb-2">
-              {searchQuery ? 'لا توجد نتائج' : 'لا توجد صفحات بعد'}
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-              {searchQuery 
-                ? 'جرب كلمات بحث مختلفة' 
-                : 'ابدأ بإنشاء صفحتك الأولى من قالب أو من الصفر'}
-            </p>
-            {!searchQuery && (
-              <div className="flex gap-3 justify-center">
-                <Button onClick={() => setShowTemplateDialog(true)} variant="outline" size="lg">
-                  <LayoutTemplate className="ml-2 h-5 w-5" />
-                  تصفح القوالب
-                </Button>
-                <Button onClick={() => navigate('/dashboard/pages/new')} size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                  <Plus className="ml-2 h-5 w-5" />
-                  إنشاء صفحة
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPages.map((page) => (
-            <Card key={page.id} className="border-0 shadow-md hover:shadow-xl transition-all group relative">
-              <div className="absolute top-4 left-4 z-10">
-                <Checkbox
-                  checked={selectedPages.has(page.id)}
-                  onCheckedChange={() => togglePageSelection(page.id)}
-                  id={`page-${page.id}`}
-                />
-              </div>
-              <CardHeader>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 pr-8">
-                    <CardTitle className="text-xl mb-2 group-hover:text-indigo-600 transition-colors">
-                      {page.title}
-                    </CardTitle>
-                    <CardDescription className="flex items-center gap-2">
-                      <Globe className="h-4 w-4" />
-                      /{page.slug}
-                    </CardDescription>
-                  </div>
-                  <Badge 
-                    variant={page.isPublished ? 'default' : 'secondary'}
-                    className={page.isPublished 
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                      : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}
-                  >
-                    {page.isPublished ? 'منشورة' : 'مسودة'}
-                  </Badge>
-                </div>
-                {page.updatedAt && (
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Calendar className="h-4 w-4" />
-                    {new Date(page.updatedAt).toLocaleDateString('ar-SA')}
-                  </div>
-                )}
-              </CardHeader>
-              <Separator />
-              <CardContent className="pt-4">
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 border-2"
-                    onClick={() => navigate(`/dashboard/pages/${encodeURIComponent(page.id)}`)}
-                  >
-                    <Edit className="ml-2 h-4 w-4" />
-                    تعديل
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-2"
-                    onClick={() => handleDuplicate(page)}
-                    title="نسخ الصفحة"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-2"
-                    onClick={() => window.open(getStorefrontPageUrl(page.slug), '_blank')}
-                    title="معاينة"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => handleDelete(page.id)}
-                    title="حذف"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

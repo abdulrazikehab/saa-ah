@@ -420,7 +420,7 @@ export const DashboardHeader = ({
 
           {/* Saeaa Logo */}
           <div className={`hidden sm:flex items-center flex-shrink-0 ${isRTL ? 'mr-1 md:mr-3 lg:mr-6' : 'ml-1 md:ml-3 lg:ml-6'}`}>
-            <img src={getLogoUrl()} alt="Saeaa - سِعَة" className="h-6 sm:h-7 md:h-8 object-contain bg-transparent" />
+            <img src={getLogoUrl()} alt="Saeaa - سِعَة" className="h-12 sm:h-14 md:h-16 lg:h-18 object-contain bg-transparent" />
           </div>
 
         </div>

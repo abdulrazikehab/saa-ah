@@ -1,5 +1,11 @@
-import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, Package, ArrowLeft, Plus, Tag, Eye, Edit, X, Image as ImageIcon, AlertTriangle, Home, Store, Box, Trash2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  ChevronRight, ChevronDown, ChevronLeft, Folder, FolderOpen, Package, 
+  ArrowLeft, Plus, Tag, Eye, Edit, X, Image as ImageIcon, 
+  AlertTriangle, Home, Store, Box, Trash2, Search, MoreVertical,
+  LayoutGrid, List, Info, ExternalLink, RefreshCw, Upload
+} from 'lucide-react';
+import { CloudinaryImagePicker } from './CloudinaryImagePicker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,10 +16,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu';
 import { ImageUpload } from '@/components/ui/image-upload';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Brand {
   id: string;
@@ -181,8 +189,10 @@ export function HierarchicalExplorer({
     sku: '',
     barcode: '',
     stock: '',
+    images: [] as string[],
   });
   const [savingProduct, setSavingProduct] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
 
   // Navigate to ProductsManager with pre-filled brand and categories
   const navigateToAddProduct = () => {
@@ -262,6 +272,7 @@ export function HierarchicalExplorer({
         sku: details.sku || '',
         barcode: details.barcode || '',
         stock: details.stock?.toString() || '0',
+        images: details.images || [],
       });
     } catch (error) {
       console.error('Failed to load product details:', error);
@@ -292,6 +303,7 @@ export function HierarchicalExplorer({
         compareAtPrice: editProductData.compareAtPrice ? parseFloat(editProductData.compareAtPrice) : undefined,
         sku: editProductData.sku || undefined,
         barcode: editProductData.barcode || undefined,
+        images: editProductData.images,
       });
 
       // Update inventory if stock changed
@@ -340,182 +352,81 @@ export function HierarchicalExplorer({
     navigate(`/dashboard/products?${params.toString()}`);
   };
 
+  // Helper to get all categories belonging to a specific brand
+  const getCategorySetForBrand = useCallback((brandId: string | null) => {
+    if (!brandId) return new Set<string>();
+    
+    const set = new Set<string>();
+    
+    // 1. Explicit mapping (from local storage / manual creation)
+    categoryBrandMap.forEach((bId, cId) => {
+      if (bId === brandId) {
+        set.add(cId);
+      }
+    });
+    
+    // 2. Products (from server data)
+    products.forEach(product => {
+      if (product.brandId === brandId && product.categories) {
+        product.categories.forEach((pc: ProductCategory) => {
+          const catId = pc.categoryId || pc.category?.id || pc.id;
+          if (catId) set.add(catId);
+        });
+      }
+    });
+    
+    // 3. Ancestors (if a child is in brand, parent must be too)
+    let addedAny = true;
+    while (addedAny) {
+      addedAny = false;
+      categories.forEach(cat => {
+        if (cat.parentId && set.has(cat.id) && !set.has(cat.parentId)) {
+          set.add(cat.parentId);
+          addedAny = true;
+        }
+      });
+    }
+    
+    // 4. Descendants (if a parent is in brand, all children should be visible)
+    addedAny = true;
+    while (addedAny) {
+      addedAny = false;
+      categories.forEach(cat => {
+        if (cat.parentId && set.has(cat.parentId) && !set.has(cat.id)) {
+          set.add(cat.id);
+          addedAny = true;
+        }
+      });
+    }
+    
+    return set;
+  }, [categories, products, categoryBrandMap]);
+
+  // Get all categories that belong to the selected brand
+  const categoriesInBrand = useMemo(() => getCategorySetForBrand(selectedBrand), [getCategorySetForBrand, selectedBrand]);
+
   // Get categories by brand - ensures proper hierarchy: Brand → Category → Subcategory → Product
-  // SIMPLIFIED: Only show categories explicitly mapped to this brand OR have products from this brand
-  const getCategoriesByBrand = (brandId: string | null, filterByProducts: boolean = false): Category[] => {
+  const getCategoriesByBrand = useCallback((brandId: string | null): Category[] => {
     if (!brandId) {
       // Return all top-level categories when no brand is selected
       return categories.filter(cat => !cat.parentId);
     }
     
-    // Step 1: Get all category IDs that belong to this brand (from map - HIGHEST PRIORITY)
-    const categoriesInThisBrand = new Set<string>();
-    categoryBrandMap.forEach((mapBrandId, categoryId) => {
-      if (mapBrandId === brandId) {
-        categoriesInThisBrand.add(categoryId);
-        console.log(`[getCategoriesByBrand] ✅ Found mapped category ${categoryId} for brand ${brandId}`);
-      }
-    });
-    
-    // Step 2: Get all category IDs that have products from this brand (SECONDARY - only if not conflicting with map)
-    const brandProducts = products.filter(p => p.brandId === brandId);
-    brandProducts.forEach(product => {
-      if (product.categories && Array.isArray(product.categories)) {
-        product.categories.forEach((pc: ProductCategory) => {
-          const catId = pc.categoryId || pc.category?.id || pc.id;
-          if (catId) {
-            // Only add if not mapped to a different brand (map takes priority)
-            const mappedBrand = categoryBrandMap.get(catId);
-            if (!mappedBrand || mappedBrand === brandId) {
-              categoriesInThisBrand.add(catId);
-              // Add all ancestors to show full hierarchy (if they're not mapped to different brand)
-              let currentId = catId;
-              while (currentId) {
-                const category = categories.find(c => c.id === currentId);
-                if (category?.parentId) {
-                  const parentMappedBrand = categoryBrandMap.get(category.parentId);
-                  if (!parentMappedBrand || parentMappedBrand === brandId) {
-                    categoriesInThisBrand.add(category.parentId);
-                    currentId = category.parentId;
-                  } else {
-                    break; // Stop if parent is mapped to different brand
-                  }
-                } else {
-                  break;
-                }
-              }
-            }
-          }
-        });
-      }
-    });
-    
-    // Step 3: Return ONLY top-level categories that belong to this brand
-    const result = categories.filter(cat => {
-      if (cat.parentId) return false; // Only top-level categories
-      
-      // Direct match
-      if (categoriesInThisBrand.has(cat.id)) {
-        return true;
-      }
-      
-      // Check if any descendant belongs to this brand
-      const hasDescendantInBrand = (categoryId: string): boolean => {
-        const children = categories.filter(c => c.parentId === categoryId);
-        return children.some(child => {
-          if (categoriesInThisBrand.has(child.id)) {
-            return true;
-          }
-          return hasDescendantInBrand(child.id);
-        });
-      };
-      
-      return hasDescendantInBrand(cat.id);
-    });
-    
-    console.log(`[getCategoriesByBrand] Brand: ${brandId}`);
-    console.log(`[getCategoriesByBrand] Total categories: ${categories.length}, Top-level: ${categories.filter(c => !c.parentId).length}`);
-    console.log(`[getCategoriesByBrand] categoryBrandMap size: ${categoryBrandMap.size}, entries:`, Array.from(categoryBrandMap.entries()));
-    console.log(`[getCategoriesByBrand] Categories in brand set:`, Array.from(categoriesInThisBrand));
-    console.log(`[getCategoriesByBrand] Brand products count: ${brandProducts.length}`);
-    console.log(`[getCategoriesByBrand] Found ${result.length} top-level categories:`, result.map(c => ({ id: c.id, name: c.name || c.nameAr, parentId: c.parentId })));
-    
-    return result;
-  };
+    // Return top-level categories that are in this brand
+    const brandSet = getCategorySetForBrand(brandId);
+    return categories.filter(cat => !cat.parentId && brandSet.has(cat.id));
+  }, [categories, getCategorySetForBrand]);
 
-  // Get subcategories of a category - filtered by brand to ensure proper hierarchy
-  // SIMPLIFIED: Only show subcategories that belong to this brand (from map or products)
-  const getSubcategories = (parentId: string, brandId: string | null = null, filterByProducts: boolean = false): Category[] => {
-    // Get all subcategories with the given parentId
+  // Get subcategories of a category - strictly filtered by brand
+  const getSubcategories = useCallback((parentId: string, brandId: string | null = null): Category[] => {
     const allSubcategories = categories.filter(cat => cat.parentId === parentId);
     
-    // If no brandId provided, return all subcategories (global view)
-    if (!brandId) {
-      return allSubcategories;
-    }
+    if (!brandId) return allSubcategories;
     
-    // Verify that parent category belongs to this brand
-    const parentCategory = categories.find(c => c.id === parentId);
-    if (!parentCategory) {
-      return [];
-    }
-    
-    // Check if parent belongs to this brand
-    const parentBelongsToBrand = (): boolean => {
-      // Check explicit mapping
-      if (categoryBrandMap.get(parentId) === brandId) return true;
-      
-      // Check products
-      const parentHasProducts = products.some(p => {
-        if (p.brandId !== brandId) return false;
-        if (!p.categories || !Array.isArray(p.categories)) return false;
-        return p.categories.some((pc: ProductCategory) => {
-          const catId = pc.categoryId || pc.category?.id || pc.id;
-          return catId === parentId;
-        });
-      });
-      if (parentHasProducts) return true;
-      
-      // Check ancestors recursively
-      let currentParentId = parentCategory.parentId;
-      while (currentParentId) {
-        if (categoryBrandMap.get(currentParentId) === brandId) return true;
-        const category = categories.find(c => c.id === currentParentId);
-        currentParentId = category?.parentId;
-      }
-      
-      return false;
-    };
-    
-    // If parent doesn't belong to this brand, return empty array
-    if (!parentBelongsToBrand()) {
-      return [];
-    }
-    
-    // Get all subcategories that belong to this brand
-    const result = allSubcategories.filter(subcat => {
-      // Check explicit mapping
-      if (categoryBrandMap.get(subcat.id) === brandId) {
-        return true;
-      }
-      
-      // Check products
-      const hasProducts = products.some(p => {
-        if (p.brandId !== brandId) return false;
-        if (!p.categories || !Array.isArray(p.categories)) return false;
-        return p.categories.some((pc: ProductCategory) => {
-          const catId = pc.categoryId || pc.category?.id || pc.id;
-          return catId === subcat.id;
-        });
-      });
-      if (hasProducts) return true;
-      
-      // Check descendants
-      const hasBrandDescendants = (categoryId: string): boolean => {
-        const children = categories.filter(c => c.parentId === categoryId);
-        return children.some(child => {
-          if (categoryBrandMap.get(child.id) === brandId) return true;
-          const childHasProducts = products.some(p => {
-            if (p.brandId !== brandId) return false;
-            if (!p.categories || !Array.isArray(p.categories)) return false;
-            return p.categories.some((pc: ProductCategory) => {
-              const catId = pc.categoryId || pc.category?.id || pc.id;
-              return catId === child.id;
-            });
-          });
-          if (childHasProducts) return true;
-          return hasBrandDescendants(child.id);
-        });
-      };
-      
-      return hasBrandDescendants(subcat.id);
-    });
-    
-    console.log(`[getSubcategories] Parent: ${parentId}, Brand: ${brandId}`);
-    console.log(`[getSubcategories] All: ${allSubcategories.length}, Filtered: ${result.length}`, result.map(c => ({ id: c.id, name: c.name || c.nameAr })));
-    
-    return result;
-  };
+    // Return subcategories that are in this brand
+    const brandSet = getCategorySetForBrand(brandId);
+    return allSubcategories.filter(subcat => brandSet.has(subcat.id));
+  }, [categories, getCategorySetForBrand]);
 
   // Get products in a category, optionally filtered by brand
   const getProductsInCategory = async (categoryId: string, brandId: string | null = null): Promise<Product[]> => {
@@ -583,7 +494,7 @@ export function HierarchicalExplorer({
   };
 
   const handleCategoryClick = async (category: Category) => {
-    const subcategories = getSubcategories(category.id, selectedBrand, false); // Don't filter in navigation
+    const subcategories = getSubcategories(category.id, selectedBrand);
     
     if (subcategories.length > 0) {
       // Has subcategories, navigate to subcategories
@@ -603,7 +514,7 @@ export function HierarchicalExplorer({
   };
 
   const handleSubcategoryClick = async (category: Category) => {
-    const subcategories = getSubcategories(category.id, selectedBrand, false); // Don't filter in navigation
+    const subcategories = getSubcategories(category.id, selectedBrand);
     
     if (subcategories.length > 0) {
       // Has more subcategories, navigate deeper
@@ -680,15 +591,19 @@ export function HierarchicalExplorer({
     }
   };
 
-  const currentCategories = currentView === 'categories' 
-    ? getCategoriesByBrand(selectedBrand, false) // Show all in categories view
-    : currentView === 'subcategories' && selectedCategory
-    ? getSubcategories(selectedCategory, selectedBrand, true) // Filter by products in subcategories view
-    : [];
+  const currentCategories = useMemo(() => {
+    return currentView === 'categories' 
+      ? getCategoriesByBrand(selectedBrand)
+      : currentView === 'subcategories' && selectedCategory
+      ? getSubcategories(selectedCategory, selectedBrand)
+      : [];
+  }, [currentView, selectedBrand, selectedCategory, getCategoriesByBrand, getSubcategories]);
 
-  const currentProducts = currentView === 'products' && selectedCategory
-    ? filteredProducts
-    : [];
+  const currentProducts = useMemo(() => {
+    return currentView === 'products' && selectedCategory
+      ? filteredProducts
+      : [];
+  }, [currentView, selectedCategory, filteredProducts]);
 
   // Load products when view changes to products
   useEffect(() => {
@@ -891,17 +806,12 @@ export function HierarchicalExplorer({
         // Track brand association for the new category
         let brandIdToAssociate: string | null = null;
         if (categoryParentBrand) {
-          // Category was created directly under a brand
           brandIdToAssociate = categoryParentBrand;
         } else if (selectedBrand) {
-          // Category was created when a brand is selected
           brandIdToAssociate = selectedBrand;
         } else if (parentId) {
-          // Subcategory was created - check if parent belongs to a brand
-          const parentBrandId = categoryBrandMap.get(parentId);
-          if (parentBrandId) {
-            brandIdToAssociate = parentBrandId;
-          }
+          // If creating a subcategory, inherit brand from parent
+          brandIdToAssociate = categoryBrandMap.get(parentId) || null;
         }
         
         // Add to categoryBrandMap if we have a brand association
@@ -909,22 +819,15 @@ export function HierarchicalExplorer({
           setCategoryBrandMap(prev => {
             const newMap = new Map(prev);
             newMap.set(newCategory.id, brandIdToAssociate!);
-            console.log(`[handleCreateCategory] Adding category ${newCategory.id} (${newCategory.name || newCategory.nameAr}) to brand ${brandIdToAssociate}`);
             
             // Also ensure parent category is in the map if it exists
             if (parentId && !prev.has(parentId)) {
               newMap.set(parentId, brandIdToAssociate!);
-              console.log(`[handleCreateCategory] Also adding parent category ${parentId} to brand ${brandIdToAssociate}`);
             }
             
-            // Save to localStorage
             saveCategoryBrandMap(newMap);
-            console.log(`[handleCreateCategory] categoryBrandMap now has ${newMap.size} entries:`, Array.from(newMap.entries()));
-            
             return newMap;
           });
-        } else {
-          console.warn('[handleCreateCategory] No brandIdToAssociate found for new category:', newCategory.id);
         }
 
         // Refresh categories
@@ -938,29 +841,28 @@ export function HierarchicalExplorer({
         setCategoryParentCategory(null);
         setShowCreateCategoryDialog(false);
         
-        // If category was created under a brand, expand that brand
+        // If category was created under a brand, navigate to that brand
         if (categoryParentBrand) {
-          const newExpanded = new Set(expandedBrands);
-          newExpanded.add(categoryParentBrand);
-          setExpandedBrands(newExpanded);
+          setSelectedBrand(categoryParentBrand);
+          setCurrentView('categories');
+          setCategoryPath([]);
         }
 
-        // If category was created under a parent category, expand the parent category
+        // If category was created under a parent category, ensure we are in that view
         if (parentId && selectedBrand) {
-          const categoryKey = `${selectedBrand}-${parentId}`;
-          const newExpanded = new Set(expandedCategories);
-          newExpanded.add(categoryKey);
-          setExpandedCategories(newExpanded);
-        }
-
-        // If we're in subcategories view, navigate to the new category
-        if (parentId) {
-          // Wait a bit for categories to refresh, then navigate
-          setTimeout(() => {
-            setSelectedCategory(newCategory.id);
-            setCategoryPath([...categoryPath, newCategory]);
-            setCurrentView('subcategories');
-          }, 500);
+          // If we are already in the parent category, the new subcategory will appear automatically
+          // If we were in a different view, we might want to navigate
+          if (selectedCategory !== parentId) {
+            const parent = categories.find(c => c.id === parentId);
+            if (parent) {
+              setSelectedCategory(parentId);
+              // Reconstruct path if needed, or just add to current path if it's a child
+              if (!categoryPath.some(c => c.id === parentId)) {
+                setCategoryPath([...categoryPath, parent]);
+              }
+              setCurrentView('subcategories');
+            }
+          }
         }
       } else {
         // Fallback: use coreApi directly
@@ -1065,906 +967,380 @@ export function HierarchicalExplorer({
     }
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return {
+      categories: currentCategories.filter(c => 
+        (c.name || '').toLowerCase().includes(query) || 
+        (c.nameAr || '').toLowerCase().includes(query)
+      ),
+      products: currentProducts.filter(p => 
+        (p.name || '').toLowerCase().includes(query) || 
+        (p.nameAr || '').toLowerCase().includes(query) ||
+        (p.sku || '').toLowerCase().includes(query)
+      )
+    };
+  }, [currentCategories, currentProducts, searchQuery]);
+
   return (
-    <div className="w-full bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
-      {/* Explorer Header - Like Windows Explorer */}
-      <div className="bg-slate-800 border-b border-slate-700 px-4 py-2">
-        <div className="flex items-center gap-2">
-          {/* Navigation Buttons */}
-          <div className="flex items-center gap-1">
+    <div className="flex h-[750px] overflow-hidden rounded-2xl border border-border bg-background/40 backdrop-blur-2xl shadow-2xl">
+      {/* Sidebar - Brands */}
+      <div className="w-72 border-r border-border/50 bg-card/20 flex flex-col">
+        <div className="p-6 border-b border-border/50">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">العلامات التجارية</h3>
             <Button
-              variant="ghost"
               size="icon"
-              className="h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-700"
-              onClick={handleBack}
-              disabled={currentView === 'brands'}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Breadcrumb Path - Like Explorer Address Bar */}
-          <div className="flex-1 flex items-center bg-slate-700/50 rounded px-2 py-1.5 gap-1">
-            <Button
               variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs text-slate-300 hover:text-white hover:bg-slate-600 gap-1"
-              onClick={() => {
-                setCurrentView('brands');
-                setSelectedBrand(null);
-                setCategoryPath([]);
-                setSelectedCategory(null);
-                onBrandSelect?.(null);
-              }}
-            >
-              <Home className="h-3 w-3" />
-              الرئيسية
-            </Button>
-            
-            {selectedBrand && (
-              <>
-                <ChevronRight className="h-3 w-3 text-slate-500" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs text-slate-300 hover:text-white hover:bg-slate-600 gap-1"
-                  onClick={() => handleBreadcrumbClick(-1)}
-                >
-                  <Store className="h-3 w-3" />
-                  {brands.find(b => b.id === selectedBrand)?.nameAr || brands.find(b => b.id === selectedBrand)?.name}
-                </Button>
-              </>
-            )}
-
-            {categoryPath.map((cat, index) => (
-              <div key={cat.id} className="flex items-center gap-1">
-                <ChevronRight className="h-3 w-3 text-slate-500" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs text-slate-300 hover:text-white hover:bg-slate-600 gap-1"
-                  onClick={() => handleBreadcrumbClick(index)}
-                >
-                  <Folder className="h-3 w-3 text-yellow-500" />
-                  {cat.nameAr || cat.name}
-                </Button>
-              </div>
-            ))}
-
-            {currentView === 'products' && selectedCategory && (
-              <>
-                <ChevronRight className="h-3 w-3 text-slate-500" />
-                <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <Package className="h-3 w-3 text-cyan-400" />
-                  المنتجات
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="bg-slate-800/50 border-b border-slate-700 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          {currentView === 'brands' && <span>{brands.length} علامة تجارية</span>}
-          {(currentView === 'categories' || currentView === 'subcategories') && <span>{currentCategories.length} فئة</span>}
-          {currentView === 'products' && <span>{currentProducts.length} منتج</span>}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {currentView === 'brands' && (
-            <Button
-              size="sm"
-              className="h-7 text-xs gap-1 bg-cyan-600 hover:bg-cyan-700"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
               onClick={() => setShowCreateBrandDialog(true)}
             >
-              <Plus className="h-3 w-3" />
-              علامة تجارية جديدة
+              <Plus className="h-4 w-4" />
             </Button>
-          )}
-          
-          {(currentView === 'categories' || currentView === 'subcategories') && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1 border-slate-600 text-slate-300 hover:bg-slate-700"
-                onClick={() => setShowCreateCategoryDialog(true)}
-                disabled={currentView === 'subcategories' && !canAddSubcategory}
-              >
-                <Folder className="h-3 w-3 text-yellow-500" />
-                {currentView === 'subcategories' ? `فئة فرعية (${remainingSubcategories})` : 'فئة جديدة'}
-              </Button>
-              {canAddProduct && (
-                <Button
-                  size="sm"
-                  className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700"
-                  onClick={() => navigateToAddProduct()}
-                >
-                  <Package className="h-3 w-3" />
-                  منتج جديد
-                </Button>
-              )}
-            </>
-          )}
-          
-          {currentView === 'products' && selectedCategory && (
-            <>
-              {!hasProducts ? (
-                canAddSubcategory && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1 border-slate-600 text-slate-300 hover:bg-slate-700"
-                    onClick={() => setShowCreateCategoryDialog(true)}
-                  >
-                    <Folder className="h-3 w-3 text-yellow-500" />
-                    فئة فرعية ({remainingSubcategories})
-                  </Button>
-                )
-              ) : null}
-              {canAddProduct && (
-                <Button
-                  size="sm"
-                  className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700"
-                  onClick={() => navigateToAddProduct()}
-                >
-                  <Package className="h-3 w-3" />
-                  منتج جديد
-                </Button>
-              )}
-            </>
-          )}
+          </div>
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <Input
+              placeholder="بحث..."
+              className="pr-10 h-9 bg-muted/50 border-border text-sm focus:ring-primary/20"
+            />
+          </div>
         </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-3 space-y-1">
+            <button
+              onClick={() => {
+                setSelectedBrand(null);
+                setCurrentView('brands');
+                setCategoryPath([]);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                !selectedBrand 
+                  ? 'bg-primary/10 border border-primary/30 text-primary shadow-lg shadow-primary/5' 
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              }`}
+            >
+              <div className={`p-2 rounded-lg ${!selectedBrand ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>
+                <LayoutGrid className="h-4 w-4" />
+              </div>
+              <span className="font-medium text-sm">جميع العلامات</span>
+            </button>
+
+            {brands.map((brand) => (
+              <button
+                key={brand.id}
+                onClick={() => {
+                  setSelectedBrand(brand.id);
+                  setCurrentView('categories');
+                  setCategoryPath([]);
+                  const newExpanded = new Set(expandedBrands);
+                  newExpanded.add(brand.id);
+                  setExpandedBrands(newExpanded);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                  selectedBrand === brand.id 
+                    ? 'bg-primary/10 border border-primary/30 text-primary shadow-lg shadow-primary/5' 
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                }`}
+              >
+                <div className={`p-2 rounded-lg transition-colors ${
+                  selectedBrand === brand.id ? 'bg-primary text-white' : 'bg-muted text-muted-foreground group-hover:bg-muted/80'
+                }`}>
+                  <Store className="h-4 w-4" />
+                </div>
+                <div className="flex flex-col items-start overflow-hidden">
+                  <span className="font-medium text-sm truncate w-full">{brand.nameAr || brand.name}</span>
+                  {brand.code && <span className="text-[10px] text-slate-500 uppercase tracking-tighter">{brand.code}</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
       </div>
 
-      {/* Content Area - Explorer Style */}
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <ScrollArea className="h-[450px] bg-slate-900">
-            <div className="p-4">
-              {/* Brands View */}
-              {currentView === 'brands' && (
-                <div>
-                  {brands.length === 0 ? (
-                    <div className="text-center py-16">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
-                        <Store className="h-10 w-10 text-slate-600" />
-                      </div>
-                      <h3 className="text-lg font-medium text-slate-300 mb-2">لا توجد علامات تجارية</h3>
-                      <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-                        ابدأ بإنشاء علامة تجارية جديدة لبناء هيكل المنتجات
-                      </p>
-                      <div className="flex items-center justify-center gap-2 text-xs text-slate-600 mb-6">
-                        <Store className="h-4 w-4" />
-                        <ChevronRight className="h-3 w-3" />
-                        <Folder className="h-4 w-4 text-yellow-600" />
-                        <ChevronRight className="h-3 w-3" />
-                        <Folder className="h-4 w-4 text-yellow-600" />
-                        <ChevronRight className="h-3 w-3" />
-                        <Package className="h-4 w-4 text-cyan-600" />
-                      </div>
-                      <Button onClick={() => setShowCreateBrandDialog(true)} className="gap-2 bg-cyan-600 hover:bg-cyan-700">
-                        <Plus className="h-4 w-4" />
-                        إنشاء علامة تجارية
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      {/* Windows Explorer-style tree view */}
-                      {brands.map((brand) => {
-                        const isExpanded = expandedBrands.has(brand.id);
-                        const brandCategories = getCategoriesByBrand(brand.id, false); // Show all in tree view
-                        
-                        return (
-                          <ContextMenu key={brand.id}>
-                            <ContextMenuTrigger asChild>
-                              <div className="select-none">
-                                {/* Brand Row - Tree Item */}
-                                <div
-                                  className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-800/50 rounded cursor-pointer group"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const newExpanded = new Set(expandedBrands);
-                                    if (newExpanded.has(brand.id)) {
-                                      newExpanded.delete(brand.id);
-                                    } else {
-                                      newExpanded.add(brand.id);
-                                    }
-                                    setExpandedBrands(newExpanded);
-                                  }}
-                                >
-                                  {/* Expand/Collapse Icon */}
-                                  <div className="w-4 h-4 flex items-center justify-center">
-                                    {brandCategories.length > 0 ? (
-                                      isExpanded ? (
-                                        <ChevronDown className="h-3 w-3 text-slate-400" />
-                                      ) : (
-                                        <ChevronRight className="h-3 w-3 text-slate-400" />
-                                      )
-                                    ) : (
-                                      <div className="w-3 h-3" />
-                                    )}
-                                  </div>
-                                  {/* Brand Icon */}
-                                  <Store className="h-4 w-4 text-cyan-500 flex-shrink-0" />
-                                  {/* Brand Name */}
-                                  <span className="text-sm text-slate-300 group-hover:text-white flex-1 truncate">
-                                    {brand.nameAr || brand.name}
-                                  </span>
-                                  {brand.code && (
-                                    <span className="text-xs text-slate-500 ml-2">{brand.code}</span>
-                                  )}
-                                </div>
-                                
-                                {/* Add Category Button when Brand is Expanded */}
-                                {isExpanded && (
-                                  <div className="mr-6 mb-2">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs gap-1 text-slate-400 hover:text-white hover:bg-slate-700/50 w-full justify-start"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setCategoryParentBrand(brand.id);
-                                        setCategoryParentCategory(null);
-                                        setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
-                                        setShowCreateCategoryDialog(true);
-                                      }}
-                                    >
-                                      <Plus className="h-3 w-3" />
-                                      إضافة فئة
-                                    </Button>
-                                  </div>
-                                )}
-                                
-                                {/* Categories under Brand - Indented Tree */}
-                                {isExpanded && brandCategories.length > 0 && (
-                                  <div className="mr-6 space-y-0.5">
-                                    {brandCategories.map((category) => {
-                                      const categoryKey = `${brand.id}-${category.id}`;
-                                      const isCategoryExpanded = expandedCategories.has(categoryKey);
-                                      const subcategories = getSubcategories(category.id, brand.id, false); // Show all in tree view
-                                      
-                                      return (
-                                        <ContextMenu key={category.id}>
-                                          <ContextMenuTrigger asChild>
-                                            <div>
-                                              <div
-                                                className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-800/50 rounded cursor-pointer group"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  if (subcategories.length > 0) {
-                                                    const newExpanded = new Set(expandedCategories);
-                                                    if (newExpanded.has(categoryKey)) {
-                                                      newExpanded.delete(categoryKey);
-                                                    } else {
-                                                      newExpanded.add(categoryKey);
-                                                    }
-                                                    setExpandedCategories(newExpanded);
-                                                  } else {
-                                                    handleCategoryClick(category);
-                                                  }
-                                                }}
-                                              >
-                                                {/* Expand/Collapse Icon */}
-                                                <div className="w-4 h-4 flex items-center justify-center">
-                                                  {subcategories.length > 0 ? (
-                                                    isCategoryExpanded ? (
-                                                      <ChevronDown className="h-3 w-3 text-slate-400" />
-                                                    ) : (
-                                                      <ChevronRight className="h-3 w-3 text-slate-400" />
-                                                    )
-                                                  ) : (
-                                                    <div className="w-3 h-3" />
-                                                  )}
-                                                </div>
-                                                {/* Folder Icon */}
-                                                {isCategoryExpanded || subcategories.length === 0 ? (
-                                                  <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                                                ) : (
-                                                  <Folder className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                                                )}
-                                                {/* Category Name */}
-                                                <span className="text-sm text-slate-300 group-hover:text-white flex-1 truncate">
-                                                  {category.nameAr || category.name}
-                                                </span>
-                                              </div>
-                                              
-                                              {/* Subcategories - More Indented */}
-                                              {isCategoryExpanded && subcategories.length > 0 && (
-                                                <div className="mr-6 space-y-0.5">
-                                                  {subcategories.map((subcat) => {
-                                                    const subcatKey = `${category.id}-${subcat.id}`;
-                                                    const isSubcatExpanded = expandedCategories.has(subcatKey);
-                                                    const subSubcategories = getSubcategories(subcat.id, brand.id, false); // Show all in tree view
-                                                    
-                                                    return (
-                                                      <div key={subcat.id}>
-                                                        <div
-                                                          className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-800/50 rounded cursor-pointer group"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            if (subSubcategories.length > 0) {
-                                                              const newExpanded = new Set(expandedCategories);
-                                                              if (newExpanded.has(subcatKey)) {
-                                                                newExpanded.delete(subcatKey);
-                                                              } else {
-                                                                newExpanded.add(subcatKey);
-                                                              }
-                                                              setExpandedCategories(newExpanded);
-                                                            } else {
-                                                              handleCategoryClick(subcat);
-                                                            }
-                                                          }}
-                                                        >
-                                                          <div className="w-4 h-4 flex items-center justify-center">
-                                                            {subSubcategories.length > 0 ? (
-                                                              isSubcatExpanded ? (
-                                                                <ChevronDown className="h-3 w-3 text-slate-400" />
-                                                              ) : (
-                                                                <ChevronRight className="h-3 w-3 text-slate-400" />
-                                                              )
-                                                            ) : (
-                                                              <div className="w-3 h-3" />
-                                                            )}
-                                                          </div>
-                                                          {isSubcatExpanded || subSubcategories.length === 0 ? (
-                                                            <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                                                          ) : (
-                                                            <Folder className="h-4 w-4 text-yellow-500 flex-shrink-0" />
-                                                          )}
-                                                          <span className="text-sm text-slate-300 group-hover:text-white flex-1 truncate">
-                                                            {subcat.nameAr || subcat.name}
-                                                          </span>
-                                                        </div>
-                                                      </div>
-                                                    );
-                                                  })}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </ContextMenuTrigger>
-                                          <ContextMenuContent className="w-48 bg-slate-800 border-slate-700">
-                                            <ContextMenuItem
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (subcategories.length > 0) {
-                                                  const newExpanded = new Set(expandedCategories);
-                                                  if (!newExpanded.has(categoryKey)) {
-                                                    newExpanded.add(categoryKey);
-                                                    setExpandedCategories(newExpanded);
-                                                  }
-                                                } else {
-                                                  handleCategoryClick(category);
-                                                }
-                                              }}
-                                              className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
-                                            >
-                                              <Eye className="h-4 w-4" />
-                                              عرض المحتوى
-                                            </ContextMenuItem>
-                                            <ContextMenuSeparator className="bg-slate-700" />
-                                            <ContextMenuItem
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setCategoryParentBrand(brand.id);
-                                                setCategoryParentCategory(category.id);
-                                                setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
-                                                setShowCreateCategoryDialog(true);
-                                              }}
-                                              className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
-                                              disabled={subcategories.length >= MAX_SUBCATEGORIES}
-                                            >
-                                              <Folder className="h-4 w-4" />
-                                              إضافة فئة فرعية
-                                            </ContextMenuItem>
-                                            <ContextMenuItem
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const params = new URLSearchParams();
-                                                params.set('brandId', brand.id);
-                                                params.set('categoryIds', category.id);
-                                                params.set('openAdd', 'true');
-                                                navigate(`/dashboard/products?${params.toString()}`);
-                                              }}
-                                              className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
-                                              disabled={subcategories.length > 0}
-                                            >
-                                              <Package className="h-4 w-4" />
-                                              إضافة منتج
-                                            </ContextMenuItem>
-                                          </ContextMenuContent>
-                                        </ContextMenu>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </ContextMenuTrigger>
-                            <ContextMenuContent className="w-48 bg-slate-800 border-slate-700">
-                              <ContextMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newExpanded = new Set(expandedBrands);
-                                  if (!newExpanded.has(brand.id)) {
-                                    newExpanded.add(brand.id);
-                                    setExpandedBrands(newExpanded);
-                                  }
-                                }}
-                                className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
-                              >
-                                <Eye className="h-4 w-4" />
-                                عرض المحتوى
-                              </ContextMenuItem>
-                              <ContextMenuSeparator className="bg-slate-700" />
-                              <ContextMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setCategoryParentBrand(brand.id);
-                                  setCategoryParentCategory(null);
-                                  setNewCategoryData({ name: '', nameAr: '', description: '', image: '' });
-                                  setShowCreateCategoryDialog(true);
-                                }}
-                                className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
-                              >
-                                <Folder className="h-4 w-4" />
-                                إضافة فئة
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const params = new URLSearchParams();
-                                  params.set('brandId', brand.id);
-                                  params.set('openAdd', 'true');
-                                  navigate(`/dashboard/products?${params.toString()}`);
-                                }}
-                                className="gap-2 text-slate-300 hover:text-white hover:bg-slate-700"
-                              >
-                                <Package className="h-4 w-4" />
-                                إضافة منتج
-                              </ContextMenuItem>
-                              <ContextMenuSeparator className="bg-slate-700" />
-                              <ContextMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setBrandToDelete(brand);
-                                  setShowDeleteBrandDialog(true);
-                                }}
-                                className="gap-2 text-red-500 focus:text-red-500 hover:bg-slate-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                حذف العلامة التجارية
-                              </ContextMenuItem>
-                            </ContextMenuContent>
-                          </ContextMenu>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col bg-background/20">
+        {/* Toolbar */}
+        <div className="h-20 border-b border-border/50 flex items-center justify-between px-8 bg-card/10 backdrop-blur-md">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-xl border border-border/50">
+              <button
+                onClick={() => handleBack()}
+                disabled={currentView === 'brands'}
+                className="p-2 rounded-lg hover:bg-muted text-muted-foreground disabled:opacity-30 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <Separator orientation="vertical" className="h-4 bg-border" />
+              <button
+                onClick={() => {
+                  setSelectedBrand(null);
+                  setCurrentView('brands');
+                  setCategoryPath([]);
+                }}
+                className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <Home className="h-4 w-4" />
+              </button>
+            </div>
 
-              {/* Categories View */}
-              {currentView === 'categories' && (
-                <div>
-                  {currentCategories.length === 0 ? (
-                    <div className="text-center py-16">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-lg bg-slate-800 flex items-center justify-center">
-                        <Folder className="h-10 w-10 text-yellow-600" />
-                      </div>
-                      <h3 className="text-lg font-medium text-slate-300 mb-2">مجلد فارغ</h3>
-                      <p className="text-sm text-slate-500 mb-6">
-                        أنشئ فئة جديدة أو أضف منتج مباشرة
-                      </p>
-                      <div className="flex items-center justify-center gap-3">
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setShowCreateCategoryDialog(true)} 
-                          className="gap-2 border-slate-600 text-slate-300 hover:bg-slate-700"
-                        >
-                          <Folder className="h-4 w-4 text-yellow-500" />
-                          فئة جديدة
-                        </Button>
-                        <Button 
-                          onClick={() => navigateToAddProduct()} 
-                          className="gap-2 bg-green-600 hover:bg-green-700"
-                        >
-                          <Package className="h-4 w-4" />
-                          منتج جديد
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Warning: Can't add products when categories exist */}
-                      <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                        <p className="text-sm text-amber-400">
-                          لإضافة منتج، يجب الدخول إلى مجلد فارغ (بدون فئات فرعية)
-                        </p>
-                      </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {currentCategories.map((category) => {
-                        const subcategories = getSubcategories(category.id, null, false); // Show all in grid view for counting
-                        const isSelected = selectedCategoryIds.includes(category.id);
-                        
-                        return (
-                          <div
-                            key={category.id}
-                            className="group cursor-pointer"
-                            onClick={() => handleCategoryClick(category)}
-                          >
-                            <div className={`flex flex-col items-center p-4 rounded-lg hover:bg-slate-800 transition-colors ${isSelected ? 'bg-slate-800 ring-1 ring-cyan-500' : ''}`}>
-                              {/* Folder Icon with Image */}
-                              <div className="w-16 h-16 mb-3 relative">
-                                {category.image ? (
-                                  <div className="w-full h-full relative group-hover:scale-105 transition-transform">
-                                    {/* Folder shape background */}
-                                    <div className="absolute inset-0 bg-gradient-to-b from-yellow-500 to-yellow-600 rounded-lg shadow-lg">
-                                      {/* Folder tab */}
-                                      <div className="absolute -top-1.5 left-1 w-6 h-2.5 bg-yellow-400 rounded-t-md" />
-                                    </div>
-                                    {/* Image inside folder */}
-                                    <div className="absolute inset-1 top-2 bg-white rounded overflow-hidden shadow-inner">
-                                      <img 
-                                        src={category.image} 
-                                        alt={category.name} 
-                                        className="w-full h-full object-cover"
-                                      />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform">
-                                    {subcategories.length > 0 ? (
-                                      <FolderOpen className="h-14 w-14 text-yellow-500 drop-shadow-lg" />
-                                    ) : (
-                                      <Folder className="h-14 w-14 text-yellow-500 drop-shadow-lg" />
-                                    )}
-                                  </div>
-                                )}
-                                {subcategories.length > 0 && (
-                                  <div className="absolute -bottom-1 -right-1 bg-yellow-500 text-xs text-yellow-900 font-bold px-1.5 py-0.5 rounded-full shadow">
-                                    {subcategories.length}
-                                  </div>
-                                )}
-                              </div>
-                              {/* Category Name */}
-                              <p className="text-sm text-slate-300 text-center font-medium truncate w-full group-hover:text-white">
-                                {category.nameAr || category.name}
-                              </p>
-                              {subcategories.length > 0 && (
-                                <p className="text-xs text-slate-500 mt-0.5">{subcategories.length} فئة فرعية</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    </>
-                  )}
-                </div>
+            {/* Breadcrumbs */}
+            <div className="flex items-center gap-2 overflow-hidden max-w-[400px]">
+              {selectedBrand && (
+                <>
+                  <ChevronLeft className="h-3 w-3 text-slate-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-slate-400 truncate">
+                    {brands.find(b => b.id === selectedBrand)?.nameAr || brands.find(b => b.id === selectedBrand)?.name}
+                  </span>
+                </>
               )}
-
-              {/* Subcategories View */}
-              {currentView === 'subcategories' && (
-                <div>
-                  {currentCategories.length === 0 ? (
-                    <div className="text-center py-16">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-lg bg-slate-800 flex items-center justify-center">
-                        <Folder className="h-10 w-10 text-yellow-600" />
-                      </div>
-                      <h3 className="text-lg font-medium text-slate-300 mb-2">مجلد فارغ - يمكن إضافة منتج</h3>
-                      <p className="text-sm text-slate-500 mb-2">
-                        أنشئ فئة فرعية أو أضف منتج مباشرة
-                      </p>
-                      {canAddSubcategory && (
-                        <p className="text-xs text-slate-600 mb-6">
-                          متبقي {remainingSubcategories} من {MAX_SUBCATEGORIES}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-center gap-3">
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setShowCreateCategoryDialog(true)} 
-                          className="gap-2 border-slate-600 text-slate-300 hover:bg-slate-700"
-                          disabled={!canAddSubcategory}
-                        >
-                          <Folder className="h-4 w-4 text-yellow-500" />
-                          فئة فرعية
-                        </Button>
-                        <Button 
-                          onClick={() => navigateToAddProduct()} 
-                          className="gap-2 bg-green-600 hover:bg-green-700"
-                        >
-                          <Package className="h-4 w-4" />
-                          منتج جديد
-                        </Button>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="mt-4 text-slate-400 hover:text-white hover:bg-slate-700"
-                        onClick={async () => {
-                          if (selectedCategory) {
-                            setCurrentView('products');
-                            const categoryProducts = await getProductsInCategory(selectedCategory, selectedBrand);
-                            setFilteredProducts(categoryProducts);
-                            onCategorySelect(selectedCategory);
-                          }
-                        }}
-                      >
-                        <Eye className="h-3 w-3 mr-1" />
-                        عرض المنتجات
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Warning: Can't add products when subcategories exist */}
-                      <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0" />
-                        <p className="text-sm text-amber-400">
-                          لإضافة منتج، يجب الدخول إلى مجلد فارغ (بدون فئات فرعية)
-                        </p>
-                      </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {currentCategories.map((category) => {
-                        const subcategories = getSubcategories(category.id, selectedBrand, false); // Show all in grid view for counting
-                        const isSelected = selectedCategoryIds.includes(category.id);
-                        
-                        return (
-                          <div
-                            key={category.id}
-                            className="group cursor-pointer"
-                            onClick={() => handleSubcategoryClick(category)}
-                          >
-                            <div className={`flex flex-col items-center p-4 rounded-lg hover:bg-slate-800 transition-colors ${isSelected ? 'bg-slate-800 ring-1 ring-cyan-500' : ''}`}>
-                              {/* Folder Icon with Image */}
-                              <div className="w-16 h-16 mb-3 relative">
-                                {category.image ? (
-                                  <div className="w-full h-full relative group-hover:scale-105 transition-transform">
-                                    {/* Folder shape background */}
-                                    <div className="absolute inset-0 bg-gradient-to-b from-yellow-500 to-yellow-600 rounded-lg shadow-lg">
-                                      {/* Folder tab */}
-                                      <div className="absolute -top-1.5 left-1 w-6 h-2.5 bg-yellow-400 rounded-t-md" />
-                                    </div>
-                                    {/* Image inside folder */}
-                                    <div className="absolute inset-1 top-2 bg-white rounded overflow-hidden shadow-inner">
-                                      <img 
-                                        src={category.image} 
-                                        alt={category.name} 
-                                        className="w-full h-full object-cover"
-                                      />
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform">
-                                    {subcategories.length > 0 ? (
-                                      <FolderOpen className="h-14 w-14 text-yellow-500 drop-shadow-lg" />
-                                    ) : (
-                                      <Folder className="h-14 w-14 text-yellow-500 drop-shadow-lg" />
-                                    )}
-                                  </div>
-                                )}
-                                {subcategories.length > 0 && (
-                                  <div className="absolute -bottom-1 -right-1 bg-yellow-500 text-xs text-yellow-900 font-bold px-1.5 py-0.5 rounded-full shadow">
-                                    {subcategories.length}
-                                  </div>
-                                )}
-                              </div>
-                              {/* Category Name */}
-                              <p className="text-sm text-slate-300 text-center font-medium truncate w-full group-hover:text-white">
-                                {category.nameAr || category.name}
-                              </p>
-                              {subcategories.length > 0 && (
-                                <p className="text-xs text-slate-500 mt-0.5">{subcategories.length} فئة فرعية</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    </>
-                  )}
+              {categoryPath.map((cat, idx) => (
+                <div key={cat.id} className="flex items-center gap-2 flex-shrink-0">
+                  <ChevronLeft className="h-3 w-3 text-slate-600" />
+                  <button
+                    onClick={() => {
+                      const newPath = categoryPath.slice(0, idx + 1);
+                      setCategoryPath(newPath);
+                      setSelectedCategory(cat.id);
+                      setCurrentView(idx === categoryPath.length - 1 ? currentView : 'subcategories');
+                    }}
+                    className="text-sm font-medium text-slate-300 hover:text-cyan-400 transition-colors truncate max-w-[120px]"
+                  >
+                    {cat.nameAr || cat.name}
+                  </button>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative w-64">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <Input
+                placeholder="بحث في المجلد الحالي..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pr-10 h-10 bg-muted/50 border-border text-sm focus:ring-primary/20 rounded-xl"
+              />
+            </div>
+            
+            <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border/50">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-muted text-primary shadow-inner' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-muted text-primary shadow-inner' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {selectedBrand && (
+                <Button
+                  onClick={() => setShowCreateCategoryDialog(true)}
+                  className="h-10 px-4 bg-gradient-primary hover:opacity-90 text-white border-none shadow-lg shadow-primary/20 rounded-xl gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>إضافة فئة</span>
+                </Button>
               )}
-
-              {/* Products View */}
-              {currentView === 'products' && (
-                <div>
-                  {loadingProducts ? (
-                    <div className="text-center py-16">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4" />
-                      <p className="text-slate-400">جاري التحميل...</p>
-                    </div>
-                  ) : currentProducts.length === 0 ? (
-                    <div className="text-center py-16">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-lg bg-slate-800 flex items-center justify-center">
-                        <Box className="h-10 w-10 text-cyan-600" />
-                      </div>
-                      <h3 className="text-lg font-medium text-slate-300 mb-2">لا توجد منتجات</h3>
-                      <p className="text-sm text-slate-500 mb-2">
-                        أضف أول منتج في هذا المجلد
-                      </p>
-                      {canAddSubcategory && (
-                        <p className="text-xs text-slate-600 mb-6">
-                          أو أنشئ فئة فرعية جديدة (متبقي {remainingSubcategories})
-                        </p>
-                      )}
-                      <div className="flex items-center justify-center gap-3">
-                        {canAddSubcategory && (
-                          <Button 
-                            variant="outline" 
-                            onClick={() => setShowCreateCategoryDialog(true)} 
-                            className="gap-2 border-slate-600 text-slate-300 hover:bg-slate-700"
-                          >
-                            <Folder className="h-4 w-4 text-yellow-500" />
-                            فئة فرعية
-                          </Button>
-                        )}
-                        {canAddProduct && (
-                          <Button 
-                            onClick={() => navigateToAddProduct()} 
-                            className="gap-2 bg-green-600 hover:bg-green-700"
-                          >
-                            <Package className="h-4 w-4" />
-                            منتج جديد
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Info: Can't add subcategories when products exist */}
-                      <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg flex items-center gap-3">
-                        <Package className="h-5 w-5 text-cyan-500 flex-shrink-0" />
-                        <p className="text-sm text-cyan-400">
-                          يوجد منتجات في هذا المجلد - لا يمكن إضافة فئات فرعية
-                        </p>
-                      </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {currentProducts.map((product) => (
-                        <div
-                          key={product.id}
-                          className="group cursor-pointer"
-                          onClick={() => loadProductDetails(product.id)}
-                        >
-                          <div className="flex flex-col items-center p-4 rounded-lg hover:bg-slate-800 transition-colors">
-                            {/* Product Image */}
-                            <div className="w-16 h-16 mb-3 relative">
-                              {product.images?.[0] ? (
-                                <div className="w-full h-full relative group-hover:scale-105 transition-transform">
-                                  {/* Product card background */}
-                                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-xl shadow-lg shadow-cyan-500/30" />
-                                  {/* Product image */}
-                                  <div className="absolute inset-1 bg-white rounded-lg overflow-hidden shadow-inner">
-                                    <img 
-                                      src={product.images[0]} 
-                                      alt={product.name} 
-                                      className="w-full h-full object-cover"
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="w-full h-full rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600 flex items-center justify-center group-hover:border-cyan-500 group-hover:scale-105 transition-all">
-                                  <Package className="h-8 w-8 text-cyan-500" />
-                                </div>
-                              )}
-                            </div>
-                            {/* Product Name */}
-                            <p className="text-sm text-slate-300 text-center font-medium truncate w-full group-hover:text-white">
-                              {product.nameAr || product.name}
-                            </p>
-                            {product.price !== undefined && (
-                              <p className="text-xs text-cyan-400 mt-0.5 font-semibold">{Number(product.price).toFixed(2)} ريال</p>
-                            )}
-                            {/* Action buttons on hover */}
-                            <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  loadProductDetails(product.id);
-                                }}
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigateToEditProduct(product.id);
-                                }}
-                              >
-                                <Edit className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    </>
-                  )}
-                </div>
+              {canAddProduct && (
+                <Button
+                  onClick={() => navigateToAddProduct()}
+                  className="h-10 px-4 bg-gradient-secondary hover:opacity-90 text-white border-none shadow-lg shadow-secondary/20 rounded-xl gap-2"
+                >
+                  <Package className="h-4 w-4" />
+                  <span>إضافة منتج</span>
+                </Button>
               )}
             </div>
-          </ScrollArea>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="bg-slate-800 border-slate-700">
-            {/* At brands level - can add brand */}
-            {currentView === 'brands' && (
-              <ContextMenuItem onClick={() => setShowCreateBrandDialog(true)}>
-                <Tag className="h-4 w-4 ml-2" />
-                إضافة علامة تجارية
-              </ContextMenuItem>
-            )}
-            
-            {/* At categories level (inside brand) - can add category or product */}
-            {currentView === 'categories' && (
-              <>
-                <ContextMenuItem onClick={() => setShowCreateCategoryDialog(true)}>
-                  <Folder className="h-4 w-4 ml-2" />
-                  إضافة فئة
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem 
-                  onClick={() => canAddProduct && navigateToAddProduct()}
-                  disabled={!canAddProduct}
-                >
-                  <Package className="h-4 w-4 ml-2" />
-                  {canAddProduct ? 'إضافة منتج' : 'لا يمكن - توجد فئات فرعية'}
-                </ContextMenuItem>
-              </>
-            )}
-            
-            {/* At subcategories level (inside category) - can add subcategory or product */}
-            {currentView === 'subcategories' && selectedCategory && (
-              <>
-                <ContextMenuItem 
-                  onClick={() => canAddSubcategory && setShowCreateCategoryDialog(true)}
-                  disabled={!canAddSubcategory}
-                >
-                  <Folder className="h-4 w-4 ml-2" />
-                  إضافة فئة فرعية {!canAddSubcategory ? '(الحد الأقصى)' : `(${remainingSubcategories})`}
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem 
-                  onClick={() => canAddProduct && navigateToAddProduct()}
-                  disabled={!canAddProduct}
-                >
-                  <Package className="h-4 w-4 ml-2" />
-                  {canAddProduct ? 'إضافة منتج' : 'لا يمكن - توجد فئات فرعية'}
-                </ContextMenuItem>
-              </>
-            )}
-            
-            {/* At products level - can still add subcategory or more products */}
-            {currentView === 'products' && selectedCategory && (
-              <>
-                <ContextMenuItem 
-                  onClick={() => canAddSubcategory && setShowCreateCategoryDialog(true)}
-                  disabled={!canAddSubcategory}
-                >
-                  <Folder className="h-4 w-4 ml-2" />
-                  إضافة فئة فرعية {!canAddSubcategory ? '(الحد الأقصى)' : `(${remainingSubcategories})`}
-                </ContextMenuItem>
-                <ContextMenuSeparator />
-                <ContextMenuItem 
-                  onClick={() => canAddProduct && navigateToAddProduct()}
-                  disabled={!canAddProduct}
-                >
-                  <Package className="h-4 w-4 ml-2" />
-                  {canAddProduct ? 'إضافة منتج جديد' : 'توجد فئات فرعية - انتقل للداخل'}
-                </ContextMenuItem>
-              </>
-            )}
-          </ContextMenuContent>
-        </ContextMenu>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <ScrollArea className="flex-1 p-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${currentView}-${selectedBrand}-${selectedCategory}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {currentView === 'brands' && !selectedBrand ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {brands.map((brand) => (
+                    <motion.div
+                      key={brand.id}
+                      whileHover={{ scale: 1.02, y: -4 }}
+                      className="group relative bg-card/40 backdrop-blur-md border border-border/50 rounded-2xl p-6 cursor-pointer hover:border-primary/50 transition-all duration-300 shadow-xl hover:shadow-primary/10"
+                      onClick={() => {
+                        setSelectedBrand(brand.id);
+                        setCurrentView('categories');
+                      }}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="p-4 rounded-2xl bg-gradient-to-br from-muted to-card border border-border group-hover:from-primary/20 group-hover:to-secondary/20 group-hover:border-primary/30 transition-all duration-300">
+                          <Store className="h-8 w-8 text-primary" />
+                        </div>
+                        <button className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                          <MoreVertical className="h-5 w-5" />
+                        </button>
+                      </div>
+                      <h4 className="text-lg font-bold text-foreground mb-1 group-hover:text-primary transition-colors">
+                        {brand.nameAr || brand.name}
+                      </h4>
+                      <p className="text-sm text-muted-foreground font-mono uppercase tracking-widest">{brand.code || 'NO CODE'}</p>
+                      
+                      <div className="mt-6 pt-6 border-t border-slate-800/50 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <Folder className="h-3 w-3" />
+                          <span>{getCategoriesByBrand(brand.id).length} فئات</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-cyan-500 font-medium group-hover:translate-x-[-4px] transition-transform">
+                          <span>فتح</span>
+                          <ChevronLeft className="h-3 w-3" />
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-2"}>
+                  {/* Categories */}
+                  {filteredItems.categories.map((category) => (
+                    <motion.div
+                      key={category.id}
+                      whileHover={{ scale: 1.02 }}
+                      className={viewMode === 'grid' 
+                        ? "group relative bg-card/40 backdrop-blur-md border border-border/50 rounded-2xl p-5 cursor-pointer hover:border-secondary/50 transition-all duration-300 shadow-xl hover:shadow-secondary/5"
+                        : "group flex items-center gap-4 bg-card/40 backdrop-blur-md border border-border/50 rounded-xl p-3 cursor-pointer hover:border-secondary/50 transition-all duration-300"
+                      }
+                      onClick={() => handleCategoryClick(category)}
+                    >
+                      <div className={viewMode === 'grid' ? "flex items-start justify-between mb-4" : "flex-shrink-0"}>
+                        <div className={`p-3 rounded-xl bg-muted/50 border border-border group-hover:bg-secondary/10 group-hover:border-secondary/30 transition-all duration-300`}>
+                          <Folder className="h-6 w-6 text-secondary" />
+                        </div>
+                        {viewMode === 'grid' && (
+                          <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-slate-200 group-hover:text-white transition-colors truncate">
+                          {category.nameAr || category.name}
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1 truncate">
+                          {getSubcategories(category.id, selectedBrand).length} فئات فرعية
+                        </p>
+                      </div>
+
+                      {viewMode === 'list' && (
+                        <div className="flex items-center gap-2">
+                          <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+
+                  {/* Products */}
+                  {filteredItems.products.map((product) => (
+                    <motion.div
+                      key={product.id}
+                      whileHover={{ scale: 1.02 }}
+                      className={viewMode === 'grid'
+                        ? "group relative bg-card/40 backdrop-blur-md border border-border/50 rounded-2xl p-5 cursor-pointer hover:border-primary/50 transition-all duration-300 shadow-xl hover:shadow-primary/5"
+                        : "group flex items-center gap-4 bg-card/40 backdrop-blur-md border border-border/50 rounded-xl p-3 cursor-pointer hover:border-primary/50 transition-all duration-300"
+                      }
+                      onClick={() => loadProductDetails(product.id)}
+                    >
+                      <div className={viewMode === 'grid' ? "flex items-start justify-between mb-4" : "flex-shrink-0"}>
+                        <div className={`p-3 rounded-xl bg-muted/50 border border-border group-hover:bg-primary/10 group-hover:border-primary/30 transition-all duration-300`}>
+                          <Package className="h-6 w-6 text-primary" />
+                        </div>
+                        {viewMode === 'grid' && (
+                          <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-slate-200 group-hover:text-white transition-colors truncate">
+                          {product.nameAr || product.name}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded uppercase font-mono">
+                            {product.sku || 'NO SKU'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {viewMode === 'list' && (
+                        <div className="flex items-center gap-2">
+                          <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition-colors">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+
+                  {/* Empty State */}
+                  {filteredItems.categories.length === 0 && filteredItems.products.length === 0 && (
+                    <div className="col-span-full py-20 flex flex-col items-center justify-center text-center">
+                      <div className="w-24 h-24 bg-slate-900/50 rounded-full flex items-center justify-center mb-6 border border-slate-800">
+                        <Search className="h-10 w-10 text-slate-700" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-300 mb-2">لا توجد نتائج</h3>
+                      <p className="text-slate-500 max-w-xs">
+                        {searchQuery ? `لم نجد أي نتائج لـ "${searchQuery}"` : 'هذا المجلد فارغ حالياً'}
+                      </p>
+                      {!searchQuery && (
+                        <div className="mt-8 flex gap-3">
+                          <Button 
+                            variant="outline" 
+                            className="border-slate-800 text-slate-400 hover:bg-slate-800 rounded-xl"
+                            onClick={() => setShowCreateCategoryDialog(true)}
+                          >
+                            إضافة فئة
+                          </Button>
+                          <Button 
+                            className="bg-cyan-600 hover:bg-cyan-700 rounded-xl"
+                            onClick={() => navigateToAddProduct()}
+                          >
+                            إضافة منتج
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </ScrollArea>
+      </div>
 
       {/* Create Brand Dialog */}
       <Dialog open={showCreateBrandDialog} onOpenChange={setShowCreateBrandDialog}>
@@ -2231,9 +1607,10 @@ export function HierarchicalExplorer({
                 // Edit Mode
                 <div className="space-y-4 py-4">
                   <Tabs defaultValue="basic" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-3">
                       <TabsTrigger value="basic">الأساسية</TabsTrigger>
                       <TabsTrigger value="pricing">الأسعار والمخزون</TabsTrigger>
+                      <TabsTrigger value="images">الصور</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="basic" className="space-y-4 mt-4">
@@ -2340,6 +1717,42 @@ export function HierarchicalExplorer({
                           placeholder="0"
                         />
                       </div>
+                    </TabsContent>
+
+                    <TabsContent value="images" className="space-y-4 mt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        {editProductData.images.map((image, index) => (
+                          <div key={index} className="relative group">
+                            <ImageUpload
+                              value={image}
+                                onChange={(url) => {
+                                  const newImages = [...editProductData.images];
+                                  if (url) {
+                                    newImages[index] = url;
+                                  } else {
+                                    newImages.splice(index, 1);
+                                  }
+                                  setEditProductData(prev => ({ ...prev, images: newImages }));
+                                }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="mt-6 flex justify-center">
+                        <Button
+                          variant="outline"
+                          className="w-full border-dashed border-2 h-24 flex flex-col gap-2 hover:border-primary hover:bg-primary/5"
+                          onClick={() => setShowImagePicker(true)}
+                        >
+                          <Upload className="h-6 w-6 text-muted-foreground" />
+                          <span>اختر صور من Cloudinary</span>
+                        </Button>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground text-center">
+                        يمكنك إضافة حتى 4 صور للمنتج
+                      </p>
                     </TabsContent>
                   </Tabs>
                 </div>
@@ -2515,6 +1928,24 @@ export function HierarchicalExplorer({
           ) : null}
         </DialogContent>
       </Dialog>
+      {/* Cloudinary Image Picker */}
+      <CloudinaryImagePicker
+        open={showImagePicker}
+        onOpenChange={setShowImagePicker}
+        multiple={true}
+        onSelect={(urls) => {
+          setEditProductData(prev => {
+            const currentImages = [...prev.images];
+            const newImages = [...currentImages, ...urls].slice(0, 4);
+            return { ...prev, images: newImages };
+          });
+          setShowImagePicker(false);
+          toast({
+            title: 'تمت إضافة الصور',
+            description: `تمت إضافة ${urls.length} صور للمنتج`,
+          });
+        }}
+      />
     </div>
   );
 }

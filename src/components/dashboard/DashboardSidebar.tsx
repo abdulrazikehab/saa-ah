@@ -262,16 +262,16 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
             <img 
               src={config.storeLogoUrl || config.logo} 
               alt={config.storeNameAr || config.storeName || config.tenantName || 'Store Logo'} 
-              className={cn("rounded-xl object-cover shadow-sm border", collapsed ? "h-8 w-8" : "h-10 w-10")}
+              className={cn("rounded-xl object-cover shadow-sm border", collapsed ? "h-8 w-8" : "h-12 w-12")}
             />
           ) : (
-            <div className={cn("rounded-xl bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-600 flex items-center justify-center shadow-lg", collapsed ? "h-8 w-8" : "h-10 w-10")}>
+            <div className={cn("rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg", collapsed ? "h-8 w-8" : "h-12 w-12")}>
               <Store className={cn("text-white", collapsed ? "h-4 w-4" : "h-6 w-6")} />
             </div>
           )}
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-lg font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent truncate max-w-[140px]">
+              <span className="text-lg font-bold gradient-text truncate max-w-[140px]">
                 {config?.storeNameAr || config?.storeName || config?.tenantName || "Saeaa"}
               </span>
               <span className="text-xs text-muted-foreground">{t('dashboard.sidebar.controlPanel')}</span>
@@ -344,7 +344,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                     onClick={() => toggleSection(section.title)}
                     className={cn(
                       "w-full flex items-center justify-between px-2 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors rounded-md",
-                      sectionActive && "text-cyan-600 dark:text-cyan-400 bg-cyan-500/5"
+                      sectionActive && "text-primary bg-primary/5"
                     )}
                   >
                     <span>{section.title}</span>
@@ -375,12 +375,12 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                               'flex items-center gap-3 rounded-lg text-sm font-medium transition-all group',
                               collapsed ? 'justify-center px-3 py-2.5' : 'justify-between px-3 py-2.5',
                               isActive
-                                ? `bg-gradient-to-r from-cyan-500/10 to-blue-500/10 text-cyan-700 dark:text-cyan-400 ${isRTL ? 'border-r-2' : 'border-l-2'} border-cyan-500 shadow-sm`
+                                ? `bg-primary/10 text-primary ${isRTL ? 'border-r-2' : 'border-l-2'} border-primary shadow-sm`
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             )}
                             onClick={() => {
                               // Mark as watched when clicking on the link
-                              if (item.badge === 'جديد' && hasUnreadUpdates(item.href)) {
+                              if (item.badge === t('dashboard.sidebar.new') && hasUnreadUpdates(item.href)) {
                                 markAsWatched(item.href);
                               }
                             }}
@@ -388,7 +388,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                             <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
                               <item.icon className={cn(
                                 "h-4 w-4 transition-transform group-hover:scale-110 flex-shrink-0",
-                                isActive && "text-cyan-600 dark:text-cyan-400"
+                                isActive && "text-primary"
                               )} />
                               {!collapsed && <span className="text-xs">{item.name}</span>}
                             </div>
@@ -430,7 +430,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className="flex items-center justify-between p-4 border-b">
-                                    <h3 className="font-semibold">التحديثات الجديدة</h3>
+                                    <h3 className="font-semibold">{t('dashboard.header.notifications')}</h3>
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -458,10 +458,10 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                                                     variant={update.type === 'added' ? 'default' : 'secondary'}
                                                     className="text-xs"
                                                   >
-                                                    {update.type === 'added' ? 'إضافة جديدة' : 'تحديث'}
+                                                    {update.type === 'added' ? t('dashboard.sidebar.new') : t('dashboard.header.status')}
                                                   </Badge>
                                                   <span className="text-xs text-muted-foreground">
-                                                    {new Date(update.timestamp).toLocaleTimeString('ar-SA', {
+                                                    {new Date(update.timestamp).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', {
                                                       hour: '2-digit',
                                                       minute: '2-digit'
                                                     })}
@@ -475,7 +475,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                                       </div>
                                     ) : (
                                       <div className="p-8 text-center text-muted-foreground">
-                                        <p>لا توجد تحديثات جديدة</p>
+                                        <p>{t('dashboard.header.noNotifications')}</p>
                                       </div>
                                     )}
                                   </ScrollArea>
@@ -490,7 +490,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                                           setOpenPopover(null);
                                         }}
                                       >
-                                        تم الاطلاع
+                                        {t('common.confirm')}
                                       </Button>
                                     </div>
                                   )}
@@ -538,7 +538,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                           />
                         )}
                       </div>
-                      {!collapsed && <span>دعم ASUS</span>}
+                      {!collapsed && <span>{t('dashboard.sidebar.support')} ASUS</span>}
                     </div>
                   </Link>
                 )}
@@ -546,7 +546,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                 {partnerStatus.smartLinePartnerCompleted && (
                   <Link
                     to="/dashboard/support"
-                    title={collapsed ? 'دعم Smart Line' : undefined}
+                    title={collapsed ? t('dashboard.sidebar.support') + ' Smart Line' : undefined}
                     className={cn(
                       'flex items-center gap-3 rounded-lg text-sm font-medium transition-all group',
                       collapsed ? 'justify-center px-3 py-3' : 'justify-between px-4 py-3',
@@ -569,7 +569,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                           />
                         )}
                       </div>
-                      {!collapsed && <span>دعم Smart Line</span>}
+                      {!collapsed && <span>{t('dashboard.sidebar.support')} Smart Line</span>}
                     </div>
                   </Link>
                 )}

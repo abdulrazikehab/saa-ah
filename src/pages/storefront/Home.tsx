@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { 
   ArrowRight, Loader2, FileText, Calendar, Eye,
-  Sparkles, ShoppingBag, Package, FolderOpen, Tag
+  Sparkles, ShoppingBag, Package, FolderOpen, Tag, 
+  ChevronRight, Star, TrendingUp, Zap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { SectionRenderer } from '@/components/builder/SectionRenderer';
 import { Section } from '@/components/builder/PageBuilder';
 import { Page, Product, Category } from '@/services/types';
 import { getLogoUrl, BRAND_NAME_AR } from '@/config/logo.config';
+import { cn } from '@/lib/utils';
 
 interface Brand {
   id: string;
@@ -38,15 +40,12 @@ export default function Home() {
 
   const loadData = async () => {
     try {
-      // Try to fetch 'home' page first (silently fail if not found)
       try {
         const home = await coreApi.getPageBySlug('home');
         if (home && home.isPublished) {
           setHomePage(home);
         }
       } catch (e: any) {
-        // Silently ignore errors for home page - it's optional
-        // getPageBySlug now returns null for 404, so this catch is for other errors
         if (e?.status && e.status !== 404) {
           console.warn('Error loading home page:', e);
         }
@@ -59,12 +58,10 @@ export default function Home() {
         coreApi.getBrands().catch(() => [])
       ]);
       
-      // Validate pagesData
       const publishedPages = Array.isArray(pagesData) 
         ? (pagesData as Page[]).filter((p) => p && typeof p === 'object' && !('error' in p) && p.isPublished)
         : [];
       
-      // Validate productsData
       let rawProducts: Product[] = [];
       if (productsData && typeof productsData === 'object' && !('error' in productsData) && !('statusCode' in productsData)) {
         if (Array.isArray(productsData)) {
@@ -84,7 +81,6 @@ export default function Home() {
         compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined
       }));
       
-      // Validate categoriesData
       let rawCategories: Category[] = [];
       if (categoriesData && typeof categoriesData === 'object' && !('error' in categoriesData) && !('statusCode' in categoriesData)) {
         if (Array.isArray(categoriesData)) {
@@ -99,7 +95,6 @@ export default function Home() {
       }
       const rootCategories = rawCategories.filter((cat: Category) => !cat.parentId);
       
-      // Validate brandsData
       let validBrands: Brand[] = [];
       if (brandsData && typeof brandsData === 'object' && !('error' in brandsData) && !('statusCode' in brandsData)) {
         if (Array.isArray(brandsData)) {
@@ -129,14 +124,31 @@ export default function Home() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-6">
+        <div className="text-center space-y-8 animate-fade-in">
+          {/* Animated Loading Logo */}
           <div className="relative">
-            <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse" />
-            <div className="relative w-20 h-20 mx-auto rounded-xl overflow-hidden bg-card border border-border shadow-lg">
-              <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-2" />
+            <div className="absolute inset-0 rounded-full gradient-primary blur-3xl opacity-30 animate-pulse" />
+            <div className="relative w-24 h-24 mx-auto rounded-2xl overflow-hidden bg-card border border-border shadow-2xl animate-float">
+              <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-3" />
             </div>
           </div>
-          <p className="text-muted-foreground">جاري التحميل...</p>
+          
+          {/* Loading Spinner */}
+          <div className="flex items-center justify-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <span className="text-muted-foreground font-medium">جاري التحميل...</span>
+          </div>
+          
+          {/* Animated Dots */}
+          <div className="flex justify-center gap-2">
+            {[0, 1, 2].map((i) => (
+              <div 
+                key={i} 
+                className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                style={{ animationDelay: `${i * 150}ms` }}
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -157,81 +169,159 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
-      <section className="relative overflow-hidden gradient-primary">
+      <section className="relative overflow-hidden">
+        {/* Animated Background */}
+        <div className="absolute inset-0 gradient-primary" />
         <div className="absolute inset-0 bg-grid-pattern opacity-10" />
-        <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-slow" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1.5s' }} />
         
-        <div className="container relative py-20 md:py-32">
+        {/* Animated Orbs */}
+        <div className="absolute top-20 right-20 w-96 h-96 rounded-full bg-white/10 blur-3xl animate-blob" />
+        <div className="absolute bottom-20 left-20 w-96 h-96 rounded-full bg-white/10 blur-3xl animate-blob animation-delay-2000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-white/5 blur-3xl animate-pulse-slow" />
+        
+        {/* Floating Particles */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(6)].map((_, i) => (
+            <div 
+              key={i}
+              className="absolute w-2 h-2 rounded-full bg-white/30"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animation: `float ${5 + Math.random() * 5}s ease-in-out infinite`,
+                animationDelay: `${Math.random() * 5}s`
+              }}
+            />
+          ))}
+        </div>
+        
+        <div className="container relative py-24 md:py-36">
           <div className="mx-auto max-w-4xl text-center">
             {(pages.length > 0 || featuredProducts.length > 0) && (
               <>
+                {/* Badge */}
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 mb-8 animate-slide-down">
+                  <Sparkles className="w-4 h-4 text-warning" />
+                  <span className="text-white/90 text-sm font-medium">أفضل المنتجات بأفضل الأسعار</span>
+                </div>
+                
+                {/* Title */}
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-heading font-bold tracking-tight mb-6 text-white leading-tight animate-slide-up">
-                  مرحباً بك
+                  مرحباً بك في
+                  <span className="block mt-2 bg-gradient-to-r from-white via-white/90 to-white/70 bg-clip-text text-transparent">
+                    متجرنا الإلكتروني
+                  </span>
                 </h1>
                 
-                <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                {/* Subtitle */}
+                <p className="text-xl md:text-2xl text-white/80 mb-10 max-w-2xl mx-auto animate-slide-up animation-delay-200">
+                  اكتشف تشكيلة متنوعة من المنتجات عالية الجودة بأسعار منافسة
+                </p>
+                
+                {/* CTA Buttons */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center animate-slide-up animation-delay-400">
                   {featuredProducts.length > 0 && (
                     <Link to="/products">
-                      <Button size="lg" className="bg-white text-primary hover:bg-white/90 shadow-xl h-14 px-8 text-lg font-semibold">
-                        <ShoppingBag className="ml-2 h-5 w-5" />
-                        المنتجات ({featuredProducts.length})
+                      <Button 
+                        size="lg" 
+                        className="bg-white text-primary hover:bg-white/90 shadow-2xl h-14 px-8 text-lg font-semibold rounded-xl group"
+                      >
+                        <ShoppingBag className="ml-2 h-5 w-5 group-hover:animate-wiggle" />
+                        تصفح المنتجات
+                        <ChevronRight className="mr-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                       </Button>
                     </Link>
                   )}
                   {pages.length > 0 && (
                     <Link to={`/${pages[0].slug}`}>
-                      <Button size="lg" variant="outline" className="border-2 border-white text-white hover:bg-white/10 h-14 px-8 text-lg font-semibold">
+                      <Button 
+                        size="lg" 
+                        variant="outline" 
+                        className="border-2 border-white/50 text-white hover:bg-white/10 h-14 px-8 text-lg font-semibold rounded-xl backdrop-blur-sm"
+                      >
                         <FileText className="ml-2 h-5 w-5" />
-                        الصفحات ({pages.length})
+                        اكتشف المزيد
                       </Button>
                     </Link>
                   )}
+                </div>
+                
+                {/* Stats */}
+                <div className="mt-16 grid grid-cols-3 gap-8 max-w-xl mx-auto animate-slide-up animation-delay-500">
+                  {[
+                    { label: 'منتج', value: featuredProducts.length + '+', icon: Package },
+                    { label: 'تصنيف', value: categories.length + '+', icon: FolderOpen },
+                    { label: 'علامة تجارية', value: brands.length + '+', icon: Tag },
+                  ].map((stat, i) => (
+                    <div key={i} className="text-center">
+                      <div className="text-3xl md:text-4xl font-bold text-white mb-1">{stat.value}</div>
+                      <div className="text-sm text-white/70 flex items-center justify-center gap-1">
+                        <stat.icon className="w-3.5 h-3.5" />
+                        {stat.label}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </>
             )}
           </div>
         </div>
+        
+        {/* Wave Divider */}
+        <div className="absolute bottom-0 left-0 right-0">
+          <svg viewBox="0 0 1440 120" fill="none" className="w-full h-auto">
+            <path 
+              d="M0,60 C480,120 960,0 1440,60 L1440,120 L0,120 Z" 
+              className="fill-background"
+            />
+          </svg>
+        </div>
       </section>
 
-      <div className="container py-16 space-y-20">
+      <div className="container py-20 space-y-24">
         {/* Brands Section */}
         {brands.length > 0 && (
           <section className="animate-slide-up">
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-10">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Tag className="h-5 w-5 text-primary" />
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2.5 rounded-xl gradient-primary shadow-glow">
+                    <Tag className="h-5 w-5 text-white" />
                   </div>
                   <h2 className="text-3xl md:text-4xl font-heading font-bold gradient-text">
                     العلامات التجارية
                   </h2>
-                  <Badge variant="soft-primary" className="text-base px-3 py-1">
+                  <Badge variant="outline" className="text-sm px-3 py-1 rounded-full border-primary/30 text-primary">
                     {brands.length}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground text-lg">
-                  تسوق حسب العلامة التجارية
+                  تسوق من أفضل العلامات التجارية العالمية
                 </p>
               </div>
               <Link to="/categories">
-                <Button variant="outline" size="lg" className="border-2 hidden sm:flex">
+                <Button variant="outline" size="lg" className="border-2 hidden sm:flex rounded-xl hover:bg-primary/5 group">
                   عرض الكل
-                  <ArrowRight className="mr-2 h-5 w-5" />
+                  <ArrowRight className="mr-2 h-5 w-5 group-hover:-translate-x-1 transition-transform" />
                 </Button>
               </Link>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              {brands.map((brand) => (
-                <Link key={brand.id} to={`/products?brandId=${brand.id}`}>
-                  <Card className="px-5 py-3 hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group">
-                    <span className="font-semibold text-base group-hover:text-primary transition-colors">
+              {brands.map((brand, index) => (
+                <Link 
+                  key={brand.id} 
+                  to={`/products?brandId=${brand.id}`}
+                  className="animate-scale-in"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <Card className="px-5 py-3 hover:shadow-lg hover:border-primary/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer group rounded-xl">
+                    <span className="font-semibold text-base group-hover:text-primary transition-colors inline-flex items-center gap-2">
                       {brand.name}
                       {brand.nameAr && brand.nameAr !== brand.name && (
-                        <span className="text-muted-foreground mr-2 text-sm">({brand.nameAr})</span>
+                        <span className="text-muted-foreground text-sm">({brand.nameAr})</span>
                       )}
+                      <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                     </span>
                   </Card>
                 </Link>
@@ -242,50 +332,63 @@ export default function Home() {
 
         {/* Categories Section */}
         {categories.length > 0 && (
-          <section className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            <div className="flex items-center justify-between mb-8">
+          <section className="animate-slide-up animation-delay-200">
+            <div className="flex items-center justify-between mb-10">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-secondary/10 rounded-lg">
-                    <FolderOpen className="h-5 w-5 text-secondary" />
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2.5 rounded-xl gradient-secondary shadow-glow-secondary">
+                    <FolderOpen className="h-5 w-5 text-white" />
                   </div>
                   <h2 className="text-3xl md:text-4xl font-heading font-bold gradient-text-secondary">
                     التصنيفات
                   </h2>
-                  <Badge variant="soft-secondary" className="text-base px-3 py-1">
+                  <Badge variant="outline" className="text-sm px-3 py-1 rounded-full border-secondary/30 text-secondary">
                     {categories.length}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground text-lg">
-                  تسوق حسب التصنيف
+                  تصفح مجموعاتنا المتنوعة
                 </p>
               </div>
               <Link to="/categories">
-                <Button variant="outline" size="lg" className="border-2 hidden sm:flex">
+                <Button variant="outline" size="lg" className="border-2 hidden sm:flex rounded-xl hover:bg-secondary/5 group">
                   عرض الكل
-                  <ArrowRight className="mr-2 h-5 w-5" />
+                  <ArrowRight className="mr-2 h-5 w-5 group-hover:-translate-x-1 transition-transform" />
                 </Button>
               </Link>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {categories.map((category) => (
-                <Link key={category.id} to={`/categories/${category.id}`}>
-                  <Card className="h-full hover:shadow-lg transition-all duration-300 group cursor-pointer hover:-translate-y-1 overflow-hidden">
+              {categories.map((category, index) => (
+                <Link 
+                  key={category.id} 
+                  to={`/categories/${category.id}`}
+                  className="animate-scale-in"
+                  style={{ animationDelay: `${index * 75}ms` }}
+                >
+                  <Card className="h-full overflow-hidden group cursor-pointer rounded-2xl border-2 border-border/50 hover:border-secondary/50 hover:shadow-2xl transition-all duration-500 hover:-translate-y-2">
                     <div className="flex">
-                      <div className="w-24 h-24 bg-gradient-mesh flex items-center justify-center shrink-0">
+                      <div className="w-28 h-28 relative overflow-hidden bg-gradient-mesh flex items-center justify-center shrink-0">
+                        {/* Overlay */}
+                        <div className="absolute inset-0 gradient-secondary opacity-0 group-hover:opacity-20 transition-opacity duration-500" />
+                        
                         {category.image ? (
-                          <img src={category.image} alt={category.name} className="w-full h-full object-cover" />
+                          <img 
+                            src={category.image} 
+                            alt={category.name} 
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                          />
                         ) : (
-                          <FolderOpen className="h-10 w-10 text-primary/40" />
+                          <FolderOpen className="h-12 w-12 text-secondary/40 group-hover:text-secondary group-hover:scale-110 transition-all duration-300" />
                         )}
                       </div>
-                      <CardContent className="flex-1 p-4 flex flex-col justify-center">
-                        <CardTitle className="text-lg group-hover:text-primary transition-colors">
+                      <CardContent className="flex-1 p-5 flex flex-col justify-center">
+                        <CardTitle className="text-lg group-hover:text-secondary transition-colors flex items-center gap-2">
                           {category.name}
+                          <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                         </CardTitle>
                         {category.description && (
-                          <CardDescription className="line-clamp-1 mt-1">
+                          <CardDescription className="line-clamp-2 mt-1">
                             {category.description}
                           </CardDescription>
                         )}
@@ -298,19 +401,21 @@ export default function Home() {
           </section>
         )}
 
-        {/* User Created Pages Section */}
+        {/* Pages Section */}
         {pages.length > 0 && (
-          <section className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-            <div className="flex items-center justify-between mb-8">
+          <section className="animate-slide-up animation-delay-400">
+            <div className="flex items-center justify-between mb-10">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-accent/10 rounded-lg">
-                    <FileText className="h-5 w-5 text-accent" />
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2.5 rounded-xl gradient-accent shadow-glow-accent">
+                    <FileText className="h-5 w-5 text-white" />
                   </div>
                   <h2 className="text-3xl md:text-4xl font-heading font-bold">
-                    <span className="text-foreground">الصفحات</span>
+                    <span className="bg-gradient-to-r from-accent via-primary to-secondary bg-clip-text text-transparent">
+                      الصفحات
+                    </span>
                   </h2>
-                  <Badge variant="soft-primary" className="text-base px-3 py-1">
+                  <Badge variant="outline" className="text-sm px-3 py-1 rounded-full border-accent/30 text-accent">
                     {pages.length} {pages.length === 1 ? 'صفحة' : pages.length === 2 ? 'صفحتان' : 'صفحات'}
                   </Badge>
                 </div>
@@ -321,29 +426,35 @@ export default function Home() {
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {pages.map((page) => (
-                <Link key={page.id} to={`/${page.slug}`}>
-                  <Card className="h-full hover:shadow-lg transition-all duration-300 group cursor-pointer hover:-translate-y-1">
+              {pages.map((page, index) => (
+                <Link 
+                  key={page.id} 
+                  to={`/${page.slug}`}
+                  className="animate-scale-in"
+                  style={{ animationDelay: `${index * 75}ms` }}
+                >
+                  <Card className="h-full group cursor-pointer rounded-2xl border-2 border-border/50 hover:border-accent/50 hover:shadow-2xl transition-all duration-500 hover:-translate-y-2">
                     <CardHeader>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="p-3 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                          <FileText className="h-6 w-6 text-primary" />
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="p-3.5 rounded-xl bg-accent/10 group-hover:bg-accent/20 group-hover:scale-110 transition-all duration-300">
+                          <FileText className="h-6 w-6 text-accent" />
                         </div>
+                        <Badge variant="outline" className="text-xs border-border/50 text-muted-foreground">
+                          <Calendar className="h-3 w-3 ml-1" />
+                          {new Date(page.createdAt).toLocaleDateString('ar-SA')}
+                        </Badge>
                       </div>
-                      <CardTitle className="text-xl group-hover:text-primary transition-colors">
+                      <CardTitle className="text-xl group-hover:text-accent transition-colors flex items-center gap-2">
                         {page.title}
+                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                       </CardTitle>
-                      <CardDescription className="flex items-center gap-2 text-sm">
-                        <Calendar className="h-4 w-4" />
-                        {new Date(page.createdAt).toLocaleDateString('ar-SA')}
-                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-muted-foreground font-mono bg-muted/50 px-2 py-1 rounded-md">
                           /{page.slug}
                         </span>
-                        <Button variant="ghost" size="sm" className="group-hover:bg-primary/10">
+                        <Button variant="ghost" size="sm" className="group-hover:bg-accent/10 rounded-lg">
                           <Eye className="h-4 w-4 ml-2" />
                           عرض
                         </Button>
@@ -358,29 +469,36 @@ export default function Home() {
 
         {/* Featured Products Section */}
         {featuredProducts.length > 0 && (
-          <section className="animate-slide-up" style={{ animationDelay: '0.3s' }}>
-            <div className="flex items-center justify-between mb-8">
+          <section className="animate-slide-up animation-delay-500">
+            <div className="flex items-center justify-between mb-10">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-success/10 rounded-lg">
-                    <ShoppingBag className="h-5 w-5 text-success" />
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2.5 rounded-xl bg-gradient-to-r from-success to-primary shadow-lg">
+                    <ShoppingBag className="h-5 w-5 text-white" />
                   </div>
                   <h2 className="text-3xl md:text-4xl font-heading font-bold gradient-text">
-                    المنتجات
+                    المنتجات المميزة
                   </h2>
+                  <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-warning/10 text-warning text-sm font-medium">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>الأكثر مبيعاً</span>
+                  </div>
                 </div>
+                <p className="text-muted-foreground text-lg">
+                  اكتشف أفضل منتجاتنا
+                </p>
               </div>
               <Link to="/products">
-                <Button variant="outline" size="lg" className="border-2">
+                <Button variant="outline" size="lg" className="border-2 rounded-xl hover:bg-primary/5 group">
                   عرض الكل
-                  <ArrowRight className="mr-2 h-5 w-5" />
+                  <ArrowRight className="mr-2 h-5 w-5 group-hover:-translate-x-1 transition-transform" />
                 </Button>
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {featuredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredProducts.map((product, index) => (
+                <ProductCard key={product.id} product={product} index={index} />
               ))}
             </div>
           </section>
@@ -388,19 +506,61 @@ export default function Home() {
 
         {/* Empty State */}
         {pages.length === 0 && featuredProducts.length === 0 && (
-          <section className="py-20">
-            <Card className="shadow-lg">
-              <CardContent className="py-16 text-center">
-                <Package className="h-20 w-20 mx-auto text-muted-foreground/30 mb-4" />
-                <h3 className="text-2xl font-heading font-bold mb-2">لا يوجد محتوى بعد</h3>
-                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                  عذراً، لا يوجد محتوى لعرضه حالياً.
+          <section className="py-20 animate-fade-in">
+            <Card className="shadow-2xl rounded-3xl border-2 border-dashed border-border">
+              <CardContent className="py-20 text-center">
+                <div className="relative inline-block mb-6">
+                  <div className="absolute inset-0 rounded-full gradient-mesh blur-2xl opacity-50" />
+                  <div className="relative p-6 rounded-full bg-muted/50">
+                    <Package className="h-20 w-20 text-muted-foreground/30" />
+                  </div>
+                </div>
+                <h3 className="text-2xl font-heading font-bold mb-3">لا يوجد محتوى بعد</h3>
+                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                  عذراً، لا يوجد محتوى لعرضه حالياً. يرجى العودة لاحقاً.
                 </p>
+                <Button size="lg" className="gradient-primary text-white rounded-xl hover:shadow-glow transition-shadow">
+                  <Sparkles className="ml-2 h-5 w-5" />
+                  استكشف المزيد
+                </Button>
               </CardContent>
             </Card>
           </section>
         )}
       </div>
+
+      {/* Newsletter Section */}
+      <section className="relative overflow-hidden py-20">
+        <div className="absolute inset-0 gradient-mesh" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-secondary/5" />
+        
+        <div className="container relative">
+          <Card className="gradient-card border-2 border-border/30 rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-8 md:p-12 text-center">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+                <Zap className="w-4 h-4" />
+                عروض حصرية
+              </div>
+              <h3 className="text-3xl md:text-4xl font-heading font-bold mb-4 gradient-text">
+                اشترك في النشرة البريدية
+              </h3>
+              <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto">
+                احصل على أحدث العروض والمنتجات الجديدة مباشرة في بريدك الإلكتروني
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+                <input 
+                  type="email" 
+                  placeholder="أدخل بريدك الإلكتروني"
+                  className="flex-1 h-12 px-5 rounded-xl border-2 border-border/50 bg-background/50 focus:border-primary/50 focus:outline-none transition-colors"
+                />
+                <Button size="lg" className="gradient-primary text-white rounded-xl h-12 px-8 hover:shadow-glow transition-shadow">
+                  اشترك الآن
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </section>
     </div>
   );
 }

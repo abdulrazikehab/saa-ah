@@ -2,7 +2,7 @@ import { useEffect, useState, useContext } from 'react';
 import { Section } from './PageBuilder';
 import { Button } from '@/components/ui/button';
 import { coreApi } from '@/lib/api';
-import { Loader2, Moon, Sun, Globe, Menu, X, Wallet, ShoppingCart, DollarSign, Heart, Users, FileText, Search, Package, Store, Plus, Minus, Upload, Calendar, TrendingUp, BarChart3, User, CreditCard, MessageSquare, ArrowRight, RefreshCw, ChevronDown, FolderOpen, Phone } from 'lucide-react';
+import { Loader2, Moon, Sun, Globe, Menu, X, Wallet, ShoppingCart, DollarSign, Heart, Users, FileText, Search, Package, Store, Plus, Minus, Upload, Calendar, TrendingUp, BarChart3, User, CreditCard, MessageSquare, ArrowRight, RefreshCw, ChevronDown, FolderOpen, Phone, Settings } from 'lucide-react';
 import { SupportTicketsSection, FavoritesPageSection, BalanceOperationsSection, EmployeesPageSection, ChargeWalletSection, ReportsPageSection, ProfilePageSection } from './MerchantSections';
 import { staffService, StaffUser } from '@/services/staff.service';
 import { ImageSlider } from '@/components/ui/ImageSlider';
@@ -1341,11 +1341,11 @@ function MerchantDashboardSection({ props }: { props: MerchantDashboardProps }) 
   const ordersCount = dashboardData?.todayOrdersCount || dashboardData?.ordersCount || 0;
 
   const quickActions = [
-    { icon: Wallet, label: 'شحن الرصيد', link: '/charge-wallet', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
-    { icon: ShoppingCart, label: 'إنشاء طلب', link: '/store', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    { icon: Heart, label: 'المفضلة', link: '/favorites', color: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
-    { icon: Users, label: 'إضافة موظف', link: '/employees', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-    { icon: FileText, label: 'إضافة تذكرة', link: '/support', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
+    { icon: Plus, label: 'إضافة منتج', link: '/dashboard/products', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+    { icon: Package, label: 'إدارة المنتجات', link: '/dashboard/products', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+    { icon: ShoppingCart, label: 'إدارة الطلبات', link: '/dashboard/orders', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+    { icon: Settings, label: 'إعدادات المتجر', link: '/dashboard/settings', color: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' },
+    { icon: BarChart3, label: 'التقارير', link: '/dashboard/reports', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
   ];
 
   return (

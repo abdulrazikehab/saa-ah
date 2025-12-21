@@ -216,7 +216,7 @@ export default function Login() {
         <div className="relative z-10">
           <Link to="/" className="inline-flex flex-col gap-4 group">
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 shadow-lg">
                 <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
               <div className="flex flex-col">
@@ -270,7 +270,7 @@ export default function Login() {
           {/* Mobile Logo with Bilingual Branding */}
           <Link to="/" className="lg:hidden flex flex-col items-center gap-3 mb-8 group">
             <div className="flex items-center gap-3">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
+              <div className="w-28 h-28 md:w-32 md:h-32 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
                 <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
               <div className="flex flex-col">
@@ -305,7 +305,7 @@ export default function Login() {
               {!showRecoveryMode ? (
                 <>
                   {/* Google Sign-In */}
-                  <Button
+                  {/* <Button
                     type="button"
                     variant="outline"
                     className="w-full h-12 border-2 hover:bg-muted/50 hover:border-primary/50 transition-all shadow-sm"
@@ -318,7 +318,7 @@ export default function Login() {
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                     </svg>
                     <span className="text-foreground font-medium">Google</span>
-                  </Button>
+                  </Button> */}
 
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">

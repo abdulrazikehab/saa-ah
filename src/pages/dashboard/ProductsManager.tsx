@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Download, Upload, Edit, Trash2, Eye, Package, AlertCircle, Image as ImageIcon, X, Tag, Globe, TrendingUp, Settings, FolderTree, Store } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Filter, Download, Upload, Edit, Trash2, Eye, Package, AlertCircle, Image as ImageIcon, X, Tag, Globe, TrendingUp, Settings, FolderTree, Store, Loader2, ChevronLeft, ChevronRight, Cloud } from 'lucide-react';
 import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,13 +14,14 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { UploadProgress } from '@/components/ui/upload-progress';
+import { ImportProgressDialog } from '@/components/ui/import-progress-dialog';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
+import { CloudinaryImagePicker } from '@/components/dashboard/CloudinaryImagePicker';
 
 interface Category {
   id: string;
@@ -114,6 +115,9 @@ export default function ProductsManager() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [importErrors, setImportErrors] = useState<Array<{ row: number; column: string; productName: string; error: string }>>([]);
   const [showImportErrorDialog, setShowImportErrorDialog] = useState(false);
+  const importAbortRef = useRef<boolean>(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -146,12 +150,35 @@ export default function ProductsManager() {
   });
   const [productImages, setProductImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showCloudinaryPicker, setShowCloudinaryPicker] = useState(false);
+
+
   const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-show error dialog when errors are set and import is complete
+  useEffect(() => {
+    if (importErrors.length > 0 && !isImporting) {
+      console.log('🔄 useEffect: Checking error dialog state', {
+        errorsCount: importErrors.length,
+        isImporting,
+        showImportErrorDialog
+      });
+      if (!showImportErrorDialog) {
+        console.log('🔄 Auto-showing error dialog with', importErrors.length, 'errors');
+        // Use setTimeout to ensure state updates are processed
+        const timer = setTimeout(() => {
+          setShowImportErrorDialog(true);
+          console.log('✅ useEffect: Set error dialog to true');
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [importErrors.length, isImporting, showImportErrorDialog]);
 
   // Handle URL parameters for pre-filling form from Hierarchical Explorer
   useEffect(() => {
@@ -193,6 +220,11 @@ export default function ProductsManager() {
   
   // Check if user has a market set up
   const hasMarket = !!(user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system');
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus, filterCategory, activeTab]);
   
   // Show market setup prompt if no market (must be after all hooks)
   if (!hasMarket) {
@@ -354,7 +386,7 @@ export default function ProductsManager() {
 
       if (res.images && res.images.length > 0) {
         const newImageUrls = res.images.map((img) => img.secureUrl || img.url || '');
-        setProductImages([...productImages, ...newImageUrls]);
+        setProductImages(prev => [...prev, ...newImageUrls]);
         toast({ title: 'تم الرفع بنجاح', description: 'تم رفع الصور بنجاح' });
       }
     } catch (error) {
@@ -370,7 +402,19 @@ export default function ProductsManager() {
   };
 
   const removeImage = (index: number) => {
-    setProductImages(productImages.filter((_, i) => i !== index));
+    setProductImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCloudinarySelect = (images: string[]) => {
+    console.log('📸 Setting image from Cloudinary:', images);
+    // Take only the first image since we're in single selection mode
+    const selectedImage = images.length > 0 ? [images[0]] : [];
+    setProductImages(selectedImage);
+    console.log('📸 New productImages state:', selectedImage);
+    toast({
+      title: 'تم الاختيار بنجاح',
+      description: 'تم تعيين الصورة من Cloudinary كصورة المنتج',
+    });
   };
 
   // Function to extract quantity from product name (e.g., "100 coin card" -> 100)
@@ -568,14 +612,30 @@ export default function ProductsManager() {
 
     try {
       setIsDeleting(true);
-      const ids = Array.from(selectedProducts);
-      const result = await coreApi.deleteProducts(ids);
+      const allIds = Array.from(selectedProducts);
+      
+      // Batch delete in chunks of 100 to avoid payload limits and timeouts
+      const CHUNK_SIZE = 100;
+      let deletedCount = 0;
+      let failedCount = 0;
+      
+      for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
+        const chunk = allIds.slice(i, i + CHUNK_SIZE);
+        try {
+          const result = await coreApi.deleteProducts(chunk);
+          deletedCount += result.deleted || chunk.length;
+          failedCount += result.failed || 0;
+        } catch (error) {
+          console.error(`Failed to delete chunk ${i/CHUNK_SIZE + 1}:`, error);
+          failedCount += chunk.length;
+        }
+      }
       
       // Handle partial failures gracefully
-      if (result.failed > 0) {
+      if (failedCount > 0) {
         toast({
           title: 'تنبيه',
-          description: `تم حذف ${result.deleted} من أصل ${count} منتج. عدد المحاولات الفاشلة: ${result.failed}`,
+          description: `تم حذف ${deletedCount} من أصل ${count} منتج. عدد المحاولات الفاشلة: ${failedCount}`,
           variant: 'destructive',
         });
       } else {
@@ -723,214 +783,128 @@ export default function ProductsManager() {
     return matchesSearch && matchesStatus && matchesCategory && matchesTab;
   });
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedProducts(new Set(filteredProducts.map(p => p.id)));
+      setSelectedProducts(new Set(paginatedProducts.map(p => p.id)));
     } else {
       setSelectedProducts(new Set());
     }
   };
 
-  const isAllSelected = filteredProducts.length > 0 && filteredProducts.every(p => selectedProducts.has(p.id));
-  const isSomeSelected = selectedProducts.size > 0 && selectedProducts.size < filteredProducts.length;
+  const handleSelectAllProducts = async () => {
+    try {
+      // Fetch all products with a very large limit to get all IDs
+      const allProducts = await coreApi.getProducts({ limit: 10000 });
+      const allProductIds = allProducts.map((p) => p.id);
+      setSelectedProducts(new Set(allProductIds));
+      toast({
+        title: 'تم التحديد',
+        description: `تم تحديد ${allProductIds.length} منتج`,
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'فشل في تحديد جميع المنتجات';
+      console.error('Failed to select all products:', error);
+      toast({
+        title: 'خطأ',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const isAllSelected = paginatedProducts.length > 0 && paginatedProducts.every(p => selectedProducts.has(p.id));
+  const isSomeSelected = selectedProducts.size > 0 && selectedProducts.size < paginatedProducts.length;
 
   // Export products to Excel with all order-related fields
   const handleExportProducts = async () => {
     try {
-      // Fetch orders to get sales data
-      const ordersData = await coreApi.getOrders();
-      const ordersList = Array.isArray(ordersData) ? ordersData : ((ordersData as any)?.orders || []);
-      
-      // Create a map of product ID to order items
-      const productOrderMap = new Map<string, any[]>();
-      
-      ordersList.forEach((order: any) => {
-        const orderItems = order.items || order.orderItems || [];
-        orderItems.forEach((item: any) => {
-          // Try multiple ways to get product ID
-          const productId = item.productId || item.product?.id || item.productId;
-          if (productId) {
-            if (!productOrderMap.has(productId)) {
-              productOrderMap.set(productId, []);
-            }
-            productOrderMap.get(productId)!.push({
-              ...item,
-              order: order
-            });
-          }
-        });
-      });
-
       const headers = [
-        'created_at',
-        'order_number',
-        'order_status',
-        'user_name',
-        'customer_name',
-        'customer_phone',
-        'brand_name',
-        'vendor_name',
         'product_id',
-        'product_name',
+        'sku',
+        'price',
+        'cost',
         'coins_number',
-        'unit_price',
-        'cost_price',
-        'qty',
-        'cost_sold',
-        'total',
-        'profit',
-        'net_profit',
-        'payment_method',
-        'payment_type',
-        'payment_brand',
-        'reference_number',
-        'bank_commission',
-        'additional_value_fees',
-        'sale_date',
-        'quantity_sold',
-        'total_sales',
-        'store'
+        'notify',
+        'min',
+        'max',
+        'web_status',
+        'mobile_status',
+        'purple_cards_product_name_ar',
+        'purple_cards_product_name_en',
+        'purple_cards_slug_ar',
+        'purple_cards_slug_en',
+        'purple_cards_desc_ar',
+        'purple_cards_desc_en',
+        'purple_cards_long_desc_ar',
+        'purple_cards_long_desc_en',
+        'purple_cards_meta_title_ar',
+        'purple_cards_meta_title_en',
+        'purple_cards_meta_keyword_ar',
+        'purple_cards_meta_keyword_en',
+        'purple_cards_meta_description_ar',
+        'purple_cards_meta_description_en',
+        'ish7en_product_name_ar',
+        'ish7en_product_name_en',
+        'ish7en_slug_ar',
+        'ish7en_slug_en',
+        'ish7en_desc_ar',
+        'ish7en_desc_en',
+        'ish7en_long_desc_ar',
+        'ish7en_long_desc_en',
+        'ish7en_meta_title_ar',
+        'ish7en_meta_title_en',
+        'ish7en_meta_keyword_ar',
+        'ish7en_meta_keyword_en',
+        'ish7en_meta_description_ar',
+        'ish7en_meta_description_en'
       ];
       
-      const exportData: any[] = [];
-      
-      // Process each product
-      products.forEach(p => {
-        // Get order items by both internal ID and productId
-        const orderItemsByInternalId = productOrderMap.get(p.id) || [];
-        const orderItemsByProductId = (p as any).productId 
-          ? (productOrderMap.get((p as any).productId) || [])
-          : [];
-        // Combine and deduplicate by order item ID
-        const allOrderItems = [...orderItemsByInternalId, ...orderItemsByProductId];
-        const uniqueOrderItems = Array.from(
-          new Map(allOrderItems.map(item => [item.id || `${item.order?.id}-${item.productId}`, item])).values()
-        );
-        const orderItems = uniqueOrderItems;
-        const unit = units.find(u => u.id === (p as any).unitId || (p as any).unit?.id);
-        const unitCode = unit ? (unit.code || '') : '';
-        
-        // Extract coins_number from product name or unit
-        let coinsNumber = '';
-        if (unitCode) {
-          const extractedQty = extractQuantityFromName(
-            p.name || p.nameAr || '',
-            unitCode,
-            unit?.name || '',
-            unit?.nameAr
-          );
-          coinsNumber = extractedQty ? extractedQty.toString() : '';
-        }
-        
-        // Get brand name
-        const brandName = (p as any).brand?.name || (p as any).brand?.nameAr || '';
-        
-        // Get vendor/supplier name
-        const productSuppliers = (p as any).suppliers || [];
-        const vendorName = productSuppliers.length > 0
-          ? (productSuppliers[0]?.supplier?.nameAr || productSuppliers[0]?.supplier?.name || '')
-          : '';
-        
-        // Calculate product totals
-        const quantitySold = orderItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        const totalSales = orderItems.reduce((sum, item) => sum + (Number(item.price || 0) * (item.quantity || 0)), 0);
-        const costPrice = Number(p.cost || (p as any).costPerItem || 0);
-        const unitPrice = Number(p.price || 0);
-        
-        if (orderItems.length > 0) {
-          // Create a row for each order item
-          orderItems.forEach((orderItem: any) => {
-            const order = orderItem.order;
-            const qty = orderItem.quantity || 0;
-            const itemPrice = Number(orderItem.price || unitPrice);
-            const itemTotal = itemPrice * qty;
-            const itemCostSold = costPrice * qty;
-            const itemProfit = itemTotal - itemCostSold;
-            
-            // Calculate net profit (profit minus fees/commissions)
-            const bankCommission = 0; // TODO: Get from payment transaction if available
-            const additionalFees = 0; // TODO: Get from order if available
-            const netProfit = itemProfit - bankCommission - additionalFees;
-            
-            // Get payment info
-            const paymentMethod = order.paymentMethod || order.paymentMethodId || '';
-            const paymentType = order.paymentStatus || '';
-            const paymentBrand = order.paymentMethod || '';
-            const referenceNumber = order.transactionId || order.id || '';
-            
-            // Get customer info
-            const customerName = order.customer?.name || order.customerName || '';
-            const customerPhone = order.customer?.phone || order.customerPhone || '';
-            const userName = order.user?.name || order.customer?.email || '';
-            
-            // Get store/tenant info
-            const store = order.tenantId || user?.tenantId || '';
-            
-            exportData.push({
-              created_at: order.createdAt || orderItem.createdAt || '',
-              order_number: order.orderNumber || '',
-              order_status: order.status || '',
-              user_name: userName,
-              customer_name: customerName,
-              customer_phone: customerPhone,
-              brand_name: brandName,
-              vendor_name: vendorName,
-              product_id: (p as any).productId || p.id || '',
-              product_name: p.nameAr || p.name || '',
-              coins_number: coinsNumber,
-              unit_price: unitPrice,
-              cost_price: costPrice,
-              qty: qty,
-              cost_sold: itemCostSold,
-              total: itemTotal,
-              profit: itemProfit,
-              net_profit: netProfit,
-              payment_method: paymentMethod,
-              payment_type: paymentType,
-              payment_brand: paymentBrand,
-              reference_number: referenceNumber,
-              bank_commission: bankCommission,
-              additional_value_fees: additionalFees,
-              sale_date: order.createdAt || order.paidAt || '',
-              quantity_sold: qty,
-              total_sales: itemTotal,
-              store: store
-            });
-          });
-        } else {
-          // If product has no sales, still include it with empty order fields
-          exportData.push({
-            created_at: (p as any).createdAt || '',
-            order_number: '',
-            order_status: '',
-            user_name: '',
-            customer_name: '',
-            customer_phone: '',
-            brand_name: brandName,
-            vendor_name: vendorName,
-            product_id: (p as any).productId || p.id || '',
-            product_name: p.nameAr || p.name || '',
-            coins_number: coinsNumber,
-            unit_price: unitPrice,
-            cost_price: costPrice,
-            qty: 0,
-            cost_sold: 0,
-            total: 0,
-            profit: 0,
-            net_profit: 0,
-            payment_method: '',
-            payment_type: '',
-            payment_brand: '',
-            reference_number: '',
-            bank_commission: 0,
-            additional_value_fees: 0,
-            sale_date: '',
-            quantity_sold: quantitySold,
-            total_sales: totalSales,
-            store: user?.tenantId || ''
-          });
-        }
-      });
+      const exportData = products.map((p: any) => ({
+        product_id: p.productId || p.id || '',
+        sku: p.sku || '',
+        price: p.price || 0,
+        cost: p.costPerItem || p.cost || 0,
+        coins_number: p.coinsNumber || '',
+        notify: p.notify ? 'true' : 'false',
+        min: p.min || '',
+        max: p.max || '',
+        web_status: p.webStatus !== false ? 'true' : 'false',
+        mobile_status: p.mobileStatus !== false ? 'true' : 'false',
+        purple_cards_product_name_ar: p.purpleCardsProductNameAr || '',
+        purple_cards_product_name_en: p.purpleCardsProductNameEn || '',
+        purple_cards_slug_ar: p.purpleCardsSlugAr || '',
+        purple_cards_slug_en: p.purpleCardsSlugEn || '',
+        purple_cards_desc_ar: p.purpleCardsDescAr || '',
+        purple_cards_desc_en: p.purpleCardsDescEn || '',
+        purple_cards_long_desc_ar: p.purpleCardsLongDescAr || '',
+        purple_cards_long_desc_en: p.purpleCardsLongDescEn || '',
+        purple_cards_meta_title_ar: p.purpleCardsMetaTitleAr || '',
+        purple_cards_meta_title_en: p.purpleCardsMetaTitleEn || '',
+        purple_cards_meta_keyword_ar: p.purpleCardsMetaKeywordAr || '',
+        purple_cards_meta_keyword_en: p.purpleCardsMetaKeywordEn || '',
+        purple_cards_meta_description_ar: p.purpleCardsMetaDescriptionAr || '',
+        purple_cards_meta_description_en: p.purpleCardsMetaDescriptionEn || '',
+        ish7en_product_name_ar: p.ish7enProductNameAr || '',
+        ish7en_product_name_en: p.ish7enProductNameEn || '',
+        ish7en_slug_ar: p.ish7enSlugAr || '',
+        ish7en_slug_en: p.ish7enSlugEn || '',
+        ish7en_desc_ar: p.ish7enDescAr || '',
+        ish7en_desc_en: p.ish7enDescEn || '',
+        ish7en_long_desc_ar: p.ish7enLongDescAr || '',
+        ish7en_long_desc_en: p.ish7enLongDescEn || '',
+        ish7en_meta_title_ar: p.ish7enMetaTitleAr || '',
+        ish7en_meta_title_en: p.ish7enMetaTitleEn || '',
+        ish7en_meta_keyword_ar: p.ish7enMetaKeywordAr || '',
+        ish7en_meta_keyword_en: p.ish7enMetaKeywordEn || '',
+        ish7en_meta_description_ar: p.ish7enMetaDescriptionAr || '',
+        ish7en_meta_description_en: p.ish7enMetaDescriptionEn || ''
+      }));
 
       const ws = utils.json_to_sheet(exportData, { header: headers });
       const wb = utils.book_new();
@@ -967,11 +941,16 @@ export default function ProductsManager() {
     }
 
     try {
+      // Set importing state first to show dialog immediately
       setIsImporting(true);
-      setImportProgress({ current: 0, total: 0, currentItem: 'جاري قراءة الملف...' });
-      
-      // Show loading dialog immediately
+      // Clear any previous errors
+      setImportErrors([]);
+      setShowImportErrorDialog(false);
+      // Set initial progress to show loading animation
       setImportProgress({ current: 0, total: 100, currentItem: 'جاري قراءة ملف Excel...' });
+      
+      // Force a re-render to ensure dialog is visible
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       const data = await file.arrayBuffer();
       setImportProgress({ current: 10, total: 100, currentItem: 'جاري تحليل البيانات...' });
@@ -979,13 +958,54 @@ export default function ProductsManager() {
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       setImportProgress({ current: 20, total: 100, currentItem: 'جاري معالجة البيانات...' });
+      
+      // Read ALL rows from Excel - ensure no limit is applied
       const jsonData = utils.sheet_to_json<{
+        product_id?: string;
+        sku?: string;
+        price: number | string;
+        cost?: number | string;
+        coins_number?: number | string;
+        notify?: string | boolean;
+        min?: number | string;
+        max?: number | string;
+        web_status?: string | boolean;
+        mobile_status?: string | boolean;
+        purple_cards_product_name_ar?: string;
+        purple_cards_product_name_en?: string;
+        purple_cards_slug_ar?: string;
+        purple_cards_slug_en?: string;
+        purple_cards_desc_ar?: string;
+        purple_cards_desc_en?: string;
+        purple_cards_long_desc_ar?: string;
+        purple_cards_long_desc_en?: string;
+        purple_cards_meta_title_ar?: string;
+        purple_cards_meta_title_en?: string;
+        purple_cards_meta_keyword_ar?: string;
+        purple_cards_meta_keyword_en?: string;
+        purple_cards_meta_description_ar?: string;
+        purple_cards_meta_description_en?: string;
+        ish7en_product_name_ar?: string;
+        ish7en_product_name_en?: string;
+        ish7en_slug_ar?: string;
+        ish7en_slug_en?: string;
+        ish7en_desc_ar?: string;
+        ish7en_desc_en?: string;
+        ish7en_long_desc_ar?: string;
+        ish7en_long_desc_en?: string;
+        ish7en_meta_title_ar?: string;
+        ish7en_meta_title_en?: string;
+        ish7en_meta_keyword_ar?: string;
+        ish7en_meta_keyword_en?: string;
+        ish7en_meta_description_ar?: string;
+        ish7en_meta_description_en?: string;
+        // Legacy fields (for backward compatibility)
         SKU?: string;
-        Name: string;
+        Name?: string;
         NameAr?: string;
         Description?: string;
         DescriptionAr?: string;
-        Price: number | string;
+        Price?: number | string;
         CompareAtPrice?: number | string;
         Stock?: number | string;
         Category?: string;
@@ -1000,305 +1020,420 @@ export default function ProductsManager() {
       }>(worksheet, { defval: '' });
 
       const totalItems = jsonData.length;
-      setImportProgress({ current: 30, total: 100, currentItem: `جاري معالجة ${totalItems} منتج...` });
-
-      let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
-      const detailedErrors: Array<{ row: number; column: string; productName: string; error: string }> = [];
-      let importStopped = false; // Flag to track if import was stopped early
-
-      for (let i = 0; i < jsonData.length; i++) {
+      
+      // Log total items for debugging
+      console.log(`📊 Total items to import: ${totalItems}`);
+      console.log(`📋 Excel file contains ${jsonData.length} rows (excluding header)`);
+      
+      if (totalItems === 0) {
+        setIsImporting(false);
+        toast({
+          title: 'خطأ',
+          description: 'لم يتم العثور على أي بيانات في ملف Excel. يرجى التحقق من الملف.',
+          variant: 'destructive',
+        });
+        e.target.value = '';
+        return;
+      }
+      
+      // ============================================
+      // PHASE 1: SCAN AND VALIDATE ALL ROWS FIRST
+      // ============================================
+      console.log('📋 PHASE 1: Scanning and validating all rows...');
+      setImportProgress({ current: 0, total: totalItems, currentItem: `جاري فحص ومراجعة ${totalItems} صف...` });
+      
+      const validationErrors: Array<{ row: number; column: string; productName: string; error: string }> = [];
+      const validRows: Array<{ index: number; row: any; productData: any }> = [];
+      
+      // Scan and validate all rows first
+      for (let i = 0; i < totalItems; i++) {
+        // Check if import was stopped
+        if (importAbortRef.current) {
+          console.log('🛑 Import stopped by user during validation');
+          break;
+        }
+        
         const row = jsonData[i];
         const rowNum = i + 2; // Excel row number (1-indexed + header)
         
-        // Update progress with percentage
-        const progressPercent = 30 + Math.floor(((i + 1) / totalItems) * 60); // 30% to 90%
+        // Update scan progress
         setImportProgress({ 
-          current: progressPercent, 
-          total: 100, 
-          currentItem: `جاري استيراد: ${row.Name || `الصف ${rowNum}`}... (${i + 1}/${totalItems})` 
+          current: i + 1, 
+          total: totalItems, 
+          currentItem: `جاري فحص الصف ${rowNum}/${totalItems}...` 
         });
         
-        if (!row.Name) {
-          const error = 'Name is required';
-          errors.push(`Row ${rowNum}: ${error}`);
-          detailedErrors.push({ row: rowNum, column: 'Name', productName: '', error });
-          errorCount++;
-          continue;
-        }
-
-        if (!row.Price || (typeof row.Price === 'string' && !row.Price.trim())) {
-          const error = 'Price is required';
-          errors.push(`Row ${rowNum}: ${error}`);
-          detailedErrors.push({ row: rowNum, column: 'Price', productName: row.Name, error });
-          errorCount++;
-          continue;
+        // Validate row
+        const productId = (row.product_id || '').toString().trim();
+        const sku = (row.sku || row.SKU || '').toString().trim();
+        const name = (row.Name || '').toString().trim();
+        const productName = name || productId || sku || `الصف ${rowNum}`;
+        const priceStr = row.price || row.Price;
+        
+        let hasError = false;
+        let errorColumn = 'General';
+        let errorMessage = '';
+        
+        // Validate required fields
+        if (!name && !productId && !sku) {
+          hasError = true;
+          errorColumn = 'General';
+          errorMessage = 'Name, product_id, or sku is required';
+        } else if (!priceStr || (typeof priceStr === 'string' && !priceStr.toString().trim())) {
+          hasError = true;
+          errorColumn = 'Price';
+          errorMessage = 'Price is required';
+        } else {
+          // Validate price format
+          const price = typeof priceStr === 'string' ? parseFloat(priceStr.toString().replace(/[^\d.-]/g, '')) : priceStr;
+          if (isNaN(price) || price < 0) {
+            hasError = true;
+            errorColumn = 'Price';
+            errorMessage = 'Invalid price format';
+          }
         }
         
-        // Find category by name (case-insensitive, supports both English and Arabic)
-        let categoryId: string | undefined;
-        if (row.Category) {
+        // Validate category if provided
+        if (!hasError && row.Category) {
           const category = categories.find(c => 
             c.name?.toLowerCase() === row.Category?.toLowerCase() ||
-            c.nameAr?.toLowerCase() === row.Category?.toLowerCase() ||
-            c.slug?.toLowerCase() === row.Category?.toLowerCase()
+            c.nameAr?.toLowerCase() === row.Category?.toLowerCase()
           );
-          categoryId = category?.id;
-          if (!categoryId && row.Category.trim()) {
-            const error = `Category "${row.Category}" not found`;
-            errors.push(`Row ${rowNum}: ${error}`);
-            detailedErrors.push({ row: rowNum, column: 'Category', productName: row.Name, error });
+          if (!category && row.Category.trim()) {
+            hasError = true;
+            errorColumn = 'Category';
+            errorMessage = `Category "${row.Category}" not found`;
           }
         }
 
-        // Find brand by name or code
-        let brandId: string | undefined;
-        if (row.Brand || row.BrandCode) {
+        // Validate brand if provided
+        if (!hasError && (row.Brand || row.BrandCode)) {
           const brand = brands.find(b => 
             b.name?.toLowerCase() === row.Brand?.toLowerCase() ||
             b.nameAr?.toLowerCase() === row.Brand?.toLowerCase() ||
             b.code?.toLowerCase() === row.BrandCode?.toLowerCase()
           );
-          brandId = brand?.id;
-          if (!brandId && (row.Brand?.trim() || row.BrandCode?.trim())) {
-            const error = `Brand "${row.Brand || row.BrandCode}" not found`;
-            errors.push(`Row ${rowNum}: ${error}`);
-            detailedErrors.push({ row: rowNum, column: row.Brand ? 'Brand' : 'BrandCode', productName: row.Name, error });
+          if (!brand && (row.Brand?.trim() || row.BrandCode?.trim())) {
+            hasError = true;
+            errorColumn = row.Brand ? 'Brand' : 'BrandCode';
+            errorMessage = `Brand "${row.Brand || row.BrandCode}" not found`;
           }
         }
-
-        try {
-          const price = typeof row.Price === 'string' ? parseFloat(row.Price.replace(/[^\d.-]/g, '')) : row.Price;
-          if (isNaN(price) || price < 0) {
-            const error = 'Invalid price format';
-            errors.push(`Row ${rowNum}: ${error}`);
-            detailedErrors.push({ row: rowNum, column: 'Price', productName: row.Name, error });
-            errorCount++;
-            continue;
-          }
-
-          const compareAtPrice = row.CompareAtPrice 
-            ? (typeof row.CompareAtPrice === 'string' 
-                ? parseFloat(row.CompareAtPrice.replace(/[^\d.-]/g, '')) 
-                : row.CompareAtPrice)
-            : undefined;
-
-          const stock = row.Stock 
-            ? (typeof row.Stock === 'string' ? parseInt(row.Stock.replace(/[^\d]/g, '')) || 0 : row.Stock)
-            : 0;
-
-          const tags = row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : [];
-
-          // If CSV provides a SKU, use it; otherwise let the backend auto-generate
-          const productSku = row.SKU?.trim() || undefined;
-
-          // Don't set variant SKU to avoid global unique constraint conflicts
-          // The backend will handle variant creation without SKU
-          const variantData: any = {
-            name: 'Default',
-            price,
-            inventoryQuantity: stock,
-          };
-          // Explicitly omit SKU to avoid conflicts with global unique constraint
-
-          // Use upsert mode to handle duplicates (update if exists, create if not)
-          await coreApi.createProduct({
-            name: row.Name.trim(),
-            nameAr: row.NameAr?.trim() || '',
-            description: row.Description?.trim() || '',
-            descriptionAr: row.DescriptionAr?.trim() || '',
-            price,
-            compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) ? compareAtPrice : undefined,
-            // Let backend generate SKU if not provided in CSV
-            ...(productSku ? { sku: productSku } : {}),
-            barcode: row.Barcode?.trim() || undefined,
-            weight: row.Weight?.trim() ? parseFloat(row.Weight.replace(/[^\d.-]/g, '')) || undefined : undefined,
-            dimensions: row.Dimensions?.trim() || undefined,
-            tags: tags.length > 0 ? tags : undefined,
-            brandId: brandId || undefined,
-            categoryIds: categoryId ? [categoryId] : undefined,
-            isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED' && row.Status !== 'draft' && row.Status !== 'archived',
-            featured: row.Featured === 'Yes' || row.Featured === 'true' || row.Featured === 'TRUE' || row.Featured === '1',
-            variants: [variantData]
-          }, true); // Pass upsert=true
-          successCount++;
-        } catch (error: any) {
-          // Convert technical errors to user-friendly messages
-          let userFriendlyError = 'حدث خطأ غير معروف';
-          
-          // Handle 403 Forbidden - tenant/market not set up
-          // STOP IMMEDIATELY on any 403 error - don't continue processing
-          if (error?.status === 403) {
-            const errorMsg = error?.message || error?.data?.message || 'يجب إعداد متجر أولاً. يرجى الانتقال إلى إعدادات المتجر وإنشاء متجرك.';
-            userFriendlyError = errorMsg;
-            errorCount++;
-            errors.push(`الصف ${rowNum} (${row.Name}): ${userFriendlyError}`);
-            
-            // ALWAYS stop import on 403 - this means tenant/market is not set up
-            toast({
-              title: 'خطأ في الإعدادات',
-              description: errorMsg.includes('market') || errorMsg.includes('tenant') || errorMsg.includes('متجر')
-                ? errorMsg
-                : 'يجب إعداد متجر أولاً قبل استيراد المنتجات. يرجى الانتقال إلى إعدادات المتجر.',
-              variant: 'destructive',
-            });
-            setIsImporting(false);
-            setImportProgress({ current: 0, total: 0, currentItem: 'Import stopped due to configuration error' });
-            importStopped = true; // Mark that import was stopped
-            
-            // Break out of the loop immediately
+        
+        if (hasError) {
+          validationErrors.push({ row: rowNum, column: errorColumn, productName: productName.toString(), error: errorMessage });
+        } else {
+          // Row is valid, prepare product data for upload
+          // We'll build the full productData in the upload phase
+          validRows.push({ index: i, row, productData: null }); // productData will be built during upload
+        }
+      }
+      
+      console.log(`✅ Scan complete: ${validRows.length} valid rows, ${validationErrors.length} invalid rows`);
+      
+      // ============================================
+      // PHASE 2: UPLOAD VALID ROWS WITH BATCHING
+      // ============================================
+      let successCount = 0;
+      const uploadErrors: Array<{ row: number; column: string; productName: string; error: string }> = [];
+      // Reset abort flag at start of import
+      importAbortRef.current = false;
+      
+      if (validRows.length > 0) {
+        console.log(`🔄 PHASE 2: Uploading ${validRows.length} valid rows...`);
+        setImportProgress({ current: 0, total: validRows.length, currentItem: `جاري رفع ${validRows.length} منتج صالح...` });
+        
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Process in batches for speed
+        const BATCH_SIZE = 5; // Process 5 products concurrently
+        
+        for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+          if (importAbortRef.current) {
+            console.log('🛑 Import stopped by user');
             break;
           }
           
-          if (error?.status === 409 || error?.message?.includes('unique') || error?.message?.includes('SKU')) {
-            userFriendlyError = 'رمز المنتج (SKU) مستخدم بالفعل. سيتم إنشاء رمز جديد تلقائياً بواسطة النظام.';
-            // Retry without forcing a SKU so backend can generate according to its rules
+          const batch = validRows.slice(i, i + BATCH_SIZE);
+          
+          await Promise.all(batch.map(async (item) => {
+            const { index, row } = item;
+            const rowNum = index + 2;
+            
+            if (importAbortRef.current) {
+              console.log('🛑 Import stopped by user - skipping item');
+              return;
+            }
+            
+            const productId = (row.product_id || '').toString().trim();
+            const sku = (row.sku || row.SKU || '').toString().trim();
+            const name = (row.Name || '').toString().trim();
+            const productName = name || productId || sku || `الصف ${rowNum}`;
+            
+            // Build product data
+            const priceStr = row.price || row.Price;
+            const costStr = row.cost;
+            const coinsNumberStr = row.coins_number;
+            const notifyStr = row.notify;
+            const minStr = row.min;
+            const maxStr = row.max;
+            const webStatusStr = row.web_status;
+            const mobileStatusStr = row.mobile_status;
+
             try {
-              const price = typeof row.Price === 'string' ? parseFloat(row.Price.replace(/[^\d.-]/g, '')) : row.Price;
+              const price = typeof priceStr === 'string' ? parseFloat(priceStr.toString().replace(/[^\d.-]/g, '')) : priceStr;
+
+              const cost = costStr 
+                ? (typeof costStr === 'string' ? parseFloat(costStr.toString().replace(/[^\d.-]/g, '')) : costStr)
+                : undefined;
+
+              const coinsNumber = coinsNumberStr 
+                ? (typeof coinsNumberStr === 'string' ? parseInt(coinsNumberStr.toString().replace(/[^\d]/g, '')) || undefined : coinsNumberStr)
+                : undefined;
+
+              const notify = notifyStr !== undefined && notifyStr !== null && notifyStr !== '' 
+                ? (typeof notifyStr === 'boolean' ? notifyStr : (notifyStr.toString().toLowerCase() === 'true' || notifyStr.toString() === '1'))
+                : undefined;
+
+              const min = minStr 
+                ? (typeof minStr === 'string' ? parseInt(minStr.toString().replace(/[^\d]/g, '')) || undefined : minStr)
+                : undefined;
+
+              const max = maxStr 
+                ? (typeof maxStr === 'string' ? parseInt(maxStr.toString().replace(/[^\d]/g, '')) || undefined : maxStr)
+                : undefined;
+
+              const webStatus = webStatusStr !== undefined && webStatusStr !== null && webStatusStr !== ''
+                ? (typeof webStatusStr === 'boolean' ? webStatusStr : (webStatusStr.toString().toLowerCase() === 'true' || webStatusStr.toString() === '1'))
+                : undefined;
+
+              const mobileStatus = mobileStatusStr !== undefined && mobileStatusStr !== null && mobileStatusStr !== ''
+                ? (typeof mobileStatusStr === 'boolean' ? mobileStatusStr : (mobileStatusStr.toString().toLowerCase() === 'true' || mobileStatusStr.toString() === '1'))
+                : undefined;
+
               const compareAtPrice = row.CompareAtPrice 
                 ? (typeof row.CompareAtPrice === 'string' 
                     ? parseFloat(row.CompareAtPrice.replace(/[^\d.-]/g, '')) 
                     : row.CompareAtPrice)
                 : undefined;
+
               const stock = row.Stock 
                 ? (typeof row.Stock === 'string' ? parseInt(row.Stock.replace(/[^\d]/g, '')) || 0 : row.Stock)
                 : 0;
-              const tags = row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : [];
 
-              // Don't set SKU to avoid conflicts; let backend generate
-              const retryVariantData: any = {
+              const tags = row.Tags ? row.Tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
+
+              const productSku = sku || undefined;
+
+              const variantData: any = {
                 name: 'Default',
                 price,
                 inventoryQuantity: stock,
               };
 
-              await coreApi.createProduct({
-                name: row.Name.trim(),
-                nameAr: row.NameAr?.trim() || '',
-                description: row.Description?.trim() || '',
-                descriptionAr: row.DescriptionAr?.trim() || '',
+              const cleanString = (value: any): string | undefined => {
+                if (value === null || value === undefined || value === '') return undefined;
+                const str = value.toString().trim();
+                return str.length > 0 ? str : undefined;
+              };
+
+              // Find category and brand
+              let categoryId: string | undefined;
+              if (row.Category) {
+                const category = categories.find(c => 
+                  c.name?.toLowerCase() === row.Category?.toLowerCase() ||
+                  c.nameAr?.toLowerCase() === row.Category?.toLowerCase()
+                );
+                categoryId = category?.id;
+              }
+
+              let brandId: string | undefined;
+              if (row.Brand || row.BrandCode) {
+                const brand = brands.find(b => 
+                  b.name?.toLowerCase() === row.Brand?.toLowerCase() ||
+                  b.nameAr?.toLowerCase() === row.Brand?.toLowerCase() ||
+                  b.code?.toLowerCase() === row.BrandCode?.toLowerCase()
+                );
+                brandId = brand?.id;
+              }
+
+              const productData: any = {
+                name: name || productId || sku || 'Product',
+                nameAr: cleanString(row.NameAr),
+                description: cleanString(row.Description),
+                descriptionAr: cleanString(row.DescriptionAr),
                 price,
-                compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) ? compareAtPrice : undefined,
-                barcode: row.Barcode?.trim() || undefined,
-                weight: row.Weight?.trim() ? parseFloat(row.Weight.replace(/[^\d.-]/g, '')) || undefined : undefined,
-                dimensions: row.Dimensions?.trim() || undefined,
+                costPerItem: cost && !isNaN(cost) && cost > 0 ? cost : undefined,
+                coinsNumber: coinsNumber !== undefined && coinsNumber !== null ? coinsNumber : undefined,
+                notify: notify !== undefined && notify !== null ? notify : undefined,
+                min: min !== undefined && min !== null ? min : undefined,
+                max: max !== undefined && max !== null ? max : undefined,
+                webStatus: webStatus !== undefined && webStatus !== null ? webStatus : undefined,
+                mobileStatus: mobileStatus !== undefined && mobileStatus !== null ? mobileStatus : undefined,
+                purpleCardsProductNameAr: cleanString(row.purple_cards_product_name_ar),
+                purpleCardsProductNameEn: cleanString(row.purple_cards_product_name_en),
+                purpleCardsSlugAr: cleanString(row.purple_cards_slug_ar),
+                purpleCardsSlugEn: cleanString(row.purple_cards_slug_en),
+                purpleCardsDescAr: cleanString(row.purple_cards_desc_ar),
+                purpleCardsDescEn: cleanString(row.purple_cards_desc_en),
+                purpleCardsLongDescAr: cleanString(row.purple_cards_long_desc_ar),
+                purpleCardsLongDescEn: cleanString(row.purple_cards_long_desc_en),
+                purpleCardsMetaTitleAr: cleanString(row.purple_cards_meta_title_ar),
+                purpleCardsMetaTitleEn: cleanString(row.purple_cards_meta_title_en),
+                purpleCardsMetaKeywordAr: cleanString(row.purple_cards_meta_keyword_ar),
+                purpleCardsMetaKeywordEn: cleanString(row.purple_cards_meta_keyword_en),
+                purpleCardsMetaDescriptionAr: cleanString(row.purple_cards_meta_description_ar),
+                purpleCardsMetaDescriptionEn: cleanString(row.purple_cards_meta_description_en),
+                ish7enProductNameAr: cleanString(row.ish7en_product_name_ar),
+                ish7enProductNameEn: cleanString(row.ish7en_product_name_en),
+                ish7enSlugAr: cleanString(row.ish7en_slug_ar),
+                ish7enSlugEn: cleanString(row.ish7en_slug_en),
+                ish7enDescAr: cleanString(row.ish7en_desc_ar),
+                ish7enDescEn: cleanString(row.ish7en_desc_en),
+                ish7enLongDescAr: cleanString(row.ish7en_long_desc_ar),
+                ish7enLongDescEn: cleanString(row.ish7en_long_desc_en),
+                ish7enMetaTitleAr: cleanString(row.ish7en_meta_title_ar),
+                ish7enMetaTitleEn: cleanString(row.ish7en_meta_title_en),
+                ish7enMetaKeywordAr: cleanString(row.ish7en_meta_keyword_ar),
+                ish7enMetaKeywordEn: cleanString(row.ish7en_meta_keyword_en),
+                ish7enMetaDescriptionAr: cleanString(row.ish7en_meta_description_ar),
+                ish7enMetaDescriptionEn: cleanString(row.ish7en_meta_description_en),
+                compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) && compareAtPrice > 0 ? compareAtPrice : undefined,
+                ...(productSku ? { sku: productSku } : {}),
+                ...(productId ? { productId: productId } : {}),
+                barcode: cleanString(row.Barcode),
+                weight: row.Weight?.toString().trim() ? (parseFloat(row.Weight.toString().replace(/[^\d.-]/g, '')) || undefined) : undefined,
+                dimensions: cleanString(row.Dimensions),
                 tags: tags.length > 0 ? tags : undefined,
                 brandId: brandId || undefined,
                 categoryIds: categoryId ? [categoryId] : undefined,
                 isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED' && row.Status !== 'draft' && row.Status !== 'archived',
                 featured: row.Featured === 'Yes' || row.Featured === 'true' || row.Featured === 'TRUE' || row.Featured === '1',
-                variants: [retryVariantData]
-              }, true);
+                variants: [variantData]
+              };
+              
+              // Remove undefined values
+              Object.keys(productData).forEach(key => {
+                if (productData[key] === undefined) {
+                  delete productData[key];
+                }
+              });
+
+              // Create product with retry logic handled by backend or simple retry here if needed
+              // For speed, we rely on backend handling or simple error catching
+              await coreApi.createProduct(productData, true);
               successCount++;
-              continue; // Skip adding to errors
-            } catch (retryError: any) {
-              userFriendlyError = 'فشل إنشاء المنتج حتى بعد المحاولة مرة أخرى';
+              
+            } catch (error: any) {
+              console.error(`❌ Error uploading product at row ${rowNum}:`, error);
+              
+              let userFriendlyError = 'حدث خطأ غير معروف';
+              let errorColumn = 'General';
+              
+              const errorMessage = error?.message || error?.data?.message || error?.response?.data?.message || '';
+                
+              if (error?.status === 403) {
+                importAbortRef.current = true;
+                userFriendlyError = 'يجب إعداد متجر أولاً.';
+              } else if (error?.status === 400) {
+                userFriendlyError = 'بيانات غير صحيحة.';
+              } else if (error?.status === 404) {
+                userFriendlyError = 'الفئة أو العلامة التجارية غير موجودة.';
+                errorColumn = 'Category';
+              }
+                
+              uploadErrors.push({ row: rowNum, column: errorColumn, productName: productName.toString(), error: userFriendlyError });
             }
-          } else if (error?.status === 400) {
-            userFriendlyError = 'بيانات غير صحيحة. يرجى التحقق من جميع الحقول المطلوبة.';
-          } else if (error?.status === 404) {
-            userFriendlyError = 'الفئة أو العلامة التجارية المحددة غير موجودة.';
-          } else if (error?.status === 500) {
-            userFriendlyError = 'حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقاً.';
-          } else if (error?.message) {
-            // Try to extract user-friendly message
-            const msg = error.message.toLowerCase();
-            if (msg.includes('price') || msg.includes('سعر')) {
-              userFriendlyError = 'السعر غير صحيح. يرجى التأكد من إدخال رقم صحيح.';
-            } else if (msg.includes('category') || msg.includes('فئة')) {
-              userFriendlyError = 'الفئة المحددة غير موجودة.';
-            } else if (msg.includes('brand') || msg.includes('علامة')) {
-              userFriendlyError = 'العلامة التجارية المحددة غير موجودة.';
-            } else {
-              userFriendlyError = 'حدث خطأ أثناء إنشاء المنتج.';
-            }
-          }
+          }));
           
-          errors.push(`الصف ${rowNum} (${row.Name}): ${userFriendlyError}`);
-          // Determine which column had the error based on error message
-          let errorColumn = 'General';
-          const errorLower = userFriendlyError.toLowerCase();
-          if (errorLower.includes('سعر') || errorLower.includes('price')) errorColumn = 'Price';
-          else if (errorLower.includes('فئة') || errorLower.includes('category')) errorColumn = 'Category';
-          else if (errorLower.includes('علامة') || errorLower.includes('brand')) errorColumn = 'Brand';
-          else if (errorLower.includes('sku') || errorLower.includes('رمز')) errorColumn = 'SKU';
-          detailedErrors.push({ row: rowNum, column: errorColumn, productName: row.Name, error: userFriendlyError });
-          errorCount++;
+          // Update progress after batch
+          setImportProgress({ 
+            current: Math.min(i + BATCH_SIZE, validRows.length), 
+            total: validRows.length, 
+            currentItem: `تم رفع ${Math.min(i + BATCH_SIZE, validRows.length)} من ${validRows.length} منتج...` 
+          });
         }
       }
 
-      // Only show completion message if import wasn't stopped early
-      if (!importStopped) {
-        // Update progress to 100%
+      // ============================================
+      // PHASE 3: SHOW ERROR POPUP WITH ALL REFUSED COLUMNS
+      // ============================================
+      // Combine validation errors and upload errors
+      const allErrors = [...validationErrors, ...uploadErrors];
+      
+      if (!importAbortRef.current) {
+        const finalTotal = totalItems;
+        const completionMessage = allErrors.length > 0 
+          ? `اكتمل الاستيراد! تم استيراد ${successCount} منتج بنجاح، ورفض ${allErrors.length} منتج من إجمالي ${finalTotal}`
+          : `اكتمل الاستيراد! تم استيراد ${successCount} منتج بنجاح من إجمالي ${finalTotal}`;
+        
         setImportProgress({ 
-          current: 100, 
-          total: 100, 
-          currentItem: 'اكتمل الاستيراد!' 
+          current: finalTotal, 
+          total: finalTotal, 
+          currentItem: completionMessage
         });
 
-        // Show user-friendly summary
-        let description = '';
-        if (successCount > 0 && errorCount === 0) {
-          description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح`;
-        } else if (successCount > 0 && errorCount > 0) {
-          description = `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح، وفشل استيراد ${errorCount} منتج${errorCount !== 1 ? 'ات' : ''}`;
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        if (allErrors.length > 0) {
+          console.group('تفاصيل أخطاء الاستيراد:');
+          console.log(`إجمالي الأخطاء: ${allErrors.length}`);
+          allErrors.forEach((err, idx) => {
+            console.error(`خطأ ${idx + 1}: الصف ${err.row} - العمود: ${err.column} - المنتج: ${err.productName} - الخطأ: ${err.error}`);
+          });
+          console.groupEnd();
+          
+          setImportErrors(allErrors);
+          setIsImporting(false);
+          
+          await new Promise(resolve => setTimeout(resolve, 600));
+          
+          setShowImportErrorDialog(true);
+          console.log('✅ Error dialog should now be visible with', allErrors.length, 'errors');
+          
+          setTimeout(() => {
+          setShowImportErrorDialog(true);
+          }, 200);
         } else {
-          description = `فشل استيراد جميع المنتجات (${errorCount} خطأ)`;
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          setIsImporting(false);
         }
-
+        
         toast({
-          title: successCount > 0 ? 'تم الاستيراد' : 'فشل الاستيراد',
-          description,
-          variant: errorCount > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
+          title: successCount > 0 ? 'تم الاستيراد بنجاح' : 'فشل الاستيراد',
+          description: allErrors.length > 0 
+            ? `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح، ورفض ${allErrors.length} منتج${allErrors.length !== 1 ? 'ات' : ''}`
+            : `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح`,
+          variant: allErrors.length > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
+          duration: 5000,
         });
-
-        // Show detailed errors in console for debugging, and show error dialog
-        if (detailedErrors.length > 0) {
-          console.group('تفاصيل أخطاء الاستيراد:');
-          errors.forEach(err => console.error(err));
-          console.groupEnd();
-          // Show error dialog
-          setImportErrors(detailedErrors);
-          setShowImportErrorDialog(true);
-        }
-      } else {
-        // Import was stopped early due to 403 error
-        // Error toast was already shown, just log errors
-        if (detailedErrors.length > 0) {
-          console.group('تفاصيل أخطاء الاستيراد:');
-          errors.forEach(err => console.error(err));
-          console.groupEnd();
-          // Show error dialog
-          setImportErrors(detailedErrors);
-          setShowImportErrorDialog(true);
-        }
+        
+        await loadData();
       }
       
-      // Wait a bit before closing progress dialog (only if not stopped)
-      if (!importStopped) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        loadData();
-      }
       // Reset file input
       e.target.value = '';
     } catch (error: unknown) {
+      // Ensure progress dialog is closed on error
+      setIsImporting(false);
       toast({ 
         title: 'تعذر استيراد المنتجات', 
         description: error instanceof Error ? error.message : 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
         variant: 'destructive' 
       });
     } finally {
-      setIsImporting(false);
-      setImportProgress({ current: 0, total: 0, currentItem: '' });
+      // Only reset progress if dialog is already closed (error dialog might be showing)
+      if (!showImportErrorDialog && !isImporting) {
+        setImportProgress({ current: 0, total: 0, currentItem: '' });
+      }
     }
   };
 
   const stats = {
     total: products.length,
-    active: products.filter(p => p.status === 'ACTIVE').length,
-    lowStock: products.filter(p => p.stock <= p.lowStockThreshold).length,
-    outOfStock: products.filter(p => p.stock === 0).length,
+    active: products.filter((p: Product) => p.status === 'ACTIVE').length,
+    lowStock: products.filter((p: Product) => p.stock <= (p as any).lowStockThreshold).length,
+    outOfStock: products.filter((p: Product) => p.stock === 0).length,
   };
 
   return (
@@ -1376,7 +1511,7 @@ export default function ProductsManager() {
                       </div>
                     )}
                     
-                    {/* Upload Button */}
+                    {/* Upload Buttons */}
                     <div className="flex items-center gap-2">
                       <Input
                         id="image-upload"
@@ -1391,10 +1526,24 @@ export default function ProductsManager() {
                         variant="outline"
                         onClick={() => document.getElementById('image-upload')?.click()}
                         disabled={uploadingImage}
-                        className="w-full"
+                        className="flex-1"
                       >
                         <ImageIcon className="ml-2 h-4 w-4" />
                         {uploadingImage ? 'جاري الرفع...' : 'رفع صور'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('🔵 [BUTTON CLICK] Opening Cloudinary picker dialog');
+                          setShowCloudinaryPicker(true);
+                        }}
+                        className="flex-1"
+                      >
+                        <Cloud className="ml-2 h-4 w-4" />
+                        اختر من Cloudinary
                       </Button>
                     </div>
                   </div>
@@ -1936,6 +2085,15 @@ export default function ProductsManager() {
               </SelectContent>
             </Select>
             <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                className="gap-2" 
+                onClick={handleSelectAllProducts}
+                disabled={loading}
+              >
+                <Package className="h-4 w-4" />
+                تحديد الكل
+              </Button>
               {selectedProducts.size > 0 && (
                 <Button 
                   variant="destructive" 
@@ -2005,7 +2163,7 @@ export default function ProductsManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.map((product, index) => (
+                {paginatedProducts.map((product, index) => (
                   <TableRow 
                     key={product.id} 
                     className="group hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent dark:hover:from-gray-800 dark:hover:to-transparent transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
@@ -2100,6 +2258,60 @@ export default function ProductsManager() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          
+          {/* Pagination Controls */}
+          {!loading && filteredProducts.length > itemsPerPage && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                عرض {startIndex + 1} - {Math.min(endIndex, filteredProducts.length)} من {filteredProducts.length} منتج
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  السابق
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className="min-w-[40px]"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  التالي
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
         </Card>
@@ -2272,150 +2484,9 @@ export default function ProductsManager() {
                 </CardContent>
               </Card>
 
-      {/* Import Progress Dialog */}
-      <Dialog open={isImporting} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>جاري استيراد المنتجات</DialogTitle>
-            <DialogDescription>
-              يرجى الانتظار أثناء استيراد المنتجات...
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <UploadProgress
-              current={importProgress.current}
-              total={importProgress.total}
-              currentItem={importProgress.currentItem}
-              isComplete={importProgress.current === importProgress.total && importProgress.total > 0}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Import Errors Dialog */}
-      <Dialog open={showImportErrorDialog} onOpenChange={setShowImportErrorDialog}>
-        <DialogContent className="max-w-5xl max-h-[85vh]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">أخطاء استيراد ملف Excel</DialogTitle>
-            <DialogDescription>
-              حدثت الأخطاء التالية أثناء الاستيراد. يرجى إصلاح هذه المشاكل والمحاولة مرة أخرى.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 max-h-[65vh] overflow-y-auto">
-            <div className="space-y-4">
-              {/* Summary Card */}
-              <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-red-100 dark:bg-red-900/50 rounded-full">
-                      <X className="h-5 w-5 text-red-600 dark:text-red-400" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-red-900 dark:text-red-300">إجمالي الأخطاء: {importErrors.length}</h3>
-                      <p className="text-sm text-red-700 dark:text-red-400">يرجى مراجعة الأخطاء أدناه وإصلاحها في ملف Excel</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Errors grouped by column */}
-              <div className="space-y-3">
-                {Object.entries(
-                  importErrors.reduce((acc, err) => {
-                    const col = err.column || 'عام';
-                    if (!acc[col]) acc[col] = [];
-                    acc[col].push(err);
-                    return acc;
-                  }, {} as Record<string, typeof importErrors>)
-                ).map(([column, errors]) => (
-                  <Card key={column} className="border-l-4 border-l-red-500">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <span className="font-bold text-red-600 dark:text-red-400">العمود: {column}</span>
-                        <Badge variant="destructive" className="mr-auto">{errors.length} خطأ</Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-20"># الصف</TableHead>
-                            <TableHead>اسم المنتج</TableHead>
-                            <TableHead>سبب الخطأ</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {errors.map((err, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell className="font-mono font-bold text-center bg-gray-50 dark:bg-gray-900">
-                                {err.row}
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {err.productName || '(لا يوجد اسم)'}
-                              </TableCell>
-                              <TableCell className="text-red-600 dark:text-red-400">
-                                {err.error}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
 
-              {/* All errors table (fallback if grouping doesn't work) */}
-              {importErrors.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">جميع الأخطاء بالتفصيل</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-20"># الصف</TableHead>
-                          <TableHead>اسم المنتج</TableHead>
-                          <TableHead>العمود</TableHead>
-                          <TableHead>سبب الخطأ</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {importErrors.map((err, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-mono font-semibold text-center bg-gray-50 dark:bg-gray-900">
-                              {err.row}
-                            </TableCell>
-                            <TableCell className="font-medium">{err.productName || '(لا يوجد اسم)'}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="font-medium text-blue-600 dark:text-blue-400">
-                                {err.column}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-red-600 dark:text-red-400">{err.error}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowImportErrorDialog(false)}>
-              إغلاق
-            </Button>
-            <Button onClick={() => {
-              setShowImportErrorDialog(false);
-              // Could add functionality to download error report
-            }}>
-              تصدير تقرير الأخطاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4 border-t">
@@ -2444,6 +2515,187 @@ export default function ProductsManager() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Cloudinary Image Picker - Always render, Dialog handles visibility */}
+      <CloudinaryImagePicker
+        open={showCloudinaryPicker}
+        onOpenChange={(open) => {
+          console.log('🔵 CloudinaryImagePicker onOpenChange:', open);
+          setShowCloudinaryPicker(open);
+        }}
+        onSelect={(images) => {
+          console.log('🔵 CloudinaryImagePicker onSelect:', images);
+          handleCloudinarySelect(images);
+        }}
+        multiple={false}
+      />
+      
+      {/* Import Errors Dialog */}
+      <Dialog 
+        open={showImportErrorDialog} 
+        onOpenChange={(open) => {
+          console.log('🔔 Error dialog onOpenChange:', open, 'Current errors:', importErrors.length);
+          setShowImportErrorDialog(open);
+        }}
+      >
+        <DialogContent className="max-w-6xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              تقرير أخطاء استيراد المنتجات
+            </DialogTitle>
+            <DialogDescription>
+              حدثت الأخطاء التالية أثناء الاستيراد. يرجى مراجعة الصفوف التي فشلت وتصحيح البيانات في ملف Excel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 max-h-[70vh] overflow-y-auto">
+            <div className="space-y-4">
+              {/* Summary Card */}
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-2 border-red-200 dark:border-red-800 rounded-lg p-5">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-full">
+                      <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg text-red-900 dark:text-red-300">
+                        إجمالي الصفوف التي فشلت: {importErrors.length}
+                      </h3>
+                      <p className="text-sm text-red-700 dark:text-red-400 mt-1">
+                        يرجى مراجعة الأخطاء أدناه وإصلاحها في ملف Excel قبل المحاولة مرة أخرى
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">عدد الصفوف</p>
+                      <p className="text-2xl font-bold text-red-600">{importErrors.length}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* All errors table - showing all failed rows */}
+              {importErrors.length > 0 && (
+                <Card className="border-2 border-red-200 dark:border-red-800">
+                  <CardHeader className="bg-red-50 dark:bg-red-950/30">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <X className="h-5 w-5 text-red-600" />
+                      قائمة الصفوف التي فشل استيرادها
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      جميع الصفوف التي لم يتم استيرادها مع سبب الفشل لكل صف
+                    </p>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-gray-50 dark:bg-gray-900">
+                            <TableHead className="w-24 font-bold text-center"># الصف في Excel</TableHead>
+                            <TableHead className="font-bold min-w-[150px]">اسم المنتج / SKU</TableHead>
+                            <TableHead className="font-bold min-w-[120px]">العمود المشكوك فيه</TableHead>
+                            <TableHead className="font-bold">سبب الفشل</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {importErrors.map((err, index) => (
+                            <TableRow 
+                              key={index} 
+                              className="hover:bg-red-50/50 dark:hover:bg-red-950/20 border-b border-red-100 dark:border-red-900/50"
+                            >
+                              <TableCell className="font-mono font-bold text-center text-lg bg-red-50 dark:bg-red-950/30">
+                                {err.row}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-semibold">{err.productName || '(لا يوجد اسم)'}</span>
+                                  {err.productName && err.productName !== err.productName && (
+                                    <span className="text-xs text-gray-500">SKU: {err.productName}</span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant="outline" 
+                                  className="font-semibold text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30"
+                                >
+                                  {err.column || 'عام'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-red-700 dark:text-red-400 font-medium">
+                                <div className="flex items-start gap-2">
+                                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <span>{err.error}</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowImportErrorDialog(false)}
+              className="min-w-[100px]"
+            >
+              إغلاق
+            </Button>
+            <Button 
+              onClick={() => {
+                // Export errors to CSV
+                const errorData = importErrors.map(err => ({
+                  row: err.row,
+                  productName: err.productName || '',
+                  column: err.column || '',
+                  error: err.error
+                }));
+                
+                const ws = utils.json_to_sheet(errorData);
+                const wb = utils.book_new();
+                utils.book_append_sheet(wb, ws, "Import Errors");
+                writeFile(wb, `import_errors_${new Date().toISOString().split('T')[0]}.xlsx`);
+                
+                toast({
+                  title: 'تم التصدير',
+                  description: 'تم تصدير تقرير الأخطاء بنجاح',
+                });
+              }}
+              variant="secondary"
+              className="min-w-[150px]"
+            >
+              <Download className="h-4 w-4 ml-2" />
+              تصدير تقرير الأخطاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Progress Dialog */}
+      <ImportProgressDialog
+        open={isImporting}
+        onOpenChange={(open) => {
+          setIsImporting(open);
+          // Stop import and reset progress when dialog is closed
+          if (!open) {
+            importAbortRef.current = true;
+            setImportProgress({ current: 0, total: 0, currentItem: '' });
+            toast({
+              title: 'تم إيقاف الاستيراد',
+              description: 'تم إيقاف عملية الاستيراد بنجاح',
+            });
+          }
+        }}
+        progress={importProgress}
+        title="جاري استيراد المنتجات"
+        description="يرجى الانتظار بينما نقوم بمعالجة ورفع المنتجات..."
+      />
     </div>
   );
 }

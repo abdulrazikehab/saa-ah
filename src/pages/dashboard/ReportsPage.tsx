@@ -344,7 +344,7 @@ export default function ReportsPage() {
           <Select value={dateRange} onValueChange={setDateRange}>
             <SelectTrigger className="w-[200px]">
               <Calendar className="h-4 w-4 ml-2" />
-              <SelectValue />
+              <SelectValue placeholder={t('dashboard.reports.selectDateRange', 'اختر الفترة')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="7days">{t('dashboard.reports.last7Days')}</SelectItem>

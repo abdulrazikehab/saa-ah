@@ -25,11 +25,15 @@ export const authService = {
   },
 
   signup: async (data: RegisterData): Promise<{
-    id: string;
     email: string;
-    recoveryId: string;
-    accessToken: string;
-    refreshToken: string;
+    emailVerified?: boolean;
+    verificationCodeSent?: boolean;
+    verificationCode?: string;
+    emailPreviewUrl?: string;
+    isTestEmail?: boolean;
+    emailWarning?: string;
+    emailError?: string;
+    recoveryId?: string;
   }> => {
     const fingerprint = await getDeviceFingerprint();
     return apiClient.fetch(`${apiClient.authUrl}/signup`, {
@@ -193,6 +197,12 @@ export const authService = {
 
   getMarketLimit: (): Promise<{ limit: number; currentCount: number }> =>
     apiClient.fetch(`${apiClient.authUrl}/markets/limit`, {
+      requireAuth: true,
+    }),
+
+  deleteMarket: (tenantId: string): Promise<{ message: string }> =>
+    apiClient.fetch(`${apiClient.coreUrl}/tenants/${tenantId}`, {
+      method: 'DELETE',
       requireAuth: true,
     }),
 
