@@ -377,7 +377,7 @@ export default function OrdersManager() {
   const handleApproveTopUp = async (requestId: string) => {
     try {
       setProcessingTopUp(requestId);
-      await coreApi.post(`/wallet/admin/topup/${requestId}/approve`, {}, { requireAuth: true });
+      await coreApi.post(`/merchant/wallet/admin/topup/${requestId}/approve`, {}, { requireAuth: true });
       
       toast({
         title: 'تمت الموافقة',
@@ -412,7 +412,7 @@ export default function OrdersManager() {
     try {
       setProcessingTopUp(selectedTopUp.id);
       await coreApi.post(
-        `/wallet/admin/topup/${selectedTopUp.id}/reject`,
+        `/merchant/wallet/admin/topup/${selectedTopUp.id}/reject`,
         { reason: rejectReason },
         { requireAuth: true }
       );

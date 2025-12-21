@@ -23,6 +23,8 @@ interface Product {
   id: string;
   name: string;
   nameAr?: string;
+  brandId?: string;
+  categories?: Array<{ categoryId?: string; category?: { id: string }; id?: string }>;
 }
 
 export default function HierarchicalManager() {
@@ -62,11 +64,30 @@ export default function HierarchicalManager() {
       const productsList = Array.isArray(productsData) 
         ? productsData 
         : ((productsData as any).products || []);
-      setProducts(productsList.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        nameAr: p.nameAr || p.name,
-      })));
+      setProducts(productsList.map((p: any) => {
+        // Normalize categories - handle both formats: array of objects or array with category property
+        let normalizedCategories = [];
+        if (p.categories && Array.isArray(p.categories)) {
+          normalizedCategories = p.categories.map((cat: any) => {
+            if (typeof cat === 'string') {
+              return { categoryId: cat };
+            }
+            return {
+              categoryId: cat.categoryId || cat.id || cat.category?.id,
+              category: cat.category,
+              id: cat.id,
+            };
+          });
+        }
+        
+        return {
+          id: p.id,
+          name: p.name,
+          nameAr: p.nameAr || p.name,
+          brandId: p.brandId || p.brand?.id,
+          categories: normalizedCategories,
+        };
+      }));
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
@@ -119,11 +140,30 @@ export default function HierarchicalManager() {
                   const productsList = Array.isArray(productsData) 
                     ? productsData 
                     : ((productsData as any).products || []);
-                  return productsList.map((p: any) => ({
-                    id: p.id,
-                    name: p.name,
-                    nameAr: p.nameAr || p.name,
-                  }));
+                  return productsList.map((p: any) => {
+                    // Normalize categories - handle both formats
+                    let normalizedCategories = [];
+                    if (p.categories && Array.isArray(p.categories)) {
+                      normalizedCategories = p.categories.map((cat: any) => {
+                        if (typeof cat === 'string') {
+                          return { categoryId: cat };
+                        }
+                        return {
+                          categoryId: cat.categoryId || cat.id || cat.category?.id,
+                          category: cat.category,
+                          id: cat.id,
+                        };
+                      });
+                    }
+                    
+                    return {
+                      id: p.id,
+                      name: p.name,
+                      nameAr: p.nameAr || p.name,
+                      brandId: p.brandId || p.brand?.id,
+                      categories: normalizedCategories,
+                    };
+                  });
                 } catch (error) {
                   console.error('Failed to load products by category:', error);
                   return [];
@@ -133,16 +173,29 @@ export default function HierarchicalManager() {
                 try {
                   const newCategory = await coreApi.createCategory({
                     name: categoryData.name,
+                    nameAr: categoryData.nameAr,
                     description: categoryData.description,
                     parentId: categoryData.parentId,
+                    image: categoryData.image,
                   } as any);
-                  await loadData();
-                  return {
-                    id: newCategory.id || (newCategory as any).category?.id,
-                    name: newCategory.name || (newCategory as any).category?.name,
-                    nameAr: categoryData.nameAr,
-                    parentId: categoryData.parentId,
+                  
+                  // Return normalized category object
+                  const createdCategory = {
+                    id: newCategory.id || (newCategory as any).category?.id || (newCategory as any).id,
+                    name: newCategory.name || (newCategory as any).category?.name || categoryData.name,
+                    nameAr: newCategory.nameAr || (newCategory as any).category?.nameAr || categoryData.nameAr || categoryData.name,
+                    parentId: newCategory.parentId || (newCategory as any).category?.parentId || categoryData.parentId,
                   };
+                  
+                  // Add to local state immediately for instant UI update
+                  setCategories(prev => [...prev, createdCategory]);
+                  
+                  // Reload all data in background to ensure consistency
+                  loadData().catch(error => {
+                    console.error('Failed to reload data after creating category:', error);
+                  });
+                  
+                  return createdCategory;
                 } catch (error) {
                   console.error('Failed to create category:', error);
                   throw error;

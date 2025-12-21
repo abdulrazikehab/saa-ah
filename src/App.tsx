@@ -78,6 +78,7 @@ import PageBuilderPage from "./pages/dashboard/PageBuilderPage";
 import DashboardProfile from "./pages/dashboard/DashboardProfile";
 import Help from "./pages/dashboard/Help";
 import WalletTransactions from "./pages/dashboard/WalletTransactions";
+import WalletPage from "./pages/dashboard/wallet/WalletPage";
 import ActivityLogs from "./pages/dashboard/ActivityLogs";
 import Chat from "./pages/dashboard/Chat";
 import Reports from "./pages/dashboard/Reports";
@@ -313,8 +314,8 @@ const App = () => {
                   <Route path="/dashboard/app-builder" element={<AppBuilder />} />
                   <Route path="/dashboard/installed-apps" element={<InstalledApps />} />
                   <Route path="/dashboard/templates" element={<TemplatesPage />} />
-                  <Route path="/dashboard/wallet" element={<WalletTransactions />} />
-                  <Route path="/dashboard/activity-logs" element={<ActivityLogs />} />
+                  <Route path="/dashboard/wallet" element={<WalletPage />} />
+                  <Route path="/dashboard/activity-log" element={<ActivityLogs />} />
                   <Route path="/dashboard/chat-team" element={<Chat />} />
                   <Route path="/dashboard/reports" element={<Reports />} />
                   <Route path="/dashboard/support" element={<SupportPage />} />

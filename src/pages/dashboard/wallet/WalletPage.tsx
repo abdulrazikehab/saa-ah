@@ -50,7 +50,7 @@ import {
   History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { coreApi } from '@/lib/api';
+import { coreApi, walletService, type Bank, type CreateBankDto } from '@/lib/api';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -64,36 +64,28 @@ interface WalletData {
 
 interface Transaction {
   id: string;
-  type: string;
-  amount: number;
+  type: 'TOPUP' | 'PURCHASE' | 'REFUND' | 'BONUS' | 'ADJUSTMENT' | 'WITHDRAWAL';
+  amount: number | string;
   currency: string;
-  status: string;
+  status: 'COMPLETED' | 'PENDING' | 'FAILED';
   description: string;
+  descriptionAr?: string;
   reference?: string;
   createdAt: string;
 }
 
 interface TopUpRequest {
   id: string;
-  amount: number;
+  amount: number | string;
   currency: string;
-  status: string;
-  paymentMethod: string;
-  proofImageUrl?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  paymentMethod: 'BANK_TRANSFER' | 'VISA' | 'MASTERCARD' | 'MADA' | 'APPLE_PAY' | 'STC_PAY';
+  receiptImage?: string;
   notes?: string;
   createdAt: string;
-  approvedAt?: string;
+  processedAt?: string;
 }
 
-interface Bank {
-  id: string;
-  name: string;
-  nameAr?: string;
-  accountName: string;
-  accountNumber: string;
-  iban?: string;
-  logoUrl?: string;
-}
 
 const transactionTypeConfig: Record<string, { label: string; labelAr: string; icon: any; color: string }> = {
   TOPUP: { label: 'Top Up', labelAr: 'إيداع', icon: ArrowDownLeft, color: 'text-green-500' },
@@ -120,28 +112,52 @@ export default function WalletPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [allBanks, setAllBanks] = useState<Bank[]>([]);
   const [loading, setLoading] = useState(true);
   const [showTopUpDialog, setShowTopUpDialog] = useState(false);
+  const [showAddBankDialog, setShowAddBankDialog] = useState(false);
+  const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('');
   const [proofImage, setProofImage] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Bank form state
+  const [bankForm, setBankForm] = useState<CreateBankDto>({
+    name: '',
+    nameAr: '',
+    code: '',
+    accountName: '',
+    accountNumber: '',
+    iban: '',
+    swiftCode: '',
+    isActive: true,
+    sortOrder: 0,
+  });
+  const [bankLogoFile, setBankLogoFile] = useState<File | null>(null);
   
   // Fetch wallet data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [walletRes, transactionsRes, topUpRes, banksRes] = await Promise.all([
-          coreApi.get('/wallet', { requireAuth: true }),
-          coreApi.get('/wallet/transactions?limit=50', { requireAuth: true }),
-          coreApi.get('/wallet/top-up-requests', { requireAuth: true }),
-          coreApi.get('/wallet/banks', { requireAuth: true }),
+        const [walletRes, transactionsRes, topUpRes, banksRes, allBanksRes] = await Promise.all([
+          walletService.getBalance().catch(() => ({ balance: 0, currency: 'SAR' })),
+          walletService.getTransactions(1, 50).catch(() => ({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 })),
+          walletService.getTopUpRequests().catch(() => []),
+          walletService.getBanks().catch(() => []),
+          walletService.getAllBanks().catch(() => []),
         ]);
-        setWallet(walletRes);
+        setWallet({
+          id: walletRes.id || '',
+          balance: typeof walletRes.balance === 'string' ? parseFloat(walletRes.balance) : walletRes.balance || 0,
+          currency: walletRes.currency || 'SAR',
+          lastUpdated: walletRes.updatedAt || new Date().toISOString(),
+        });
         setTransactions(transactionsRes.data || []);
-        setTopUpRequests(topUpRes.data || []);
-        setBanks(banksRes.data || []);
+        setTopUpRequests(Array.isArray(topUpRes) ? topUpRes : []);
+        setBanks(Array.isArray(banksRes) ? banksRes : []);
+        setAllBanks(Array.isArray(allBanksRes) ? allBanksRes : []);
       } catch (error) {
         console.error('Error fetching wallet data:', error);
         toast.error(t('common.error', 'حدث خطأ'));
@@ -168,6 +184,93 @@ export default function WalletPage() {
     toast.success(isRTL ? 'تم النسخ' : 'Copied');
   };
 
+  // Handle add/edit merchant bank
+  const handleSaveBank = async () => {
+    if (!bankForm.name || !bankForm.code || !bankForm.accountName || !bankForm.accountNumber || !bankForm.iban) {
+      toast.error(isRTL ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      if (editingBank) {
+        await walletService.updateBank(editingBank.id, bankForm, bankLogoFile || undefined);
+        toast.success(isRTL ? 'تم تحديث البنك بنجاح' : 'Bank updated successfully');
+      } else {
+        await walletService.createBank(bankForm, bankLogoFile || undefined);
+        toast.success(isRTL ? 'تم إضافة البنك بنجاح' : 'Bank added successfully');
+      }
+      setShowAddBankDialog(false);
+      setEditingBank(null);
+      setBankForm({
+        name: '',
+        nameAr: '',
+        code: '',
+        accountName: '',
+        accountNumber: '',
+        iban: '',
+        swiftCode: '',
+        isActive: true,
+        sortOrder: 0,
+      });
+      setBankLogoFile(null);
+      
+      // Refresh banks
+      const [banksRes, allBanksRes] = await Promise.all([
+        walletService.getBanks().catch(() => []),
+        walletService.getAllBanks().catch(() => []),
+      ]);
+      setBanks(Array.isArray(banksRes) ? banksRes : []);
+      setAllBanks(Array.isArray(allBanksRes) ? allBanksRes : []);
+    } catch (error: any) {
+      console.error('Error saving bank:', error);
+      toast.error(error?.message || (isRTL ? 'فشل حفظ البنك' : 'Failed to save bank'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle delete bank
+  const handleDeleteBank = async (bankId: string) => {
+    if (!confirm(isRTL ? 'هل أنت متأكد من حذف هذا البنك؟' : 'Are you sure you want to delete this bank?')) {
+      return;
+    }
+
+    try {
+      await walletService.deleteBank(bankId);
+      toast.success(isRTL ? 'تم حذف البنك بنجاح' : 'Bank deleted successfully');
+      
+      // Refresh banks
+      const [banksRes, allBanksRes] = await Promise.all([
+        walletService.getBanks().catch(() => []),
+        walletService.getAllBanks().catch(() => []),
+      ]);
+      setBanks(Array.isArray(banksRes) ? banksRes : []);
+      setAllBanks(Array.isArray(allBanksRes) ? allBanksRes : []);
+    } catch (error: any) {
+      console.error('Error deleting bank:', error);
+      toast.error(error?.message || (isRTL ? 'فشل حذف البنك' : 'Failed to delete bank'));
+    }
+  };
+
+  // Handle edit bank
+  const handleEditBank = (bank: Bank) => {
+    setEditingBank(bank);
+    setBankForm({
+      name: bank.name,
+      nameAr: bank.nameAr || '',
+      code: bank.code,
+      accountName: bank.accountName,
+      accountNumber: bank.accountNumber,
+      iban: bank.iban,
+      swiftCode: bank.swiftCode || '',
+      isActive: bank.isActive,
+      sortOrder: bank.sortOrder,
+    });
+    setBankLogoFile(null);
+    setShowAddBankDialog(true);
+  };
+
   // Submit top-up request
   const handleTopUpSubmit = async () => {
     if (!selectedBank || !topUpAmount || parseFloat(topUpAmount) <= 0) {
@@ -186,9 +289,23 @@ export default function WalletPage() {
         formData.append('proofImage', proofImage);
       }
       
-      await coreApi.post('/wallet/top-up', formData, { 
-        requireAuth: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
+      // Convert File to base64 if image provided
+      let receiptImageUrl: string | undefined;
+      if (proofImage) {
+        const reader = new FileReader();
+        receiptImageUrl = await new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(proofImage);
+        });
+      }
+
+      await walletService.createTopUpRequest({
+        amount: parseFloat(topUpAmount),
+        currency: 'SAR',
+        paymentMethod: 'BANK_TRANSFER',
+        bankId: selectedBank.id,
+        receiptImage: receiptImageUrl,
       });
       
       toast.success(isRTL ? 'تم إرسال طلب الشحن بنجاح' : 'Top-up request submitted successfully');
@@ -198,8 +315,8 @@ export default function WalletPage() {
       setProofImage(null);
       
       // Refresh data
-      const topUpRes = await coreApi.get('/wallet/top-up-requests', { requireAuth: true });
-      setTopUpRequests(topUpRes.data || []);
+      const topUpRes = await walletService.getTopUpRequests();
+      setTopUpRequests(Array.isArray(topUpRes) ? topUpRes : []);
     } catch (error) {
       console.error('Error submitting top-up:', error);
       toast.error(isRTL ? 'فشل إرسال طلب الشحن' : 'Failed to submit top-up request');
@@ -417,7 +534,7 @@ export default function WalletPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="transactions">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="transactions" className="gap-2">
             <History className="h-4 w-4" />
             {isRTL ? 'سجل العمليات' : 'Transactions'}
@@ -425,6 +542,10 @@ export default function WalletPage() {
           <TabsTrigger value="requests" className="gap-2">
             <Clock className="h-4 w-4" />
             {isRTL ? 'طلبات الشحن' : 'Top-up Requests'}
+          </TabsTrigger>
+          <TabsTrigger value="bank-accounts" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            {isRTL ? 'البنوك' : 'Banks'}
           </TabsTrigger>
         </TabsList>
 
@@ -466,9 +587,9 @@ export default function WalletPage() {
                             </div>
                           </TableCell>
                           <TableCell className={cn('font-semibold', isCredit ? 'text-green-600' : 'text-red-600')}>
-                            {isCredit ? '+' : '-'} {tx.amount.toFixed(2)} {tx.currency}
+                            {isCredit ? '+' : '-'} {typeof tx.amount === 'string' ? parseFloat(tx.amount).toFixed(2) : tx.amount.toFixed(2)} {tx.currency}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">{tx.description || '-'}</TableCell>
+                          <TableCell className="text-muted-foreground">{isRTL ? (tx.descriptionAr || tx.description || '-') : (tx.description || '-')}</TableCell>
                           <TableCell>
                             <Badge variant={status.variant}>
                               {isRTL ? status.labelAr : status.label}
@@ -518,7 +639,7 @@ export default function WalletPage() {
                       return (
                         <TableRow key={req.id}>
                           <TableCell className="font-semibold">
-                            {req.amount.toFixed(2)} {req.currency}
+                            {typeof req.amount === 'string' ? parseFloat(req.amount).toFixed(2) : req.amount.toFixed(2)} {req.currency}
                           </TableCell>
                           <TableCell>{req.paymentMethod}</TableCell>
                           <TableCell>
@@ -533,6 +654,365 @@ export default function WalletPage() {
                     })}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bank Accounts Tab */}
+        <TabsContent value="bank-accounts">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{isRTL ? 'البنوك' : 'Banks'}</CardTitle>
+                  <CardDescription>
+                    {isRTL 
+                      ? 'إدارة البنوك التي يمكن للعملاء التحويل إليها'
+                      : 'Manage banks that customers can transfer to'
+                    }
+                  </CardDescription>
+                </div>
+                <Dialog open={showAddBankDialog} onOpenChange={(open) => {
+                  setShowAddBankDialog(open);
+                  if (!open) {
+                    setEditingBank(null);
+                    setBankForm({
+                      name: '',
+                      nameAr: '',
+                      code: '',
+                      accountName: '',
+                      accountNumber: '',
+                      iban: '',
+                      swiftCode: '',
+                      isActive: true,
+                      sortOrder: 0,
+                    });
+                    setBankLogoFile(null);
+                  }
+                }}>
+                  <DialogTrigger asChild>
+                    <Button className="gap-2" onClick={() => {
+                      setEditingBank(null);
+                      setBankForm({
+                        name: '',
+                        nameAr: '',
+                        code: '',
+                        accountName: '',
+                        accountNumber: '',
+                        iban: '',
+                        swiftCode: '',
+                        isActive: true,
+                        sortOrder: 0,
+                      });
+                      setBankLogoFile(null);
+                    }}>
+                      <Plus className="h-4 w-4" />
+                      {isRTL ? 'إضافة بنك' : 'Add Bank'}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Building2 className="h-5 w-5" />
+                        {editingBank 
+                          ? (isRTL ? 'تعديل البنك' : 'Edit Bank')
+                          : (isRTL ? 'إضافة بنك جديد' : 'Add New Bank')
+                        }
+                      </DialogTitle>
+                      <DialogDescription>
+                        {isRTL 
+                          ? 'أدخل معلومات البنك الذي يمكن للعملاء التحويل إليه'
+                          : 'Enter bank information that customers can transfer to'
+                        }
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                      {/* Bank Name */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'اسم البنك *' : 'Bank Name *'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'مثال: البنك الأهلي السعودي' : 'e.g., NBE Bank'}
+                          value={bankForm.name}
+                          onChange={(e) => setBankForm({ ...bankForm, name: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Bank Name (Arabic) */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'اسم البنك (عربي)' : 'Bank Name (Arabic)'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'مثال: مصرف الأهلي' : 'e.g., مصرف الأهلي'}
+                          value={bankForm.nameAr || ''}
+                          onChange={(e) => setBankForm({ ...bankForm, nameAr: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Bank Code */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'رمز البنك *' : 'Bank Code *'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'مثال: ahli' : 'e.g., ahli'}
+                          value={bankForm.code}
+                          onChange={(e) => setBankForm({ ...bankForm, code: e.target.value })}
+                          disabled={!!editingBank}
+                        />
+                        {editingBank && (
+                          <p className="text-xs text-muted-foreground">
+                            {isRTL ? 'لا يمكن تغيير رمز البنك بعد الإنشاء' : 'Bank code cannot be changed after creation'}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Logo Upload */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'شعار البنك' : 'Bank Logo'}</Label>
+                        <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                          {bankLogoFile ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <img 
+                                src={URL.createObjectURL(bankLogoFile)} 
+                                alt="Logo preview" 
+                                className="h-16 w-16 object-contain"
+                              />
+                              <span className="text-sm">{bankLogoFile.name}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setBankLogoFile(null)}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : editingBank && editingBank.logo ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <img 
+                                src={editingBank.logo} 
+                                alt="Current logo" 
+                                className="h-16 w-16 object-contain"
+                              />
+                              <span className="text-sm text-muted-foreground">
+                                {isRTL ? 'الشعار الحالي' : 'Current logo'}
+                              </span>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer">
+                              <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                              <span className="text-sm text-muted-foreground">
+                                {isRTL ? 'اضغط لرفع الشعار' : 'Click to upload logo'}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => setBankLogoFile(e.target.files?.[0] || null)}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Account Name */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'اسم صاحب الحساب *' : 'Account Holder Name *'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'مثال: Company Name' : 'e.g., Company Name'}
+                          value={bankForm.accountName}
+                          onChange={(e) => setBankForm({ ...bankForm, accountName: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Account Number */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'رقم الحساب *' : 'Account Number *'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'رقم الحساب البنكي' : 'Bank account number'}
+                          value={bankForm.accountNumber}
+                          onChange={(e) => setBankForm({ ...bankForm, accountNumber: e.target.value })}
+                        />
+                      </div>
+
+                      {/* IBAN */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'IBAN *' : 'IBAN *'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'SA1234567890123456789012' : 'SA1234567890123456789012'}
+                          value={bankForm.iban}
+                          onChange={(e) => setBankForm({ ...bankForm, iban: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Swift Code */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'SWIFT Code' : 'SWIFT Code'}</Label>
+                        <Input
+                          placeholder={isRTL ? 'مثال: RJHISARI' : 'e.g., RJHISARI'}
+                          value={bankForm.swiftCode || ''}
+                          onChange={(e) => setBankForm({ ...bankForm, swiftCode: e.target.value })}
+                        />
+                      </div>
+
+                      {/* Sort Order */}
+                      <div className="space-y-2">
+                        <Label>{isRTL ? 'ترتيب العرض' : 'Sort Order'}</Label>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={bankForm.sortOrder}
+                          onChange={(e) => setBankForm({ ...bankForm, sortOrder: parseInt(e.target.value) || 0 })}
+                        />
+                      </div>
+
+                      {/* Is Active */}
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        <input
+                          type="checkbox"
+                          id="isActive"
+                          checked={bankForm.isActive}
+                          onChange={(e) => setBankForm({ ...bankForm, isActive: e.target.checked })}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <Label htmlFor="isActive" className="cursor-pointer">
+                          {isRTL ? 'نشط (سيظهر للعملاء)' : 'Active (will be shown to customers)'}
+                        </Label>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => {
+                        setShowAddBankDialog(false);
+                        setEditingBank(null);
+                        setBankForm({
+                          name: '',
+                          nameAr: '',
+                          code: '',
+                          accountName: '',
+                          accountNumber: '',
+                          iban: '',
+                          swiftCode: '',
+                          isActive: true,
+                          sortOrder: 0,
+                        });
+                        setBankLogoFile(null);
+                      }}>
+                        {isRTL ? 'إلغاء' : 'Cancel'}
+                      </Button>
+                      <Button 
+                        onClick={handleSaveBank} 
+                        disabled={submitting || !bankForm.name || !bankForm.code || !bankForm.accountName || !bankForm.accountNumber || !bankForm.iban}
+                      >
+                        {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        {editingBank 
+                          ? (isRTL ? 'حفظ التغييرات' : 'Save Changes')
+                          : (isRTL ? 'إضافة' : 'Add Bank')
+                        }
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {allBanks.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Building2 className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    {isRTL ? 'لا توجد بنوك' : 'No banks yet'}
+                  </h3>
+                  <p className="text-sm mb-4">
+                    {isRTL 
+                      ? 'أضف بنكك الأول ليتمكن العملاء من التحويل إليه'
+                      : 'Add your first bank so customers can transfer to it'
+                    }
+                  </p>
+                  <Button onClick={() => setShowAddBankDialog(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    {isRTL ? 'إضافة بنك' : 'Add Bank'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {allBanks.map((bank) => (
+                    <Card key={bank.id} className={cn(!bank.isActive && 'opacity-60')}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              {bank.logo ? (
+                                <img src={bank.logo} alt={bank.name} className="h-8 w-8 object-contain" />
+                              ) : (
+                                <Building2 className="h-5 w-5 text-muted-foreground" />
+                              )}
+                              <h3 className="font-semibold text-lg">
+                                {isRTL ? bank.nameAr || bank.name : bank.name}
+                              </h3>
+                              {bank.isActive ? (
+                                <Badge variant="default" className="text-xs">
+                                  {isRTL ? 'نشط' : 'Active'}
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">
+                                  {isRTL ? 'غير نشط' : 'Inactive'}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <span className="text-muted-foreground">
+                                  {isRTL ? 'رمز البنك: ' : 'Code: '}
+                                </span>
+                                <span className="font-medium">{bank.code}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">
+                                  {isRTL ? 'اسم صاحب الحساب: ' : 'Account Holder: '}
+                                </span>
+                                <span className="font-medium">{bank.accountName}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">
+                                  {isRTL ? 'رقم الحساب: ' : 'Account Number: '}
+                                </span>
+                                <span className="font-mono font-medium">{bank.accountNumber}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">IBAN: </span>
+                                <span className="font-mono font-medium text-xs">{bank.iban}</span>
+                              </div>
+                              {bank.swiftCode && (
+                                <div>
+                                  <span className="text-muted-foreground">SWIFT: </span>
+                                  <span className="font-mono font-medium text-xs">{bank.swiftCode}</span>
+                                </div>
+                              )}
+                              <div className="text-xs text-muted-foreground">
+                                {isRTL ? 'ترتيب العرض: ' : 'Sort Order: '}
+                                {bank.sortOrder}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditBank(bank)}
+                            >
+                              {isRTL ? 'تعديل' : 'Edit'}
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteBank(bank.id)}
+                            >
+                              {isRTL ? 'حذف' : 'Delete'}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -17,6 +17,7 @@ export * from '../services/staff.service';
 export * from '../services/transaction.service';
 export * from '../services/report.service';
 export * from '../services/public.service';
+export * from '../services/wallet.service';
 
 // Re-export legacy API object for backward compatibility
 import { apiClient } from '../services/core/api-client';
@@ -37,6 +38,7 @@ import { paymentService } from '../services/payment.service';
 import { staffService } from '../services/staff.service';
 import { transactionService } from '../services/transaction.service';
 import { reportService } from '../services/report.service';
+import { walletService } from '../services/wallet.service';
 
 export const api = {
   ...authService,
@@ -55,6 +57,7 @@ export const api = {
   ...staffService,
   ...transactionService,
   ...reportService,
+  ...walletService,
 };
 
 // Export aliases for backward compatibility
@@ -76,6 +79,7 @@ export const coreApi = {
   ...staffService,
   ...transactionService,
   ...reportService,
+  ...walletService,
   // Generic methods for custom endpoints
   get: async (url: string, config?: any) => {
     return await apiClient.get(url, config);

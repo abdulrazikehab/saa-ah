@@ -21,9 +21,9 @@ export default function ActivityLogs() {
     (async () => {
       setLoading(true);
       try {
-        const res = await coreApi.get('/activity-logs', { params: { page, limit: 20 } });
-        setLogs(res.data.data);
-        setTotalPages(Math.ceil(res.data.meta.total / 20));
+        const res = await coreApi.get('/activity-log', { params: { page, limit: 20 } });
+        setLogs(res.logs || res.data?.logs || []);
+        setTotalPages(res.pagination?.totalPages || Math.ceil((res.pagination?.total || 0) / 20));
       } catch (error) {
         console.error('Failed to fetch activity logs:', error);
       } finally {

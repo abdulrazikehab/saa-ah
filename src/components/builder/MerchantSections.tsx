@@ -1366,6 +1366,7 @@ export function ChargeWalletSection({ props }: { props: any }) {
   const [banks, setBanks] = useState<any[]>([]);
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('SAR');
+  const [transferrerName, setTransferrerName] = useState('');
   const [loading, setLoading] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1393,6 +1394,7 @@ export function ChargeWalletSection({ props }: { props: any }) {
       formData.append('bankId', selectedBank);
       formData.append('amount', amount);
       formData.append('currency', currency);
+      formData.append('transferrerName', transferrerName);
       
       if (receiptFile) {
         formData.append('receiptImage', receiptFile);
@@ -1517,6 +1519,17 @@ export function ChargeWalletSection({ props }: { props: any }) {
             <select className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-800 dark:text-white">
               <option>اختر حساب البنك</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">اسم المحول</label>
+            <input
+              type="text"
+              value={transferrerName}
+              onChange={(e) => setTransferrerName(e.target.value)}
+              placeholder="أدخل اسم المحول"
+              className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-800 dark:text-white"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
