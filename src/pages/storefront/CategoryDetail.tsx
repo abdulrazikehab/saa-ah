@@ -3,11 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Package, FolderOpen, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowLeft, Package, FolderOpen, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from '@/components/storefront/ProductCard';
 import { Badge } from '@/components/ui/badge';
 import { Product } from '@/services/types';
+import { useTranslation } from 'react-i18next';
+import { BRAND_NAME_AR, BRAND_NAME_EN } from '@/config/logo.config';
 
 interface Category {
   id: string;
@@ -22,8 +24,9 @@ interface Category {
 export default function CategoryDetail() {
   const { id } = useParams();
   const { toast } = useToast();
+  const { t, i18n } = useTranslation();
   const [category, setCategory] = useState<Category | null>(null);
-  const [parentCategory, setParentCategory] = useState<Category | null>(null);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,18 +49,12 @@ export default function CategoryDetail() {
       setCategory(categoryData);
       
       // Find subcategories and parent
-      const allCategories: Category[] = Array.isArray(allCategoriesData) ? allCategoriesData : ((allCategoriesData as { categories?: Category[] })?.categories || []);
-      const childCategories = allCategories.filter((cat: Category) => cat.parentId === id);
+      const allCats: Category[] = Array.isArray(allCategoriesData) ? allCategoriesData : ((allCategoriesData as { categories?: Category[] })?.categories || []);
+      setAllCategories(allCats);
+      
+      const childCategories = allCats.filter((cat: Category) => cat.parentId === id);
       setSubcategories(childCategories);
       
-      // Find parent category if exists
-      if (categoryData.parentId) {
-        const parent = allCategories.find((cat: Category) => cat.id === categoryData.parentId);
-        setParentCategory(parent || null);
-      } else {
-        setParentCategory(null);
-      }
-
       // Load products in this category
       console.log('Loading products for category:', id);
       const productsData = await coreApi.getProducts({ 
@@ -78,6 +75,28 @@ export default function CategoryDetail() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getBreadcrumbs = () => {
+    if (!category) return [];
+    
+    const path = [];
+    let currentId = category.parentId;
+    
+    // Safety break to avoid infinite loops
+    let depth = 0;
+    while (currentId && depth < 10) {
+      const cat = allCategories.find(c => c.id === currentId);
+      if (cat) {
+        path.unshift(cat);
+        currentId = cat.parentId;
+      } else {
+        break;
+      }
+      depth++;
+    }
+    
+    return path;
   };
 
   if (loading) {
@@ -111,29 +130,45 @@ export default function CategoryDetail() {
     );
   }
 
+  const breadcrumbs = getBreadcrumbs();
+  const isRtl = i18n.language === 'ar';
+  const SeparatorIcon = isRtl ? ChevronLeft : ChevronRight;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container py-8">
         {/* Breadcrumb */}
-        <div className="mb-6 flex items-center gap-2 text-sm">
+        <div className="mb-6 flex items-center flex-wrap gap-2 text-sm">
+          <Link 
+            to="/" 
+            className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors font-medium"
+          >
+            {isRtl ? BRAND_NAME_AR : BRAND_NAME_EN}
+          </Link>
+          
+          <SeparatorIcon className="h-4 w-4 text-gray-400" />
+          
           <Link 
             to="/categories" 
             className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors"
           >
-            التصنيفات
+            {t('nav.categories', 'التصنيفات')}
           </Link>
-          {parentCategory && (
-            <>
-              <ArrowLeft className="h-4 w-4 text-gray-400" />
+
+          <SeparatorIcon className="h-4 w-4 text-gray-400" />
+
+          {breadcrumbs.map((cat) => (
+            <div key={cat.id} className="flex items-center gap-2">
               <Link 
-                to={`/categories/${parentCategory.id}`}
+                to={`/categories/${cat.id}`}
                 className="text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors"
               >
-                {parentCategory.name}
+                {cat.name}
               </Link>
-            </>
-          )}
-          <ArrowLeft className="h-4 w-4 text-gray-400" />
+              <SeparatorIcon className="h-4 w-4 text-gray-400" />
+            </div>
+          ))}
+          
           <span className="text-primary font-medium">{category.name}</span>
         </div>
 

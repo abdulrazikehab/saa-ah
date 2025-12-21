@@ -133,7 +133,33 @@ export function HierarchicalExplorer({
   
   // Track categories created under brands (categoryId -> brandId)
   // This allows showing categories under brands even before products are added
-  const [categoryBrandMap, setCategoryBrandMap] = useState<Map<string, string>>(new Map());
+  // Load from localStorage on mount to preserve associations across reloads
+  const loadCategoryBrandMap = (): Map<string, string> => {
+    try {
+      const stored = localStorage.getItem('hierarchical_categoryBrandMap');
+      if (stored) {
+        const data = JSON.parse(stored) as Record<string, string>;
+        const map = new Map<string, string>(Object.entries(data));
+        console.log('[loadCategoryBrandMap] Loaded from localStorage:', Array.from(map.entries()));
+        return map;
+      }
+    } catch (error) {
+      console.error('Failed to load categoryBrandMap from localStorage:', error);
+    }
+    return new Map<string, string>();
+  };
+  
+  const saveCategoryBrandMap = (map: Map<string, string>) => {
+    try {
+      const data = Object.fromEntries(map);
+      localStorage.setItem('hierarchical_categoryBrandMap', JSON.stringify(data));
+      console.log('[saveCategoryBrandMap] Saved to localStorage:', Array.from(map.entries()));
+    } catch (error) {
+      console.error('Failed to save categoryBrandMap to localStorage:', error);
+    }
+  };
+  
+  const [categoryBrandMap, setCategoryBrandMap] = useState<Map<string, string>>(() => loadCategoryBrandMap());
   
   // Delete brand state
   const [showDeleteBrandDialog, setShowDeleteBrandDialog] = useState(false);
@@ -314,171 +340,181 @@ export function HierarchicalExplorer({
     navigate(`/dashboard/products?${params.toString()}`);
   };
 
-  // Filter categories by brand - ensures proper hierarchy: Brand → Category → Subcategory → Product
+  // Get categories by brand - ensures proper hierarchy: Brand → Category → Subcategory → Product
+  // SIMPLIFIED: Only show categories explicitly mapped to this brand OR have products from this brand
   const getCategoriesByBrand = (brandId: string | null, filterByProducts: boolean = false): Category[] => {
     if (!brandId) {
-      // Return top-level categories (no parent) when no brand is selected
+      // Return all top-level categories when no brand is selected
       return categories.filter(cat => !cat.parentId);
     }
     
-    // Get all products that belong to this brand
-    const brandProducts = products.filter(p => p.brandId === brandId);
+    // Step 1: Get all category IDs that belong to this brand (from map - HIGHEST PRIORITY)
+    const categoriesInThisBrand = new Set<string>();
+    categoryBrandMap.forEach((mapBrandId, categoryId) => {
+      if (mapBrandId === brandId) {
+        categoriesInThisBrand.add(categoryId);
+        console.log(`[getCategoriesByBrand] ✅ Found mapped category ${categoryId} for brand ${brandId}`);
+      }
+    });
     
-    // Collect all category IDs that have products with this brand
-    const categoryIdsWithBrandProducts = new Set<string>();
+    // Step 2: Get all category IDs that have products from this brand (SECONDARY - only if not conflicting with map)
+    const brandProducts = products.filter(p => p.brandId === brandId);
     brandProducts.forEach(product => {
       if (product.categories && Array.isArray(product.categories)) {
         product.categories.forEach((pc: ProductCategory) => {
           const catId = pc.categoryId || pc.category?.id || pc.id;
           if (catId) {
-            categoryIdsWithBrandProducts.add(catId);
+            // Only add if not mapped to a different brand (map takes priority)
+            const mappedBrand = categoryBrandMap.get(catId);
+            if (!mappedBrand || mappedBrand === brandId) {
+              categoriesInThisBrand.add(catId);
+              // Add all ancestors to show full hierarchy (if they're not mapped to different brand)
+              let currentId = catId;
+              while (currentId) {
+                const category = categories.find(c => c.id === currentId);
+                if (category?.parentId) {
+                  const parentMappedBrand = categoryBrandMap.get(category.parentId);
+                  if (!parentMappedBrand || parentMappedBrand === brandId) {
+                    categoriesInThisBrand.add(category.parentId);
+                    currentId = category.parentId;
+                  } else {
+                    break; // Stop if parent is mapped to different brand
+                  }
+                } else {
+                  break;
+                }
+              }
+            }
           }
         });
       }
     });
     
-    // Build set of all category IDs in the hierarchy (including ancestors)
-    const getAllAncestors = (categoryId: string, visited = new Set<string>()): string[] => {
-      if (visited.has(categoryId)) return [];
-      visited.add(categoryId);
-      
-      const category = categories.find(c => c.id === categoryId);
-      if (!category) return [];
-      
-      const result = [categoryId];
-      if (category.parentId) {
-        result.push(...getAllAncestors(category.parentId, visited));
-      }
-      return result;
-    };
-    
-    const allHierarchyCategoryIds = new Set<string>();
-    categoryIdsWithBrandProducts.forEach(catId => {
-      getAllAncestors(catId).forEach(id => allHierarchyCategoryIds.add(id));
-    });
-    
-    // Also include categories created under this brand (from categoryBrandMap)
-    categories.forEach(cat => {
-      if (categoryBrandMap.get(cat.id) === brandId) {
-        allHierarchyCategoryIds.add(cat.id);
-        // Also include all ancestors of this category
-        if (cat.parentId) {
-          getAllAncestors(cat.parentId).forEach(id => allHierarchyCategoryIds.add(id));
-        }
-      }
-    });
-    
-    // Return only top-level categories (no parent) that:
-    // 1. Have products with this brand in their hierarchy, OR
-    // 2. Were created under this brand (from categoryBrandMap)
-    return categories.filter(cat => {
+    // Step 3: Return ONLY top-level categories that belong to this brand
+    const result = categories.filter(cat => {
       if (cat.parentId) return false; // Only top-level categories
       
-      // Include if category or any descendant has products with this brand
-      const hasBrandProductsInHierarchy = (categoryId: string): boolean => {
-        if (allHierarchyCategoryIds.has(categoryId)) return true;
+      // Direct match
+      if (categoriesInThisBrand.has(cat.id)) {
+        return true;
+      }
+      
+      // Check if any descendant belongs to this brand
+      const hasDescendantInBrand = (categoryId: string): boolean => {
         const children = categories.filter(c => c.parentId === categoryId);
-        return children.some(child => hasBrandProductsInHierarchy(child.id));
+        return children.some(child => {
+          if (categoriesInThisBrand.has(child.id)) {
+            return true;
+          }
+          return hasDescendantInBrand(child.id);
+        });
       };
       
-      return hasBrandProductsInHierarchy(cat.id);
+      return hasDescendantInBrand(cat.id);
     });
+    
+    console.log(`[getCategoriesByBrand] Brand: ${brandId}`);
+    console.log(`[getCategoriesByBrand] Total categories: ${categories.length}, Top-level: ${categories.filter(c => !c.parentId).length}`);
+    console.log(`[getCategoriesByBrand] categoryBrandMap size: ${categoryBrandMap.size}, entries:`, Array.from(categoryBrandMap.entries()));
+    console.log(`[getCategoriesByBrand] Categories in brand set:`, Array.from(categoriesInThisBrand));
+    console.log(`[getCategoriesByBrand] Brand products count: ${brandProducts.length}`);
+    console.log(`[getCategoriesByBrand] Found ${result.length} top-level categories:`, result.map(c => ({ id: c.id, name: c.name || c.nameAr, parentId: c.parentId })));
+    
+    return result;
   };
 
-  // Get subcategories of a category, filtered by brand to ensure proper hierarchy
-  // Ensures subcategories only appear under their correct brand context
+  // Get subcategories of a category - filtered by brand to ensure proper hierarchy
+  // SIMPLIFIED: Only show subcategories that belong to this brand (from map or products)
   const getSubcategories = (parentId: string, brandId: string | null = null, filterByProducts: boolean = false): Category[] => {
     // Get all subcategories with the given parentId
-    let subcategories = categories.filter(cat => cat.parentId === parentId);
+    const allSubcategories = categories.filter(cat => cat.parentId === parentId);
     
     // If no brandId provided, return all subcategories (global view)
     if (!brandId) {
-      return subcategories;
+      return allSubcategories;
     }
     
-    // Get all products that belong to this brand
-    const brandProducts = products.filter(p => p.brandId === brandId);
-    
-    // Build set of all category IDs that have products with this brand (including ancestors)
-    const categoryIdsWithBrandProducts = new Set<string>();
-    brandProducts.forEach(product => {
-      if (product.categories && Array.isArray(product.categories)) {
-        product.categories.forEach((pc: ProductCategory) => {
-          const catId = pc.categoryId || pc.category?.id || pc.id;
-          if (catId) {
-            categoryIdsWithBrandProducts.add(catId);
-            
-            // Include all ancestors
-            const addAncestors = (categoryId: string, visited = new Set<string>()) => {
-              if (visited.has(categoryId)) return;
-              visited.add(categoryId);
-              const category = categories.find(c => c.id === categoryId);
-              if (category?.parentId) {
-                categoryIdsWithBrandProducts.add(category.parentId);
-                addAncestors(category.parentId, visited);
-              }
-            };
-            addAncestors(catId);
-          }
-        });
-      }
-    });
-    
-    // Also include categories created under this brand
-    categories.forEach(cat => {
-      if (categoryBrandMap.get(cat.id) === brandId) {
-        categoryIdsWithBrandProducts.add(cat.id);
-      }
-    });
-    
-    // Verify that parent category belongs to this brand's hierarchy
+    // Verify that parent category belongs to this brand
     const parentCategory = categories.find(c => c.id === parentId);
-    if (!parentCategory) return [];
-    
-    // Check if parent or any ancestor has products with this brand
-    const checkCategoryBelongsToBrand = (categoryId: string | undefined): boolean => {
-      if (!categoryId) return false;
-      if (categoryIdsWithBrandProducts.has(categoryId)) return true;
-      if (categoryBrandMap.get(categoryId) === brandId) return true;
-      
-      const category = categories.find(c => c.id === categoryId);
-      if (category?.parentId) {
-        return checkCategoryBelongsToBrand(category.parentId);
-      }
-      return false;
-    };
-    
-    // If parent doesn't belong to this brand, return empty (prevent showing wrong subcategories)
-    if (!checkCategoryBelongsToBrand(parentId)) {
+    if (!parentCategory) {
       return [];
     }
     
-    // Filter subcategories: show only those that belong to this brand's hierarchy
-    return subcategories.filter(subcat => {
-      // Include if subcategory was created under this brand
+    // Check if parent belongs to this brand
+    const parentBelongsToBrand = (): boolean => {
+      // Check explicit mapping
+      if (categoryBrandMap.get(parentId) === brandId) return true;
+      
+      // Check products
+      const parentHasProducts = products.some(p => {
+        if (p.brandId !== brandId) return false;
+        if (!p.categories || !Array.isArray(p.categories)) return false;
+        return p.categories.some((pc: ProductCategory) => {
+          const catId = pc.categoryId || pc.category?.id || pc.id;
+          return catId === parentId;
+        });
+      });
+      if (parentHasProducts) return true;
+      
+      // Check ancestors recursively
+      let currentParentId = parentCategory.parentId;
+      while (currentParentId) {
+        if (categoryBrandMap.get(currentParentId) === brandId) return true;
+        const category = categories.find(c => c.id === currentParentId);
+        currentParentId = category?.parentId;
+      }
+      
+      return false;
+    };
+    
+    // If parent doesn't belong to this brand, return empty array
+    if (!parentBelongsToBrand()) {
+      return [];
+    }
+    
+    // Get all subcategories that belong to this brand
+    const result = allSubcategories.filter(subcat => {
+      // Check explicit mapping
       if (categoryBrandMap.get(subcat.id) === brandId) {
         return true;
       }
       
-      // Include if subcategory has products with this brand
-      if (categoryIdsWithBrandProducts.has(subcat.id)) {
-        return true;
-      }
+      // Check products
+      const hasProducts = products.some(p => {
+        if (p.brandId !== brandId) return false;
+        if (!p.categories || !Array.isArray(p.categories)) return false;
+        return p.categories.some((pc: ProductCategory) => {
+          const catId = pc.categoryId || pc.category?.id || pc.id;
+          return catId === subcat.id;
+        });
+      });
+      if (hasProducts) return true;
       
-      // Include if any descendant has products with this brand
-      const hasBrandProductsInDescendants = (categoryId: string): boolean => {
+      // Check descendants
+      const hasBrandDescendants = (categoryId: string): boolean => {
         const children = categories.filter(c => c.parentId === categoryId);
-        if (children.length === 0) return false;
-        
         return children.some(child => {
-          if (categoryIdsWithBrandProducts.has(child.id)) return true;
           if (categoryBrandMap.get(child.id) === brandId) return true;
-          return hasBrandProductsInDescendants(child.id);
+          const childHasProducts = products.some(p => {
+            if (p.brandId !== brandId) return false;
+            if (!p.categories || !Array.isArray(p.categories)) return false;
+            return p.categories.some((pc: ProductCategory) => {
+              const catId = pc.categoryId || pc.category?.id || pc.id;
+              return catId === child.id;
+            });
+          });
+          if (childHasProducts) return true;
+          return hasBrandDescendants(child.id);
         });
       };
       
-      return hasBrandProductsInDescendants(subcat.id);
+      return hasBrandDescendants(subcat.id);
     });
+    
+    console.log(`[getSubcategories] Parent: ${parentId}, Brand: ${brandId}`);
+    console.log(`[getSubcategories] All: ${allSubcategories.length}, Filtered: ${result.length}`, result.map(c => ({ id: c.id, name: c.name || c.nameAr })));
+    
+    return result;
   };
 
   // Get products in a category, optionally filtered by brand
@@ -534,10 +570,11 @@ export function HierarchicalExplorer({
       setShowDeleteBrandDialog(false);
       setBrandToDelete(null);
       onBrandsUpdate?.();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'فشل حذف العلامة التجارية';
       toast({
         title: 'خطأ',
-        description: error.message || 'فشل حذف العلامة التجارية',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -669,13 +706,55 @@ export function HierarchicalExplorer({
     }
   }, [selectedBrandId, currentView]);
 
-  // Force re-render when categories prop changes to reflect newly created categories
+  // Build categoryBrandMap from products when categories or products change
+  // IMPORTANT: This only ADDS associations from products, it NEVER removes manual associations
   useEffect(() => {
-    // When categories change, if we're in tree view and a brand is expanded,
-    // ensure the brand remains expanded to show new categories
+    const newMap = new Map<string, string>();
+    
+    // For each category, find which brands have products in it
+    categories.forEach(category => {
+      const brandsWithProductsInCategory = new Map<string, number>();
+      
+      // Find all products that belong to this category
+      products.forEach(product => {
+        if (product.brandId && product.categories && Array.isArray(product.categories)) {
+          const belongsToCategory = product.categories.some((pc: ProductCategory) => {
+            const catId = pc.categoryId || pc.category?.id || pc.id;
+            return catId === category.id;
+          });
+          
+          if (belongsToCategory) {
+            const count = brandsWithProductsInCategory.get(product.brandId) || 0;
+            brandsWithProductsInCategory.set(product.brandId, count + 1);
+          }
+        }
+      });
+      
+      // If only one brand has products in this category, associate them
+      if (brandsWithProductsInCategory.size === 1) {
+        const brandId = Array.from(brandsWithProductsInCategory.keys())[0];
+        newMap.set(category.id, brandId);
+      }
+    });
+    
+    // CRITICAL: Only ADD new associations from products, NEVER remove existing ones
+    // This preserves manually created associations (from handleCreateCategory)
+    setCategoryBrandMap(prev => {
+      const merged = new Map(prev);
+      // Add new associations from products, but don't override existing ones
+      newMap.forEach((brandId, categoryId) => {
+        if (!merged.has(categoryId)) {
+          merged.set(categoryId, brandId);
+          console.log(`[useEffect] Auto-mapped category ${categoryId} to brand ${brandId} from products`);
+        }
+      });
+      // Save to localStorage
+      saveCategoryBrandMap(merged);
+      return merged;
+    });
+    
+    // Ensure expanded states are maintained
     if (currentView === 'brands' || (currentView === 'categories' && selectedBrand)) {
-      // Force component to re-render by updating expanded brands state
-      // This ensures newly created categories appear immediately
       if (selectedBrand) {
         const newExpanded = new Set(expandedBrands);
         if (!newExpanded.has(selectedBrand)) {
@@ -685,20 +764,16 @@ export function HierarchicalExplorer({
       }
     }
     
-    // If in subcategories view, ensure parent category is expanded
-    if (currentView === 'subcategories' && selectedCategory) {
-      const parentCategory = categories.find(c => c.id === selectedCategory);
-      if (parentCategory && selectedBrand) {
-        const categoryKey = `${selectedBrand}-${selectedCategory}`;
-        const newExpanded = new Set(expandedCategories);
-        if (!newExpanded.has(categoryKey)) {
-          newExpanded.add(categoryKey);
-          setExpandedCategories(newExpanded);
-        }
+    if (currentView === 'subcategories' && selectedCategory && selectedBrand) {
+      const categoryKey = `${selectedBrand}-${selectedCategory}`;
+      const newExpanded = new Set(expandedCategories);
+      if (!newExpanded.has(categoryKey)) {
+        newExpanded.add(categoryKey);
+        setExpandedCategories(newExpanded);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories]);
+  }, [categories, products]);
 
   const MAX_SUBCATEGORIES = 10;
 
@@ -834,12 +909,22 @@ export function HierarchicalExplorer({
           setCategoryBrandMap(prev => {
             const newMap = new Map(prev);
             newMap.set(newCategory.id, brandIdToAssociate!);
+            console.log(`[handleCreateCategory] Adding category ${newCategory.id} (${newCategory.name || newCategory.nameAr}) to brand ${brandIdToAssociate}`);
+            
             // Also ensure parent category is in the map if it exists
             if (parentId && !prev.has(parentId)) {
               newMap.set(parentId, brandIdToAssociate!);
+              console.log(`[handleCreateCategory] Also adding parent category ${parentId} to brand ${brandIdToAssociate}`);
             }
+            
+            // Save to localStorage
+            saveCategoryBrandMap(newMap);
+            console.log(`[handleCreateCategory] categoryBrandMap now has ${newMap.size} entries:`, Array.from(newMap.entries()));
+            
             return newMap;
           });
+        } else {
+          console.warn('[handleCreateCategory] No brandIdToAssociate found for new category:', newCategory.id);
         }
 
         // Refresh categories

@@ -9,14 +9,17 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useTranslation } from 'react-i18next';
 
 import { ProductCard } from '@/components/storefront/ProductCard';
 import { coreApi } from '@/lib/api';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
-import { Product, ProductVariant, ProductImage } from '@/services/types';
+import { Product, ProductVariant, ProductImage, Category } from '@/services/types';
+import { BRAND_NAME_AR, BRAND_NAME_EN } from '@/config/logo.config';
 
 export default function ProductDetail() {
+  const { t, i18n } = useTranslation();
   const { id, productId } = useParams();
   // Handle both /products/:id and /products/:tenantId/:productId patterns
   const actualProductId = productId || id;
@@ -27,12 +30,24 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
   const { addToCart } = useCart();
 
   useEffect(() => {
     loadProduct();
+    loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actualProductId]);
+
+  const loadCategories = async () => {
+    try {
+      const data = await coreApi.getCategories();
+      const list = Array.isArray(data) ? data : ((data as any).categories || []);
+      setCategories(list);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  };
 
   const loadProduct = async () => {
     try {
@@ -99,6 +114,28 @@ export default function ProductDetail() {
     }
   };
 
+  const getBreadcrumbs = () => {
+    if (!product || !product.categoryId) return [];
+    
+    const path = [];
+    let currentId = product.categoryId;
+    
+    // Safety break to avoid infinite loops
+    let depth = 0;
+    while (currentId && depth < 10) {
+      const category = categories.find(c => c.id === currentId);
+      if (category) {
+        path.unshift(category);
+        currentId = category.parentId;
+      } else {
+        break;
+      }
+      depth++;
+    }
+    
+    return path;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -148,19 +185,38 @@ export default function ProductDetail() {
     { icon: RotateCcw, text: 'إرجاع مجاني خلال 14 يوم' },
   ];
 
+  const breadcrumbs = getBreadcrumbs();
+  const isRtl = i18n.language === 'ar';
+  const SeparatorIcon = isRtl ? ChevronLeft : ChevronRight;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 animate-fade-in">
 
       <div className="container py-8">
         {/* Breadcrumb */}
-        <div className="mb-6">
+        <div className="mb-6 flex items-center flex-wrap gap-2 text-sm">
           <Link 
-            to="/products" 
-            className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            to="/" 
+            className="text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-medium"
           >
-            <ArrowLeft className="h-4 w-4" />
-            العودة إلى المنتجات
+            {isRtl ? BRAND_NAME_AR : BRAND_NAME_EN}
           </Link>
+          
+          <SeparatorIcon className="h-4 w-4 text-gray-400" />
+          
+          {breadcrumbs.map((cat) => (
+            <div key={cat.id} className="flex items-center gap-2">
+              <Link 
+                to={`/categories/${cat.id}`}
+                className="text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+              >
+                {cat.name}
+              </Link>
+              <SeparatorIcon className="h-4 w-4 text-gray-400" />
+            </div>
+          ))}
+          
+          <span className="text-indigo-600 font-medium truncate max-w-[200px]">{product.name}</span>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 mb-16">
