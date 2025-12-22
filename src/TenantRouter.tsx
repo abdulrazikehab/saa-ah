@@ -1,10 +1,9 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import Home from "@/pages/storefront/Home";
 import Products from "@/pages/storefront/Products";
 import ProductDetail from "@/pages/storefront/ProductDetail";
 import Cart from "@/pages/storefront/Cart";
 import Checkout from "@/pages/storefront/Checkout";
-import Profile from "@/pages/storefront/Profile";
 import Orders from "@/pages/storefront/Orders";
 import AccountProfile from "@/pages/storefront/AccountProfile";
 import OrderDetail from "@/pages/storefront/OrderDetail";
@@ -13,25 +12,23 @@ import Categories from "@/pages/storefront/Categories";
 import CategoryDetail from "@/pages/storefront/CategoryDetail";
 import DynamicPage from "@/pages/storefront/DynamicPage";
 import { StorefrontLayout } from "@/components/storefront/StorefrontLayout";
-import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import CustomerProtectedRoute from "@/components/auth/CustomerProtectedRoute";
 import NotFound from "@/pages/NotFound";
-import Login from "@/pages/auth/Login";
-import Signup from "@/pages/auth/Signup";
-import ForgotPassword from "@/pages/auth/ForgotPassword";
-import ResetPassword from "@/pages/auth/ResetPassword";
 import Help from "@/pages/dashboard/Help";
 import { useDynamicFavicon } from "@/hooks/useDynamicFavicon";
-// Digital Cards Marketplace Storefront
-import CardsHome from "@/pages/storefront/cards/CardsHome";
 import CardsCatalog from "@/pages/storefront/cards/CardsCatalog";
 import CardDetail from "@/pages/storefront/cards/CardDetail";
 import CardsLayout from "@/components/storefront/cards/CardsLayout";
+import AboutUs from "@/pages/AboutUs";
+import ContactUs from "@/pages/ContactUs";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import StorefrontAuth from "@/pages/storefront/auth/StorefrontAuth";
 
 export const TenantRouter = () => {
   console.log('Rendering TenantRouter');
   // Update favicon and title based on tenant configuration
   useDynamicFavicon();
+  
   return (
     <Routes>
       {/* Digital Cards Marketplace Routes */}
@@ -54,27 +51,35 @@ export const TenantRouter = () => {
         <Route path="/categories/:id" element={<CategoryDetail />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={<Checkout />} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/account" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
         <Route path="/account/orders" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
         <Route path="/account/profile" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
         <Route path="/orders/:id" element={<CustomerProtectedRoute><OrderDetail /></CustomerProtectedRoute>} />
+        
+        {/* Additional Storefront Pages */}
+        <Route path="/wishlist" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
+        <Route path="/track-order" element={<DynamicPage />} />
+        <Route path="/returns" element={<DynamicPage />} />
+        <Route path="/faq" element={<DynamicPage />} />
+        <Route path="/terms" element={<DynamicPage />} />
+        <Route path="/policies" element={<DynamicPage />} />
+        <Route path="/rules" element={<DynamicPage />} />
+        <Route path="/offers" element={<DynamicPage />} />
+        
         <Route path="/:slug" element={<DynamicPage />} />
         
-        {/* Auth routes for customers */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/auth/login" element={<Login />} />
-        <Route path="/auth/signup" element={<Signup />} />
-        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-        <Route path="/auth/reset-password" element={<ResetPassword />} />
+        {/* Public pages - available on both main and tenant domains */}
+        <Route path="/about" element={<AboutUs />} />
+        <Route path="/contact" element={<ContactUs />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/help" element={<Help />} />
       </Route>
       
-      {/* Public pages - available on both main and tenant domains */}
-      <Route path="/help" element={<StorefrontLayout><Help /></StorefrontLayout>} />
-      <Route path="/privacy" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
-      <Route path="/terms" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
-      <Route path="/policies" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
-      <Route path="/rules" element={<StorefrontLayout><DynamicPage /></StorefrontLayout>} />
+      {/* Auth Routes */}
+      <Route path="/auth/login" element={<StorefrontAuth />} />
+      <Route path="/auth/signup" element={<StorefrontAuth />} />
+      <Route path="/login" element={<StorefrontAuth />} />
+      <Route path="/signup" element={<StorefrontAuth />} />
       
       {/* Fallback */}
       <Route path="*" element={<NotFound />} />

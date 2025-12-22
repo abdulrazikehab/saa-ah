@@ -95,11 +95,15 @@ import BuyerFavorites from "./pages/buyer-dashboard/BuyerFavorites";
 import BuyerSupport from "./pages/buyer-dashboard/BuyerSupport";
 import BuyerProfile from "./pages/buyer-dashboard/BuyerProfile";
 import SystemAdminPanel from "./pages/SystemAdminPanel";
+import StaticPage from "./pages/StaticPage";
 import './i18n'; // Initialize i18n
 import './styles/theme.css'; // Import theme CSS
 // import './styles/theme-force.css'; // Force theme application - DISABLED to preserve dashboard design
 import './styles/dark-mode-visibility-fix.css'; // Fix invisible text in dark mode
 import PartnerWithUs from './pages/PartnerWithUs';
+import AboutUs from './pages/AboutUs';
+import ContactUs from './pages/ContactUs';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import CookieConsent from './components/ui/CookieConsent';
 import CookieRequired from './components/ui/CookieRequired';
 import i18n from './i18n';
@@ -108,6 +112,8 @@ import CardsFavorites from "./pages/dashboard/cards/CardsFavorites";
 import CardsOrders from "./pages/dashboard/cards/CardsOrders";
 import CardsReports from "./pages/dashboard/cards/CardsReports";
 import EmployeesManager from "./pages/dashboard/EmployeesManager";
+import { ThemeCustomizer } from "@/components/ui/ThemeCustomizer";
+import { isMainDomain } from "@/lib/domain";
 
 const queryClient = new QueryClient();
 
@@ -193,47 +199,6 @@ const DirectionHandler = () => {
   return null;
 };
 
-// Helper to check if we are on the main domain
-const isMainDomain = () => {
-  const hostname = window.location.hostname;
-  
-  // Main domains (app/admin access)
-  const mainDomains = [
-    'localhost', 
-    '127.0.0.1', 
-    'www.saeaa.com', 
-    'saeaa.com', 
-    'app.saeaa.com',
-    'www.saeaa.net',
-    'saeaa.net',
-    'app.saeaa.net'
-  ];
-  
-  // Check if it's exactly a main domain (no subdomain)
-  if (mainDomains.includes(hostname)) {
-    return true;
-  }
-  
-  // Check for subdomain pattern (e.g., store.localhost, myshop.localhost)
-  if (hostname.includes('.localhost')) {
-    // This is a subdomain of localhost (tenant storefront)
-    return false;
-  }
-  
-  // Check for subdomain of saeaa.com or saeaa.net (e.g., store.saeaa.com, store.saeaa.net)
-  if ((hostname.endsWith('.saeaa.com') || hostname.endsWith('.saeaa.net')) && !mainDomains.includes(hostname)) {
-    return false;
-  }
-  
-  // Custom domains are always tenant domains
-  // If it's not a main domain and not localhost, it's a custom domain
-  if (!mainDomains.includes(hostname) && hostname !== 'localhost') {
-    return false;
-  }
-  
-  return true;
-};
-
 const App = () => {
   const isMain = isMainDomain();
   console.log('App rendering. Hostname:', window.location.hostname, 'isMainDomain:', isMain);
@@ -259,6 +224,11 @@ const App = () => {
                 
                 {/* Partner with Us */}
                 <Route path="/partner" element={<PartnerWithUs />} />
+
+                {/* Static Pages */}
+                <Route path="/about" element={<AboutUs />} />
+                <Route path="/contact" element={<ContactUs />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
                 
                 {/* Hidden System Admin Panel - Secret URL */}
                 <Route path="/system-admin-x7k9p2" element={<SystemAdminPanel />} />
@@ -362,23 +332,6 @@ const App = () => {
                   {/* Redirect legacy settings route */}
                   <Route path="/dashboard/store-settings" element={<Settings />} />
                 </Route>
-
-                {/* Buyer Dashboard Routes (Protected, With Buyer Dashboard Layout) */}
-                <Route element={<CustomerProtectedRoute><BuyerDashboardLayout /></CustomerProtectedRoute>}>
-                  <Route path="/buyer" element={<BuyerDashboard />} />
-                  <Route path="/buyer/products" element={<BuyerProducts />} />
-                  <Route path="/buyer/products/:id" element={<BuyerProducts />} />
-                  <Route path="/buyer/orders" element={<BuyerOrders />} />
-                  <Route path="/buyer/orders/:id" element={<BuyerOrders />} />
-                  <Route path="/buyer/wallet" element={<BuyerWallet />} />
-                  <Route path="/buyer/payments" element={<BuyerWallet />} />
-                  <Route path="/buyer/invoices" element={<BuyerWallet />} />
-                  <Route path="/buyer/favorites" element={<BuyerFavorites />} />
-                  <Route path="/buyer/downloads" element={<BuyerProducts />} />
-                  <Route path="/buyer/support" element={<BuyerSupport />} />
-                  <Route path="/buyer/profile" element={<BuyerProfile />} />
-                  <Route path="/buyer/settings" element={<BuyerProfile />} />
-                </Route>
                 
                 {/* Fallback */}
                 <Route path="*" element={<NotFound />} />
@@ -387,6 +340,7 @@ const App = () => {
               <TenantRouter />
             )}
           </BrowserRouter>
+          <ThemeCustomizer />
         </TooltipProvider>
             </TabUpdatesProvider>
       </CartProvider>

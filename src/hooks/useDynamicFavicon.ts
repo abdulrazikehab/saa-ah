@@ -8,8 +8,7 @@ export const useDynamicFavicon = () => {
   useEffect(() => {
     const updateFavicon = async () => {
       try {
-        const hasAdminToken = !!localStorage.getItem('accessToken');
-        const config = await coreApi.get('/site-config', { requireAuth: hasAdminToken });
+        const config = await coreApi.get('/site-config', { requireAuth: false });
         if (config?.settings?.storeLogoUrl) {
           const favicon = document.getElementById('favicon') as HTMLLinkElement;
           if (favicon) {

@@ -1044,7 +1044,7 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
                 <div className="aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden">
                   <video
                     src={String(props.videoUrl)}
-                    controls={props.controls !== false}
+                    controls={props.controls === true}
                     autoPlay={props.autoPlay === true}
                     loop={props.loop === true}
                     poster={props.thumbnail ? String(props.thumbnail) : undefined}

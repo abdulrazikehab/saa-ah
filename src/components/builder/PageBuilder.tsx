@@ -588,7 +588,7 @@ function getDefaultProps(type: string, t: TFunction): Record<string, unknown> {
       videoUrl: '',
       thumbnail: '',
       autoPlay: false,
-      controls: true,
+      controls: false,
       loop: false,
     },
     countdown: {

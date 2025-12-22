@@ -17,7 +17,7 @@ export function StorefrontFooter() {
     const loadSiteConfig = async () => {
       try {
         const hasAdminToken = !!localStorage.getItem('accessToken');
-        const config = await coreApi.get('/site-config', { requireAuth: hasAdminToken });
+        const config = await coreApi.get('/site-config', { requireAuth: false });
         setSiteConfig(config);
         if (config.settings?.language) {
           setLanguage(config.settings.language);
@@ -50,7 +50,6 @@ export function StorefrontFooter() {
     { label: language === 'ar' ? 'حسابي' : 'My Account', url: '/account' },
     { label: language === 'ar' ? 'طلباتي' : 'My Orders', url: '/account/orders' },
     { label: language === 'ar' ? 'قائمة الرغبات' : 'Wishlist', url: '/wishlist' },
-    { label: language === 'ar' ? 'تتبع الطلب' : 'Track Order', url: '/track-order' },
   ];
 
   const socialLinks = siteConfig?.footer?.socialLinks || [];

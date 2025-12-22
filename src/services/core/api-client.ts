@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { isErrorObject } from '@/lib/error-utils';
 import i18n from '@/i18n';
+import { isMainDomain } from '@/lib/domain';
 
 // Determine base URLs based on environment
 const getBaseUrl = (defaultPort: string) => {
@@ -176,13 +177,12 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
     delete headers['Content-Type'];
   }
 
-  if (requireAuth) {
-    // Try to get token from cookie first, then localStorage as fallback
-    const cookieToken = getCookie('accessToken');
-    const token = cookieToken || localStorage.getItem('accessToken');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+  // Always attach token if available, regardless of requireAuth
+  // This allows public endpoints to benefit from auth context if it exists
+  const cookieToken = getCookie('accessToken');
+  const token = cookieToken || localStorage.getItem('accessToken');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   // Add admin API key if provided (for System Admin Panel)
@@ -250,8 +250,12 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
             localStorage.removeItem('refreshToken');
             document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
             document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-            // Redirect to login
-            window.location.href = '/auth/login';
+            
+            // Only redirect if auth was strictly required
+            if (requireAuth) {
+              const loginPath = isMainDomain() ? '/auth/login' : '/auth/login';
+              window.location.href = loginPath;
+            }
             throw new ApiError(401, 'Session expired. Please login again.');
           }
         } catch (error) {
@@ -263,7 +267,7 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
           document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           // Prevent infinite redirects - only redirect if not already on login page
-          if (!window.location.pathname.includes('/auth/login')) {
+          if (requireAuth && !window.location.pathname.includes('/auth/login')) {
             window.location.href = '/auth/login';
           }
           throw new ApiError(401, 'Session expired. Please login again.');

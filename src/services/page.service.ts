@@ -12,9 +12,9 @@ const encodeId = (id: string): string => {
 };
 
 export const pageService = {
-  getPages: async (): Promise<Page[]> => {
+  getPages: async (requireAuth = false): Promise<Page[]> => {
     const response = await apiClient.fetch(`${apiClient.coreUrl}/pages`, {
-      requireAuth: true,
+      requireAuth,
     });
     // After central unwrapping, response is the array of pages
     return Array.isArray(response) ? response : [];

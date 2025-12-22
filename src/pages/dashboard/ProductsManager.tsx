@@ -236,11 +236,11 @@ export default function ProductsManager() {
       setLoading(true);
       console.log('🔍 Calling coreApi.getProducts()...');
       const [productsData, categoriesData, unitsData, brandsData, suppliersData] = await Promise.all([
-        coreApi.getProducts({ limit: 1000 }),
+        coreApi.getProducts({ limit: 1000 }, true),
         coreApi.getCategories(),
         // Protected endpoints: require auth so Authorization header is attached
         coreApi.get('/units', { requireAuth: true }).catch(() => []),
-        coreApi.getBrands().catch(() => []), // Brands: attach auth when available for correct tenant
+        coreApi.getBrands(true).catch(() => []), // Brands: attach auth when available for correct tenant
         coreApi.get('/suppliers', { requireAuth: true }).catch(() => [])
       ]);
 
@@ -1373,7 +1373,8 @@ export default function ProductsManager() {
           currentItem: completionMessage
         });
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Show completion message briefly, then close dialog
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
         if (allErrors.length > 0) {
           console.group('تفاصيل أخطاء الاستيراد:');
@@ -1384,19 +1385,18 @@ export default function ProductsManager() {
           console.groupEnd();
           
           setImportErrors(allErrors);
+          // Close import dialog first
           setIsImporting(false);
           
-          await new Promise(resolve => setTimeout(resolve, 600));
+          // Small delay before showing error dialog
+          await new Promise(resolve => setTimeout(resolve, 300));
           
           setShowImportErrorDialog(true);
           console.log('✅ Error dialog should now be visible with', allErrors.length, 'errors');
-          
-          setTimeout(() => {
-          setShowImportErrorDialog(true);
-          }, 200);
         } else {
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Close dialog immediately on success
           setIsImporting(false);
+          setImportProgress({ current: 0, total: 0, currentItem: '' });
         }
         
         toast({
@@ -1409,13 +1409,20 @@ export default function ProductsManager() {
         });
         
         await loadData();
+      } else {
+        // Import was aborted - ensure dialog is closed and cleaned up
+        setIsImporting(false);
+        setImportProgress({ current: 0, total: 0, currentItem: '' });
+        importAbortRef.current = false; // Reset for next import
       }
       
       // Reset file input
       e.target.value = '';
     } catch (error: unknown) {
       // Ensure progress dialog is closed on error
+      importAbortRef.current = false; // Reset abort flag
       setIsImporting(false);
+      setImportProgress({ current: 0, total: 0, currentItem: '' });
       toast({ 
         title: 'تعذر استيراد المنتجات', 
         description: error instanceof Error ? error.message : 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
@@ -2686,10 +2693,16 @@ export default function ProductsManager() {
           if (!open) {
             importAbortRef.current = true;
             setImportProgress({ current: 0, total: 0, currentItem: '' });
-            toast({
-              title: 'تم إيقاف الاستيراد',
-              description: 'تم إيقاف عملية الاستيراد بنجاح',
-            });
+            // Only show toast if import was actually running
+            if (importProgress.total > 0 && importProgress.current < importProgress.total) {
+              toast({
+                title: 'تم إيقاف الاستيراد',
+                description: 'تم إيقاف عملية الاستيراد بنجاح',
+              });
+            }
+          } else {
+            // Reset abort flag when dialog opens
+            importAbortRef.current = false;
           }
         }}
         progress={importProgress}

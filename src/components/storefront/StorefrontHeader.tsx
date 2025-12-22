@@ -13,6 +13,7 @@ import { coreApi } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
 import { useCart } from '@/contexts/CartContext';
 import { cn } from '@/lib/utils';
+import { isMainDomain } from '@/lib/domain';
 
 interface StorefrontHeaderProps {
   cartItemCount?: number;
@@ -46,7 +47,9 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
   }, []);
 
   useEffect(() => {
-    if (location.state && (location.state as any).showLogin) {
+    const isMain = isMainDomain();
+
+    if (location.state && (location.state as any).showLogin && isMain) {
       setShowLogin(true);
       navigate(location.pathname, { replace: true, state: {} });
     }
@@ -63,14 +66,13 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
   useEffect(() => {
     const loadSiteConfig = async () => {
       try {
-        const hasAdminToken = !!localStorage.getItem('accessToken');
         const searchParams = new URLSearchParams(window.location.search);
         const themePreviewId = searchParams.get('theme_preview');
         
         let url = '/site-config';
         if (themePreviewId) url += `?themeId=${themePreviewId}`;
         
-        const config = await coreApi.get(url, { requireAuth: hasAdminToken });
+        const config = await coreApi.get(url, { requireAuth: false });
         setSiteConfig(config);
         if (config.settings?.language) setLanguage(config.settings.language);
         
@@ -505,21 +507,45 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                   </div>
                 ) : (
                   <div className="hidden md:flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowLogin(true)}
-                      className="rounded-xl hover:bg-muted/50"
-                    >
-                      {language === 'ar' ? 'تسجيل الدخول' : 'Login'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => setShowSignup(true)}
-                      className="rounded-xl gradient-primary text-white hover:shadow-glow transition-shadow"
-                    >
-                      {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
-                    </Button>
+                    {isMainDomain() ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowLogin(true)}
+                          className="rounded-xl hover:bg-muted/50"
+                        >
+                          {language === 'ar' ? 'تسجيل الدخول' : 'Login'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setShowSignup(true)}
+                          className="rounded-xl gradient-primary text-white hover:shadow-glow transition-shadow"
+                        >
+                          {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Link to="/auth/login">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-xl hover:bg-muted/50"
+                          >
+                            {language === 'ar' ? 'تسجيل الدخول' : 'Login'}
+                          </Button>
+                        </Link>
+                        <Link to="/auth/signup">
+                          <Button
+                            size="sm"
+                            className="rounded-xl gradient-primary text-white hover:shadow-glow transition-shadow"
+                          >
+                            {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
+                          </Button>
+                        </Link>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -618,25 +644,47 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
               
               {!customerData && (
                 <div className="pt-4 border-t border-border/30 space-y-2 animate-slide-up" style={{ animationDelay: '200ms' }}>
-                  <Button
-                    variant="outline"
-                    className="w-full rounded-xl h-12"
-                    onClick={() => {
-                      setShowLogin(true);
-                      setShowMobileMenu(false);
-                    }}
-                  >
-                    {language === 'ar' ? 'تسجيل الدخول' : 'Login'}
-                  </Button>
-                  <Button
-                    className="w-full rounded-xl h-12 gradient-primary text-white hover:shadow-glow"
-                    onClick={() => {
-                      setShowSignup(true);
-                      setShowMobileMenu(false);
-                    }}
-                  >
-                    {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
-                  </Button>
+                  {isMainDomain() ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-xl h-12"
+                        onClick={() => {
+                          setShowLogin(true);
+                          setShowMobileMenu(false);
+                        }}
+                      >
+                        {language === 'ar' ? 'تسجيل الدخول' : 'Login'}
+                      </Button>
+                      <Button
+                        className="w-full rounded-xl h-12 gradient-primary text-white hover:shadow-glow"
+                        onClick={() => {
+                          setShowSignup(true);
+                          setShowMobileMenu(false);
+                        }}
+                      >
+                        {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/auth/login" onClick={() => setShowMobileMenu(false)}>
+                        <Button
+                          variant="outline"
+                          className="w-full rounded-xl h-12"
+                        >
+                          {language === 'ar' ? 'تسجيل الدخول' : 'Login'}
+                        </Button>
+                      </Link>
+                      <Link to="/auth/signup" onClick={() => setShowMobileMenu(false)}>
+                        <Button
+                          className="w-full rounded-xl h-12 gradient-primary text-white hover:shadow-glow"
+                        >
+                          {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
+                        </Button>
+                      </Link>
+                    </>
+                  )}
                 </div>
               )}
             </nav>

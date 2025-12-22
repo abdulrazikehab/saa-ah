@@ -11,12 +11,10 @@ import type {
 
 export const productService = {
   // Products
-  getProducts: async (params?: ProductQueryParams): Promise<Product[]> => {
+  getProducts: async (params?: ProductQueryParams, requireAuth = false): Promise<Product[]> => {
     const url = `${apiClient.coreUrl}/products?${new URLSearchParams(params as Record<string, string>)}`;
     const response = await apiClient.fetch(url, {
-      // Attach auth if available so tenantId can be resolved from JWT for dashboard,
-      // but still works for public storefront (no token -> no header).
-      requireAuth: true,
+      requireAuth,
     });
     // Backend returns { data: [...], meta: {...} } or just [...]
     // After central unwrapping, response is already the data object
@@ -158,10 +156,9 @@ export const productService = {
   },
 
   // Brands
-  getBrands: async (): Promise<any[]> => {
-    // Attach auth if available so we load brands for the same tenant context
+  getBrands: async (requireAuth = false): Promise<any[]> => {
     const response = await apiClient.fetch(`${apiClient.coreUrl}/brands`, {
-      requireAuth: true,
+      requireAuth,
     });
     return Array.isArray(response) ? response : [];
   },

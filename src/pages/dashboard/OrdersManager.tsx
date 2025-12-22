@@ -255,8 +255,12 @@ export default function OrdersManager() {
   const loadTopUpRequests = useCallback(async () => {
     try {
       setLoadingTopUps(true);
-      const response = await coreApi.get('/merchant/wallet/admin/topups', { requireAuth: true }) as any;
-      setTopUpRequests(Array.isArray(response) ? response : (response?.requests || []));
+      const response = await coreApi.get('/wallet/admin/topups', { requireAuth: true }) as any;
+      // API client automatically unwraps { success, data, message } format
+      const requests = Array.isArray(response) 
+        ? response 
+        : (response?.data || response?.requests || []);
+      setTopUpRequests(requests);
     } catch (error) {
       console.error('Failed to load top-up requests:', error);
       toast({
@@ -280,7 +284,7 @@ export default function OrdersManager() {
   const handleApproveTopUp = async (requestId: string) => {
     try {
       setProcessingTopUp(requestId);
-      await coreApi.post(`/merchant/wallet/admin/topup/${requestId}/approve`, {}, { requireAuth: true });
+      await coreApi.post(`/wallet/admin/topup/${requestId}/approve`, {}, { requireAuth: true });
       
       toast({
         title: t('dashboard.orders.approveSuccess'),
@@ -314,7 +318,7 @@ export default function OrdersManager() {
     try {
       setProcessingTopUp(selectedTopUp.id);
       await coreApi.post(
-        `/merchant/wallet/admin/topup/${selectedTopUp.id}/reject`,
+        `/wallet/admin/topup/${selectedTopUp.id}/reject`,
         { reason: rejectReason },
         { requireAuth: true }
       );

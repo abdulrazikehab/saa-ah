@@ -127,7 +127,7 @@ export const authService = {
 
   me: (): Promise<{ user: UserProfile }> =>
     apiClient.fetch(`${apiClient.authUrl}/me`, {
-      requireAuth: true,
+      requireAuth: false,
     }),
 
   googleLogin: () => {

@@ -4,12 +4,12 @@ import type { Theme, CreateThemeData } from './types';
 export const themeService = {
   getThemes: (): Promise<Theme[]> =>
     apiClient.fetch(`${apiClient.coreUrl}/themes`, {
-      requireAuth: true,
+      requireAuth: false,
     }),
 
   getTheme: (id: string): Promise<Theme> =>
     apiClient.fetch(`${apiClient.coreUrl}/themes/${id}`, {
-      requireAuth: true,
+      requireAuth: false,
     }),
 
   createTheme: (data: CreateThemeData): Promise<Theme> =>

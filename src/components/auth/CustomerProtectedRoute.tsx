@@ -29,9 +29,9 @@ export default function CustomerProtectedRoute({ children }: CustomerProtectedRo
   }
 
   if (!isAuthenticated) {
-    // Redirect to home page (which will show login modal)
+    // Redirect to the unified auth page
     // Store the attempted location so we can redirect back after login
-    return <Navigate to="/" state={{ from: location, showLogin: true }} replace />;
+    return <Navigate to="/auth/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

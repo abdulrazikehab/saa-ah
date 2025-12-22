@@ -1124,110 +1124,127 @@ export default function CategoriesManager() {
 
       {/* Category Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="sm:max-w-[700px] max-h-[95vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle className="text-2xl">
               {editingCategory ? t('categories.productCategories.editCategory') : t('categories.productCategories.addNewCategory')}
             </DialogTitle>
             <DialogDescription>
               {editingCategory ? t('categories.productCategories.editCategoryDesc') : t('categories.productCategories.addCategoryDesc')}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">{t('categories.productCategories.categoryName')} *</Label>
+          
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-2">
+            <div className="grid gap-6 py-4">
+              {/* Names Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-bold">{t('categories.productCategories.categoryName')} *</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
+                    className="h-11"
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="nameAr">اسم الفئة (عربي)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="nameAr" className="text-sm font-bold">اسم الفئة (عربي)</Label>
                   <Input
                     id="nameAr"
                     value={formData.nameAr}
                     onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
+                    className="h-11"
                   />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="slug">{t('categories.productCategories.slug')}</Label>
+
+              {/* Slug Section */}
+              <div className="space-y-2">
+                <Label htmlFor="slug" className="text-sm font-bold">{t('categories.productCategories.slug')}</Label>
                 <Input
                   id="slug"
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                   placeholder="electronics"
+                  className="h-11 text-left direction-ltr"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground italic">
                   {t('categories.productCategories.slugHint')}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="description">{t('categories.productCategories.description')}</Label>
+
+              {/* Descriptions Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="description" className="text-sm font-bold">{t('categories.productCategories.description')}</Label>
                   <Textarea
                     id="description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={3}
+                    rows={4}
+                    className="resize-none"
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="descriptionAr">الوصف (عربي)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="descriptionAr" className="text-sm font-bold">الوصف (عربي)</Label>
                   <Textarea
                     id="descriptionAr"
                     value={formData.descriptionAr}
                     onChange={(e) => setFormData({ ...formData, descriptionAr: e.target.value })}
-                    rows={3}
+                    rows={4}
+                    className="resize-none"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="icon">الأيقونة (Icon/Emoji)</Label>
+
+              {/* Icon and Sort Order Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="icon" className="text-sm font-bold">الأيقونة (Icon/Emoji)</Label>
                   <Input
                     id="icon"
                     value={formData.icon}
                     onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                     placeholder="📱 أو category-icon"
+                    className="h-11"
                   />
                   <p className="text-xs text-muted-foreground">
                     يمكنك استخدام إيموجي أو اسم أيقونة
                   </p>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="sortOrder">ترتيب العرض</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="sortOrder" className="text-sm font-bold">ترتيب العرض</Label>
                   <Input
                     id="sortOrder"
                     type="number"
                     min="0"
                     value={formData.sortOrder}
                     onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+                    className="h-11"
                   />
                   <p className="text-xs text-muted-foreground">
                     الرقم الأقل يظهر أولاً
                   </p>
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="parentId">
+
+              {/* Parent Category Section */}
+              <div className="space-y-2">
+                <Label htmlFor="parentId" className="text-sm font-bold">
                   {t('categories.productCategories.parentCategory', 'الفئة الرئيسية (اختياري)')}
                 </Label>
                 <Select
                   value={formData.parentId || "__none__"}
                   onValueChange={(value) => setFormData({ ...formData, parentId: value === "__none__" ? '' : value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11">
                     <SelectValue placeholder={t('categories.productCategories.selectParentCategory', 'اختر فئة رئيسية (اختياري)')} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">{t('categories.productCategories.noParent', 'لا توجد فئة رئيسية')}</SelectItem>
                     {categories
-                      .filter(cat => !editingCategory || cat.id !== editingCategory.id) // Don't allow selecting self as parent
+                      .filter(cat => !editingCategory || cat.id !== editingCategory.id)
                       .map((category) => (
                         <SelectItem key={category.id} value={category.id}>
                           {category.name}
@@ -1239,22 +1256,29 @@ export default function CategoriesManager() {
                   {t('categories.productCategories.parentCategoryHint', 'اختر فئة رئيسية لجعل هذه الفئة فئة فرعية')}
                 </p>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="image">{t('categories.productCategories.categoryLogo')}</Label>
-                <ImageUpload
-                  value={formData.image}
-                  onChange={(url) => setFormData({ ...formData, image: url })}
-                  placeholder={t('categories.productCategories.uploadLogo')}
-                />
-                <p className="text-xs text-muted-foreground">
+
+              {/* Image Upload Section */}
+              <div className="space-y-2">
+                <Label htmlFor="image" className="text-sm font-bold">{t('categories.productCategories.categoryLogo')}</Label>
+                <div className="border-2 border-dashed border-border rounded-xl p-4 bg-muted/30">
+                  <ImageUpload
+                    value={formData.image}
+                    onChange={(url) => setFormData({ ...formData, image: url })}
+                    placeholder={t('categories.productCategories.uploadLogo')}
+                    className="[&>div]:aspect-square [&>div]:h-40 mx-auto"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center mt-2">
                   {t('categories.productCategories.logoHint')}
                 </p>
               </div>
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+
+              {/* Status Section */}
+              <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/20 rounded-xl">
                 <div className="space-y-0.5">
-                  <Label htmlFor="isActive">حالة الفئة</Label>
-                  <p className="text-sm text-gray-500">
-                    تفعيل أو تعطيل الفئة
+                  <Label htmlFor="isActive" className="text-base font-bold">حالة الفئة</Label>
+                  <p className="text-sm text-muted-foreground">
+                    تفعيل أو تعطيل الفئة في المتجر
                   </p>
                 </div>
                 <Switch
@@ -1264,21 +1288,27 @@ export default function CategoriesManager() {
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit">
-                {editingCategory ? t('categories.productCategories.update') : t('categories.productCategories.add')}
-              </Button>
-            </DialogFooter>
+            
+            <div className="h-4" /> {/* Bottom spacing */}
           </form>
+
+          <DialogFooter className="p-6 pt-2 border-t bg-muted/20">
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="h-11 px-8">
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" onClick={(e) => {
+              e.preventDefault();
+              handleSubmit(e as any);
+            }} className="h-11 px-8">
+              {editingCategory ? t('categories.productCategories.update') : t('categories.productCategories.add')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Tier Dialog */}
       <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
               {editingTier ? t('categories.customerTiers.editTier') : t('categories.customerTiers.addNewTier')}
@@ -1451,7 +1481,7 @@ export default function CategoriesManager() {
 
       {/* Offer Dialog */}
       <Dialog open={offerDialogOpen} onOpenChange={setOfferDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
               {editingOffer ? t('categories.offers.editOffer') : t('categories.offers.addNewOffer')}

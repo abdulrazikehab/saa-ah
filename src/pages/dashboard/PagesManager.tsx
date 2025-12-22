@@ -88,7 +88,7 @@ export default function PagesManager() {
       const tenantId = user?.tenantId;
       
       // Use pageService which handles the API call properly
-      const data = await pageService.getPages();
+      const data = await pageService.getPages(true);
       
       // Handle response - pageService already returns an array
       let pagesArray: Page[] = Array.isArray(data) ? data : [];
