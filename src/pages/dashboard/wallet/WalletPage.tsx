@@ -54,6 +54,7 @@ import { coreApi, walletService, type Bank, type CreateBankDto } from '@/lib/api
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WalletData {
   id: string;
@@ -104,9 +105,12 @@ const statusConfig: Record<string, { label: string; labelAr: string; variant: 'd
   FAILED: { label: 'Failed', labelAr: 'فشل', variant: 'destructive', icon: XCircle },
 };
 
+
+
 export default function WalletPage() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
+  const { user, loading: authLoading } = useAuth();
   
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -135,10 +139,18 @@ export default function WalletPage() {
     sortOrder: 0,
   });
   const [bankLogoFile, setBankLogoFile] = useState<File | null>(null);
-  
+
   // Fetch wallet data
   useEffect(() => {
     const fetchData = async () => {
+      // Don't fetch if auth is loading or user has no tenant
+      if (authLoading) return;
+      
+      if (!user?.tenantId) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         const [walletRes, transactionsRes, topUpRes, banksRes, allBanksRes] = await Promise.all([
@@ -166,7 +178,7 @@ export default function WalletPage() {
       }
     };
     fetchData();
-  }, [t]);
+  }, [t, authLoading, user?.tenantId]);
 
   // Format date
   const formatDate = (dateString: string) => {

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { coreApi } from '@/lib/api';
 
@@ -54,6 +55,10 @@ export default function BrandSettings() {
     averageConsumptionPerDay: 0,
     abcAnalysis: 'C - Low Value',
     odooCategoryId: '',
+    minQuantity: '',
+    maxQuantity: '',
+    enableSlider: false,
+    applySliderToAllProducts: false,
   });
 
   useEffect(() => {
@@ -96,6 +101,10 @@ export default function BrandSettings() {
           reorderPoint: parseFloat(formData.reorderPoint.toString()),
           averageConsumptionPerMonth: parseFloat(formData.averageConsumptionPerMonth.toString()),
           averageConsumptionPerDay: parseFloat(formData.averageConsumptionPerDay.toString()),
+          minQuantity: formData.minQuantity ? parseInt(formData.minQuantity) : undefined,
+          maxQuantity: formData.maxQuantity ? parseInt(formData.maxQuantity) : undefined,
+          enableSlider: formData.enableSlider,
+          applySliderToAllProducts: formData.applySliderToAllProducts,
         });
         toast({
           title: 'نجح',
@@ -110,6 +119,10 @@ export default function BrandSettings() {
           reorderPoint: parseFloat(formData.reorderPoint.toString()),
           averageConsumptionPerMonth: parseFloat(formData.averageConsumptionPerMonth.toString()),
           averageConsumptionPerDay: parseFloat(formData.averageConsumptionPerDay.toString()),
+          minQuantity: formData.minQuantity ? parseInt(formData.minQuantity) : undefined,
+          maxQuantity: formData.maxQuantity ? parseInt(formData.maxQuantity) : undefined,
+          enableSlider: formData.enableSlider,
+          applySliderToAllProducts: formData.applySliderToAllProducts,
         });
         toast({
           title: 'نجح',
@@ -148,6 +161,10 @@ export default function BrandSettings() {
       averageConsumptionPerDay: Number(brand.averageConsumptionPerDay) || 0,
       abcAnalysis: brand.abcAnalysis || 'C - Low Value',
       odooCategoryId: brand.odooCategoryId || '',
+      minQuantity: (brand as any).minQuantity?.toString() || '',
+      maxQuantity: (brand as any).maxQuantity?.toString() || '',
+      enableSlider: (brand as any).enableSlider || false,
+      applySliderToAllProducts: (brand as any).applySliderToAllProducts || false,
     });
     setIsDialogOpen(true);
   };
@@ -188,6 +205,10 @@ export default function BrandSettings() {
       averageConsumptionPerDay: 0,
       abcAnalysis: 'C - Low Value',
       odooCategoryId: '',
+      minQuantity: '',
+      maxQuantity: '',
+      enableSlider: false,
+      applySliderToAllProducts: false,
     });
     setEditingBrand(null);
   };
@@ -617,6 +638,64 @@ export default function BrandSettings() {
                 onChange={(e) => setFormData({ ...formData, odooCategoryId: e.target.value })}
                 placeholder="يتم تعيينه بعد المزامنة مع Odoo"
               />
+            </div>
+
+            {/* Quantity Slider Section for Supplier API Integration */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="enableSlider" className="text-base font-semibold">
+                    شريط الكمية للشراء (Slider)
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    تفعيل شريط اختيار الكمية عند الشراء - سيتم تطبيقه على جميع منتجات هذه العلامة التجارية
+                  </p>
+                </div>
+                <Switch
+                  id="enableSlider"
+                  checked={formData.enableSlider}
+                  onCheckedChange={(checked) => setFormData({ ...formData, enableSlider: checked })}
+                />
+              </div>
+              
+              {formData.enableSlider && (
+                <>
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <Label htmlFor="minQuantity">الحد الأدنى للكمية</Label>
+                      <Input
+                        id="minQuantity"
+                        type="number"
+                        min="1"
+                        value={formData.minQuantity}
+                        onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
+                        placeholder="1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="maxQuantity">الحد الأقصى للكمية</Label>
+                      <Input
+                        id="maxQuantity"
+                        type="number"
+                        min="1"
+                        value={formData.maxQuantity}
+                        onChange={(e) => setFormData({ ...formData, maxQuantity: e.target.value })}
+                        placeholder="100"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-2">
+                    <Switch
+                      id="applySliderToAllProducts"
+                      checked={formData.applySliderToAllProducts}
+                      onCheckedChange={(checked) => setFormData({ ...formData, applySliderToAllProducts: checked })}
+                    />
+                    <Label htmlFor="applySliderToAllProducts" className="text-sm">
+                      تطبيق على جميع منتجات هذه العلامة التجارية
+                    </Label>
+                  </div>
+                </>
+              )}
             </div>
 
             <DialogFooter>

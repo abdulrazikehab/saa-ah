@@ -72,4 +72,10 @@ export const tenantService = {
       requireAuth: true,
     });
   },
+
+  async checkSubdomainAvailability(subdomain: string): Promise<{ available: boolean; suggestions?: string[] }> {
+    return apiClient.fetch(`${apiClient.coreUrl}/public/check-subdomain?subdomain=${encodeURIComponent(subdomain)}`, {
+      requireAuth: false,
+    });
+  },
 };

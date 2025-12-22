@@ -5,9 +5,9 @@ export interface RegisterData {
   email: string;
   password: string;
   name?: string;
-  storeName: string; // Required - store name for automatic tenant creation
+  storeName?: string; // Optional - user will create store via setup page after signup
   nationalId: string; // Required - national ID or passport ID
-  subdomain?: string; // Optional - will be auto-generated from storeName if not provided
+  subdomain?: string; // Optional - removed from signup, user will select during store setup
   fingerprint?: DeviceFingerprint;
 }
 

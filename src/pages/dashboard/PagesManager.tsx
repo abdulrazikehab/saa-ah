@@ -42,15 +42,52 @@ export default function PagesManager() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // Helper function to extract subdomain from hostname
+  const extractSubdomainFromHostname = (hostname: string): string | null => {
+    // For local development
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const parts = hostname.split('.');
+      if (parts.length > 1 && parts[0] !== 'localhost' && parts[0] !== '127') {
+        return parts[0];
+      }
+      return null;
+    }
+    
+    // For production subdomains (e.g., market.saeaa.com)
+    if (hostname.endsWith('.saeaa.com') && hostname !== 'saeaa.com' && hostname !== 'www.saeaa.com') {
+      const parts = hostname.split('.');
+      if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'app') {
+        return parts[0];
+      }
+    }
+    
+    if (hostname.endsWith('.saeaa.net') && hostname !== 'saeaa.net' && hostname !== 'www.saeaa.net') {
+      const parts = hostname.split('.');
+      if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'app') {
+        return parts[0];
+      }
+    }
+    
+    return null;
+  };
+
   const getPageUrl = (slug: string) => {
     const protocol = window.location.protocol;
     const hostname = window.location.hostname;
     const port = window.location.port;
     const portPart = port ? `:${port}` : '';
-    const subdomain = tenantSubdomain || 'default';
     
-    // Base domain for production (saeaa.com)
-    const baseDomain = 'saeaa.com';
+    // Try to get subdomain from: 1. API response, 2. Current hostname, 3. User's tenant
+    const extractedSubdomain = extractSubdomainFromHostname(hostname);
+    const subdomain = tenantSubdomain || extractedSubdomain || user?.tenantSubdomain || 'default';
+    
+    // Detect base domain from current hostname
+    let baseDomain = 'saeaa.com';
+    if (hostname.includes('saeaa.net')) {
+      baseDomain = 'saeaa.net';
+    } else if (hostname.includes('saeaa.com')) {
+      baseDomain = 'saeaa.com';
+    }
     
     // For local development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -76,9 +113,22 @@ export default function PagesManager() {
       const config = await coreApi.get('/site-config', { requireAuth: true });
       if (config?.settings?.subdomain) {
         setTenantSubdomain(config.settings.subdomain);
+      } else {
+        // Fallback: Extract subdomain from current hostname
+        const hostname = window.location.hostname;
+        const extracted = extractSubdomainFromHostname(hostname);
+        if (extracted) {
+          setTenantSubdomain(extracted);
+        }
       }
     } catch (error) {
       console.error('Failed to load tenant info:', error);
+      // Fallback: Extract subdomain from current hostname
+      const hostname = window.location.hostname;
+      const extracted = extractSubdomainFromHostname(hostname);
+      if (extracted) {
+        setTenantSubdomain(extracted);
+      }
     }
   };
 
@@ -557,11 +607,12 @@ export default function PagesManager() {
       setTimeout(() => {
         loadPages();
       }, 500);
-    } catch (error: any) {
-      console.error('Failed to auto-generate pages:', error);
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error('Failed to auto-generate pages:', err);
       toast({
         title: 'خطأ في الإنشاء',
-        description: error?.message || 'حدث خطأ أثناء إنشاء الصفحات. يرجى المحاولة مرة أخرى.',
+        description: err?.message || 'حدث خطأ أثناء إنشاء الصفحات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

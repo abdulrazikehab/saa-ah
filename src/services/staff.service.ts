@@ -25,7 +25,7 @@ export interface CreateStaffDto {
 export const staffService = {
   getStaffUsers: (page: number = 1, limit: number = 50): Promise<{ data: StaffUser[]; meta: any }> =>
     apiClient.fetch(`${apiClient.authUrl}/staff?page=${page}&limit=${limit}`, {
-      requireAuth: true,
+      requireAuth: false,
     }),
 
   getStaffUser: (id: string): Promise<StaffUser> =>

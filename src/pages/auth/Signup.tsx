@@ -15,6 +15,55 @@ import { VersionFooter } from '@/components/common/VersionFooter';
 import { apiClient } from '@/lib/api';
 import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 
+// Type definitions for extended responses
+interface SignUpResponseExtended {
+  email: string;
+  emailVerified?: boolean;
+  verificationCodeSent?: boolean;
+  verificationCode?: string;
+  emailPreviewUrl?: string;
+  isTestEmail?: boolean;
+  emailWarning?: string;
+  emailError?: string;
+  recoveryId?: string;
+  user?: {
+    id: string;
+    email: string;
+    name?: string;
+    role: string;
+    tenantId?: string;
+  };
+}
+
+interface VerifyEmailResponseExtended {
+  valid: boolean;
+  message: string;
+  tokens?: {
+    accessToken: string;
+    refreshToken: string;
+  };
+  recoveryId?: string;
+  tenantId?: string | null;
+  setupPending?: boolean;
+  user?: {
+    id: string;
+    email: string;
+    name?: string;
+    role: string;
+    tenantId?: string;
+  };
+}
+
+interface ApiError {
+  message?: string;
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 export default function Signup() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
@@ -23,7 +72,6 @@ export default function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [storeName, setStoreName] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [loading, setLoading] = useState(false);
   const [faceState, setFaceState] = useState<FaceState>('excited');
@@ -68,6 +116,9 @@ export default function Signup() {
       setFaceState('excited');
     }
   }, [isFocused, passwordFieldActive, faceState]);
+  
+  // NOTE: Subdomain selection is removed from signup
+  // User will select subdomain during store setup after signup
 
   const handleInputChange = (setter: (val: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setter(e.target.value);
@@ -92,10 +143,10 @@ export default function Signup() {
     e.preventDefault();
     
     // Validate required fields
-    if (!storeName || !storeName.trim()) {
+    if (!name || !name.trim()) {
       toast({
         title: isRTL ? 'حقل مطلوب' : 'Required Field',
-        description: isRTL ? 'اسم المتجر مطلوب' : 'Store name is required',
+        description: isRTL ? 'الاسم مطلوب' : 'Name is required',
         variant: 'destructive',
       });
       return;
@@ -112,7 +163,14 @@ export default function Signup() {
     
     setLoading(true);
     try {
-      const result = await authService.signup({ name, email, password, storeName, nationalId });
+      // NOTE: storeName and subdomain are NOT sent during signup
+      // User will create store via setup page after signup
+      const result = await authService.signup({ 
+        name, 
+        email, 
+        password, 
+        nationalId 
+      });
       setFaceState('happy');
       setSignupEmail(email);
       
@@ -133,11 +191,12 @@ export default function Signup() {
       }
       
       // Show OTP verification modal first (recovery ID will be shown after verification)
-      if (result.verificationCodeSent || (result as any).emailVerified === false || (result as any).verificationCode) {
+      const extendedResult = result as SignUpResponseExtended;
+      if (result.verificationCodeSent || extendedResult.emailVerified === false || extendedResult.verificationCode) {
         setShowOtpModal(true);
-      } else if ((result as any).recoveryId) {
+      } else if (extendedResult.recoveryId) {
         // Fallback: if no verification needed, show recovery ID directly
-        setRecoveryId(result.recoveryId);
+        setRecoveryId(extendedResult.recoveryId);
         setShowRecoveryModal(true);
       } else {
         toast({
@@ -148,17 +207,18 @@ export default function Signup() {
           navigate('/auth/login');
         }, 1500);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setFaceState('sad');
+      const apiError = error as ApiError;
       const { title, description } = getProfessionalErrorMessage(
-        error,
+        apiError,
         { operation: isRTL ? 'إنشاء' : 'create', resource: isRTL ? 'الحساب' : 'account' },
         isRTL
       );
       
       // Special handling for email/SMTP errors
-      if (error?.response?.status === 400) {
-        const errorData = error?.response?.data;
+      if (apiError?.response?.status === 400) {
+        const errorData = apiError?.response?.data;
         const errorMsg = errorData?.message || '';
         if (errorMsg.includes('verification email') || errorMsg.includes('SMTP') || errorMsg.includes('email')) {
           toast({
@@ -244,23 +304,36 @@ export default function Signup() {
 
     setOtpLoading(true);
     try {
-      const result = await authService.verifyEmail(signupEmail, otpCode);
+      const result = await authService.verifyEmail(signupEmail, otpCode) as VerifyEmailResponseExtended;
       
       if (result.valid && result.tokens) {
         // Store tokens
         localStorage.setItem('accessToken', result.tokens.accessToken);
         localStorage.setItem('refreshToken', result.tokens.refreshToken);
         
+        // Store user data if available in result
+        if (result.user) {
+          localStorage.setItem('user', JSON.stringify(result.user));
+        } else {
+          // Fallback: create a basic user object with tenantId
+          localStorage.setItem('user', JSON.stringify({
+            email: signupEmail,
+            name: name,
+            tenantId: result.tenantId || undefined,
+            role: 'SHOP_OWNER'
+          }));
+        }
+        
         // Close OTP modal
         setShowOtpModal(false);
         
         // Check if setup is pending (tenant should be created automatically now)
-        const setupPending = (result as any).setupPending === true;
-        const tenantId = (result as any).tenantId;
+        const setupPending = result.setupPending === true;
+        const tenantId = result.tenantId;
         
         // Get recovery ID from verification result (account was just created)
-        if ((result as any).recoveryId) {
-          setRecoveryId((result as any).recoveryId);
+        if (result.recoveryId) {
+          setRecoveryId(result.recoveryId);
           setShowRecoveryModal(true);
           // Store setupPending flag for after recovery modal (should be false now since tenant is auto-created)
           if (setupPending) {
@@ -302,9 +375,10 @@ export default function Signup() {
           description,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = error as ApiError;
       const { title, description } = getProfessionalErrorMessage(
-        error,
+        apiError,
         { operation: isRTL ? 'التحقق' : 'verify', resource: isRTL ? 'البريد الإلكتروني' : 'email' },
         isRTL
       );
@@ -327,9 +401,10 @@ export default function Signup() {
         description: 'تم إرسال رمز التحقق الجديد إلى بريدك الإلكتروني',
       });
       setOtpCode('');
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = error as ApiError;
       const { title, description } = getProfessionalErrorMessage(
-        error,
+        apiError,
         { operation: isRTL ? 'إعادة إرسال' : 'resend', resource: isRTL ? 'رمز التحقق' : 'verification code' },
         isRTL
       );
@@ -678,27 +753,6 @@ export default function Signup() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="storeName" className="text-sm font-medium">
-                      {isRTL ? 'اسم المتجر' : 'Store Name'} *
-                    </Label>
-                    <div className="relative">
-                      <Store className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                        id="storeName"
-                        placeholder={isRTL ? 'اسم المتجر' : 'Store Name'}
-                        value={storeName}
-                        onChange={handleInputChange(setStoreName)}
-                        onFocus={() => setIsFocused(true)}
-                        onBlur={() => setIsFocused(false)}
-                        required
-                        className="h-11 pr-10 border-border focus:border-primary focus:ring-primary"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {isRTL ? 'سيتم إنشاء عنوان فرعي تلقائياً من اسم المتجر' : 'Subdomain will be generated automatically from store name'}
-                    </p>
-                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="nationalId" className="text-sm font-medium">

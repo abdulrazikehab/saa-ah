@@ -222,9 +222,9 @@ export function CloudinaryImagePicker({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-12 gap-4 h-[600px]">
+        <div className="grid grid-cols-12 gap-4" style={{ height: '600px', maxHeight: 'calc(90vh - 200px)' }}>
           {/* Folders Sidebar */}
-          <div className="col-span-3 border-r pr-4">
+          <div className="col-span-3 border-r pr-4 flex flex-col">
             <div className="mb-4">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <Folder className="h-4 w-4" />
@@ -235,7 +235,7 @@ export function CloudinaryImagePicker({
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <ScrollArea className="h-[500px]">
+                <ScrollArea className="flex-1 min-h-0">
                   <div className="space-y-1">
                     {folders.map((folder) => (
                       <button
@@ -266,9 +266,9 @@ export function CloudinaryImagePicker({
           </div>
 
           {/* Images Grid */}
-          <div className="col-span-9 flex flex-col">
+          <div className="col-span-9 flex flex-col min-h-0">
             {/* Search */}
-            <div className="mb-4">
+            <div className="mb-4 flex-shrink-0">
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -282,7 +282,7 @@ export function CloudinaryImagePicker({
 
             {/* Selected count */}
             {selectedCount > 0 && (
-              <div className="mb-4">
+              <div className="mb-4 flex-shrink-0">
                 <Badge variant="secondary">
                   {selectedCount} {multiple ? 'صور محددة' : 'صورة محددة'}
                 </Badge>
@@ -290,7 +290,7 @@ export function CloudinaryImagePicker({
             )}
 
             {/* Images Grid */}
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 min-h-0">
               {loading && images.length === 0 ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -307,32 +307,38 @@ export function CloudinaryImagePicker({
                     return (
                       <div
                         key={`${image.public_id}-${index}`}
-                        className={`relative group cursor-pointer rounded-lg border-2 overflow-hidden transition-all ${
+                        className={`relative group cursor-pointer rounded-lg border-2 overflow-hidden transition-all aspect-square ${
                           isSelected
-                            ? 'border-primary ring-2 ring-primary'
+                            ? 'border-primary ring-2 ring-primary ring-offset-2'
                             : 'border-border hover:border-primary/50'
                         }`}
                         onClick={() => toggleImageSelection(image.secure_url)}
                       >
-                        <img
-                          src={image.secure_url}
-                          alt={image.public_id}
-                          className="w-full h-32 object-cover"
-                          loading="lazy"
-                          onError={(e) => {
-                            console.error('Failed to load image:', image.secure_url);
-                            (e.target as HTMLImageElement).src = '/placeholder.svg';
-                          }}
-                        />
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                            <div className="bg-primary text-primary-foreground rounded-full p-2">
-                              <X className="h-4 w-4" />
+                        <div className="relative w-full h-full bg-muted">
+                          <img
+                            src={image.secure_url}
+                            alt={image.public_id}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              console.error('Failed to load image:', image.secure_url);
+                              const target = e.target as HTMLImageElement;
+                              target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23ddd" width="200" height="200"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3EImage%3C/text%3E%3C/svg%3E';
+                            }}
+                          />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-primary/30 flex items-center justify-center backdrop-blur-sm">
+                              <div className="bg-primary text-primary-foreground rounded-full p-2 shadow-lg">
+                                <X className="h-5 w-5" />
+                              </div>
                             </div>
+                          )}
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent text-white text-xs p-2">
+                            <p className="truncate font-medium">{image.public_id.split('/').pop()}</p>
                           </div>
-                        )}
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 truncate">
-                          {image.public_id.split('/').pop()}
+                          {!isSelected && (
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                          )}
                         </div>
                       </div>
                     );
@@ -343,7 +349,7 @@ export function CloudinaryImagePicker({
 
             {/* Load More Button */}
             {hasMore && (
-              <div className="mt-4 flex justify-center">
+              <div className="mt-4 flex justify-center flex-shrink-0">
                 <Button
                   variant="outline"
                   onClick={loadMore}

@@ -75,6 +75,7 @@ interface Product {
   price: number;
   compareAtPrice?: number;
   cost?: number;
+  costPerItem?: number;
   sku: string;
   barcode?: string;
   stock: number;
@@ -88,6 +89,42 @@ interface Product {
   metaDescription?: string;
   weight?: string;
   dimensions?: string;
+  // Export fields
+  productId?: string;
+  coinsNumber?: number;
+  notify?: boolean;
+  min?: number;
+  max?: number;
+  webStatus?: boolean;
+  mobileStatus?: boolean;
+  purpleCardsProductNameAr?: string;
+  purpleCardsProductNameEn?: string;
+  purpleCardsSlugAr?: string;
+  purpleCardsSlugEn?: string;
+  purpleCardsDescAr?: string;
+  purpleCardsDescEn?: string;
+  purpleCardsLongDescAr?: string;
+  purpleCardsLongDescEn?: string;
+  purpleCardsMetaTitleAr?: string;
+  purpleCardsMetaTitleEn?: string;
+  purpleCardsMetaKeywordAr?: string;
+  purpleCardsMetaKeywordEn?: string;
+  purpleCardsMetaDescriptionAr?: string;
+  purpleCardsMetaDescriptionEn?: string;
+  ish7enProductNameAr?: string;
+  ish7enProductNameEn?: string;
+  ish7enSlugAr?: string;
+  ish7enSlugEn?: string;
+  ish7enDescAr?: string;
+  ish7enDescEn?: string;
+  ish7enLongDescAr?: string;
+  ish7enLongDescEn?: string;
+  ish7enMetaTitleAr?: string;
+  ish7enMetaTitleEn?: string;
+  ish7enMetaKeywordAr?: string;
+  ish7enMetaKeywordEn?: string;
+  ish7enMetaDescriptionAr?: string;
+  ish7enMetaDescriptionEn?: string;
 }
 
 export default function ProductsManager() {
@@ -147,6 +184,9 @@ export default function ProductsManager() {
     brandId: '',
     categoryIds: [] as string[],
     supplierIds: [] as string[],
+    minQuantity: '',
+    maxQuantity: '',
+    enableSlider: false,
   });
   const [productImages, setProductImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -248,13 +288,16 @@ export default function ProductsManager() {
       let validCategories: CategoryResponse[] = [];
       if (categoriesData && typeof categoriesData === 'object') {
         if (Array.isArray(categoriesData)) {
-          validCategories = categoriesData.filter((c: any) => 
-            c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
-          );
-        } else if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
-          validCategories = categoriesData.categories.filter((c: any) => 
-            c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
-          );
+          validCategories = categoriesData.filter((c: unknown) => 
+            c && typeof c === 'object' && 'id' in c && !('error' in c) && !('statusCode' in c)
+          ) as CategoryResponse[];
+        } else {
+          const dataObj = categoriesData as { categories?: unknown[] };
+          if (dataObj.categories && Array.isArray(dataObj.categories)) {
+            validCategories = dataObj.categories.filter((c: unknown) => 
+              c && typeof c === 'object' && 'id' in c && !('error' in c) && !('statusCode' in c)
+            ) as CategoryResponse[];
+          }
         }
       }
       
@@ -267,33 +310,36 @@ export default function ProductsManager() {
       setCategories(mappedCategories);
       
       // Validate unitsData, brandsData, suppliersData - filter out error objects
-      const validateArray = (data: any): any[] => {
+      const validateArray = <T,>(data: unknown): T[] => {
         if (Array.isArray(data)) {
-          return data.filter((item: any) => 
+          return data.filter((item: unknown) => 
             item && typeof item === 'object' && !('error' in item) && !('statusCode' in item)
-          );
+          ) as T[];
         }
         return [];
       };
       
-      setUnits(validateArray(unitsData));
-      setBrands(validateArray(brandsData));
-      setSuppliers(validateArray(suppliersData));
+      setUnits(validateArray<typeof units[0]>(unitsData));
+      setBrands(validateArray<typeof brands[0]>(brandsData));
+      setSuppliers(validateArray<typeof suppliers[0]>(suppliersData));
 
       // Validate productsData - ensure it's not an error object
       let rawProducts: ProductApiResponse[] = [];
       if (productsData && typeof productsData === 'object') {
         if (Array.isArray(productsData)) {
-          rawProducts = productsData.filter((p: any) => 
-            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
-          ) as ProductApiResponse[];
-        } else if (productsData.products && Array.isArray(productsData.products)) {
-          rawProducts = productsData.products.filter((p: any) => 
-            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
-          ) as ProductApiResponse[];
-        } else if (!('error' in productsData) && !('statusCode' in productsData)) {
-          // Single product object
-          rawProducts = [productsData as ProductApiResponse];
+          rawProducts = (productsData.filter((p: unknown) => 
+            p && typeof p === 'object' && 'id' in p && !('error' in p) && !('statusCode' in p)
+          ) as unknown[]) as ProductApiResponse[];
+        } else {
+          const dataObj = productsData as { products?: unknown[] };
+          if (dataObj.products && Array.isArray(dataObj.products)) {
+            rawProducts = dataObj.products.filter((p: unknown) => 
+              p && typeof p === 'object' && 'id' in p && !('error' in p) && !('statusCode' in p)
+            ) as ProductApiResponse[];
+          } else if (!('error' in productsData) && !('statusCode' in productsData)) {
+            // Single product object
+            rawProducts = [productsData as ProductApiResponse];
+          }
         }
       }
       
@@ -312,7 +358,7 @@ export default function ProductsManager() {
         });
       }
 
-      const mappedProducts: Product[] = rawProducts.map((p: ProductApiResponse) => ({
+      const mappedProducts: Product[] = rawProducts.map((p: ProductApiResponse): Product => ({
         id: p.id,
         name: p.name,
         nameAr: p.nameAr || '',
@@ -406,15 +452,16 @@ export default function ProductsManager() {
   };
 
   const handleCloudinarySelect = (images: string[]) => {
-    console.log('📸 Setting image from Cloudinary:', images);
-    // Take only the first image since we're in single selection mode
-    const selectedImage = images.length > 0 ? [images[0]] : [];
-    setProductImages(selectedImage);
-    console.log('📸 New productImages state:', selectedImage);
-    toast({
-      title: 'تم الاختيار بنجاح',
-      description: 'تم تعيين الصورة من Cloudinary كصورة المنتج',
-    });
+    console.log('📸 Setting images from Cloudinary:', images);
+    // Support multiple images if the picker returns them
+    if (images.length > 0) {
+      setProductImages(prev => [...prev, ...images]);
+      console.log('📸 New productImages state:', [...productImages, ...images]);
+      toast({
+        title: 'تم الاختيار بنجاح',
+        description: `تم إضافة ${images.length} صور من Cloudinary`,
+      });
+    }
   };
 
   // Function to extract quantity from product name (e.g., "100 coin card" -> 100)
@@ -537,6 +584,9 @@ export default function ProductsManager() {
         brandId: formData.brandId || undefined,
         supplierIds: formData.supplierIds.length > 0 ? formData.supplierIds : undefined,
         tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+        min: formData.minQuantity ? parseInt(formData.minQuantity) : undefined,
+        max: formData.maxQuantity ? parseInt(formData.maxQuantity) : undefined,
+        enableSlider: formData.enableSlider || false,
         variants: [{
           name: 'Default',
           sku: formData.sku || undefined,
@@ -576,9 +626,9 @@ export default function ProductsManager() {
       toast({ title: t('common.success'), description: t('dashboard.products.delete') + ' ' + t('common.success') });
       loadData();
       setSelectedProducts(new Set());
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete product:', error);
-      const errorMessage = error?.message || 'حدث خطأ أثناء حذف المنتج';
+      const errorMessage = (error as { message?: string })?.message || 'حدث خطأ أثناء حذف المنتج';
       const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
       
       if (isNotFound) {
@@ -647,11 +697,12 @@ export default function ProductsManager() {
       
       setSelectedProducts(new Set());
       loadData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete products:', error);
+      const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'فشل حذف المنتجات';
       toast({
         title: 'خطأ',
-        description: error?.response?.data?.message || 'فشل حذف المنتجات',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -697,6 +748,9 @@ export default function ProductsManager() {
       brandId: '',
       categoryIds: [],
       supplierIds: [],
+      minQuantity: '',
+      maxQuantity: '',
+      enableSlider: false,
     });
     setProductImages([]);
   };
@@ -741,6 +795,11 @@ export default function ProductsManager() {
       odooProductId: extProduct.odooProductId || '',
       brandId: extProduct.brand?.id || '',
       supplierIds: extProduct.suppliers?.map((s) => s.supplierId || s.supplier?.id || '').filter(Boolean) || [],
+      minQuantity: product.min?.toString() || '',
+      maxQuantity: product.max?.toString() || '',
+      enableSlider: ('enableSlider' in product && typeof (product as { enableSlider?: boolean }).enableSlider === 'boolean') 
+        ? (product as { enableSlider: boolean }).enableSlider 
+        : false,
     });
     setProductImages(product.images || []);
     setIsAddDialogOpen(true);
@@ -865,7 +924,7 @@ export default function ProductsManager() {
         'ish7en_meta_description_en'
       ];
       
-      const exportData = products.map((p: any) => ({
+      const exportData = products.map((p: Product) => ({
         product_id: p.productId || p.id || '',
         sku: p.sku || '',
         price: p.price || 0,
@@ -1043,7 +1102,64 @@ export default function ProductsManager() {
       setImportProgress({ current: 0, total: totalItems, currentItem: `جاري فحص ومراجعة ${totalItems} صف...` });
       
       const validationErrors: Array<{ row: number; column: string; productName: string; error: string }> = [];
-      const validRows: Array<{ index: number; row: any; productData: any }> = [];
+      interface ExcelRow {
+        product_id?: string | number;
+        sku?: string;
+        SKU?: string;
+        price?: number | string;
+        Price?: number | string;
+        cost?: number | string;
+        coins_number?: number | string;
+        notify?: string | boolean;
+        min?: number | string;
+        max?: number | string;
+        web_status?: string | boolean;
+        mobile_status?: string | boolean;
+        purple_cards_product_name_ar?: string;
+        purple_cards_product_name_en?: string;
+        purple_cards_slug_ar?: string;
+        purple_cards_slug_en?: string;
+        purple_cards_desc_ar?: string;
+        purple_cards_desc_en?: string;
+        purple_cards_long_desc_ar?: string;
+        purple_cards_long_desc_en?: string;
+        purple_cards_meta_title_ar?: string;
+        purple_cards_meta_title_en?: string;
+        purple_cards_meta_keyword_ar?: string;
+        purple_cards_meta_keyword_en?: string;
+        purple_cards_meta_description_ar?: string;
+        purple_cards_meta_description_en?: string;
+        ish7en_product_name_ar?: string;
+        ish7en_product_name_en?: string;
+        ish7en_slug_ar?: string;
+        ish7en_slug_en?: string;
+        ish7en_desc_ar?: string;
+        ish7en_desc_en?: string;
+        ish7en_long_desc_ar?: string;
+        ish7en_long_desc_en?: string;
+        ish7en_meta_title_ar?: string;
+        ish7en_meta_title_en?: string;
+        ish7en_meta_keyword_ar?: string;
+        ish7en_meta_keyword_en?: string;
+        ish7en_meta_description_ar?: string;
+        ish7en_meta_description_en?: string;
+        Name?: string;
+        NameAr?: string;
+        Description?: string;
+        DescriptionAr?: string;
+        CompareAtPrice?: number | string;
+        Stock?: number | string;
+        Category?: string;
+        Brand?: string;
+        BrandCode?: string;
+        Status?: string;
+        Featured?: string;
+        Barcode?: string;
+        Weight?: string | number;
+        Dimensions?: string;
+        Tags?: string;
+      }
+      const validRows: Array<{ index: number; row: ExcelRow; productData: unknown }> = [];
       
       // Scan and validate all rows first
       for (let i = 0; i < totalItems; i++) {
@@ -1221,25 +1337,25 @@ export default function ProductsManager() {
                 ? (typeof row.Stock === 'string' ? parseInt(row.Stock.replace(/[^\d]/g, '')) || 0 : row.Stock)
                 : 0;
 
-              const tags = row.Tags ? row.Tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
+              const tags = row.Tags && typeof row.Tags === 'string' ? row.Tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
 
               const productSku = sku || undefined;
 
-              const variantData: any = {
+              const variantData: { name: string; price: number; inventoryQuantity: number; sku?: string; compareAtPrice?: number } = {
                 name: 'Default',
-                price,
-                inventoryQuantity: stock,
+                price: Number(price) || 0,
+                inventoryQuantity: Number(stock) || 0,
               };
 
-              const cleanString = (value: any): string | undefined => {
+              const cleanString = (value: unknown): string | undefined => {
                 if (value === null || value === undefined || value === '') return undefined;
-                const str = value.toString().trim();
+                const str = String(value).trim();
                 return str.length > 0 ? str : undefined;
               };
 
               // Find category and brand
               let categoryId: string | undefined;
-              if (row.Category) {
+              if (row.Category && typeof row.Category === 'string') {
                 const category = categories.find(c => 
                   c.name?.toLowerCase() === row.Category?.toLowerCase() ||
                   c.nameAr?.toLowerCase() === row.Category?.toLowerCase()
@@ -1248,28 +1364,82 @@ export default function ProductsManager() {
               }
 
               let brandId: string | undefined;
-              if (row.Brand || row.BrandCode) {
+              if ((row.Brand && typeof row.Brand === 'string') || (row.BrandCode && typeof row.BrandCode === 'string')) {
                 const brand = brands.find(b => 
-                  b.name?.toLowerCase() === row.Brand?.toLowerCase() ||
-                  b.nameAr?.toLowerCase() === row.Brand?.toLowerCase() ||
-                  b.code?.toLowerCase() === row.BrandCode?.toLowerCase()
+                  (row.Brand && typeof row.Brand === 'string' && b.name?.toLowerCase() === row.Brand.toLowerCase()) ||
+                  (row.Brand && typeof row.Brand === 'string' && b.nameAr?.toLowerCase() === row.Brand.toLowerCase()) ||
+                  (row.BrandCode && typeof row.BrandCode === 'string' && b.code?.toLowerCase() === row.BrandCode.toLowerCase())
                 );
                 brandId = brand?.id;
               }
 
-              const productData: any = {
+              interface ProductData {
+                name: string;
+                nameAr?: string;
+                description?: string;
+                descriptionAr?: string;
+                price: number;
+                costPerItem?: number;
+                coinsNumber?: number;
+                notify?: boolean;
+                min?: number;
+                max?: number;
+                webStatus?: boolean;
+                mobileStatus?: boolean;
+                purpleCardsProductNameAr?: string;
+                purpleCardsProductNameEn?: string;
+                purpleCardsSlugAr?: string;
+                purpleCardsSlugEn?: string;
+                purpleCardsDescAr?: string;
+                purpleCardsDescEn?: string;
+                purpleCardsLongDescAr?: string;
+                purpleCardsLongDescEn?: string;
+                purpleCardsMetaTitleAr?: string;
+                purpleCardsMetaTitleEn?: string;
+                purpleCardsMetaKeywordAr?: string;
+                purpleCardsMetaKeywordEn?: string;
+                purpleCardsMetaDescriptionAr?: string;
+                purpleCardsMetaDescriptionEn?: string;
+                ish7enProductNameAr?: string;
+                ish7enProductNameEn?: string;
+                ish7enSlugAr?: string;
+                ish7enSlugEn?: string;
+                ish7enDescAr?: string;
+                ish7enDescEn?: string;
+                ish7enLongDescAr?: string;
+                ish7enLongDescEn?: string;
+                ish7enMetaTitleAr?: string;
+                ish7enMetaTitleEn?: string;
+                ish7enMetaKeywordAr?: string;
+                ish7enMetaKeywordEn?: string;
+                ish7enMetaDescriptionAr?: string;
+                ish7enMetaDescriptionEn?: string;
+                compareAtPrice?: number;
+                sku?: string;
+                productId?: string;
+                barcode?: string;
+                weight?: number;
+                dimensions?: string;
+                tags?: string[];
+                brandId?: string;
+                categoryIds?: string[];
+                isAvailable?: boolean;
+                featured?: boolean;
+                variants: Array<{ name: string; price: number; inventoryQuantity: number; sku?: string; compareAtPrice?: number }>;
+              }
+              const productData: ProductData = {
                 name: name || productId || sku || 'Product',
                 nameAr: cleanString(row.NameAr),
                 description: cleanString(row.Description),
                 descriptionAr: cleanString(row.DescriptionAr),
-                price,
-                costPerItem: cost && !isNaN(cost) && cost > 0 ? cost : undefined,
-                coinsNumber: coinsNumber !== undefined && coinsNumber !== null ? coinsNumber : undefined,
-                notify: notify !== undefined && notify !== null ? notify : undefined,
-                min: min !== undefined && min !== null ? min : undefined,
-                max: max !== undefined && max !== null ? max : undefined,
-                webStatus: webStatus !== undefined && webStatus !== null ? webStatus : undefined,
-                mobileStatus: mobileStatus !== undefined && mobileStatus !== null ? mobileStatus : undefined,
+                price: Number(price) || 0,
+                costPerItem: cost !== undefined && cost !== null && !isNaN(Number(cost)) && Number(cost) > 0 ? Number(cost) : undefined,
+                coinsNumber: coinsNumber !== undefined && coinsNumber !== null ? Number(coinsNumber) : undefined,
+                notify: notify !== undefined && notify !== null ? Boolean(notify) : undefined,
+                min: min !== undefined && min !== null ? Number(min) : undefined,
+                max: max !== undefined && max !== null ? Number(max) : undefined,
+                webStatus: webStatus !== undefined && webStatus !== null ? Boolean(webStatus) : undefined,
+                mobileStatus: mobileStatus !== undefined && mobileStatus !== null ? Boolean(mobileStatus) : undefined,
                 purpleCardsProductNameAr: cleanString(row.purple_cards_product_name_ar),
                 purpleCardsProductNameEn: cleanString(row.purple_cards_product_name_en),
                 purpleCardsSlugAr: cleanString(row.purple_cards_slug_ar),
@@ -1298,7 +1468,7 @@ export default function ProductsManager() {
                 ish7enMetaKeywordEn: cleanString(row.ish7en_meta_keyword_en),
                 ish7enMetaDescriptionAr: cleanString(row.ish7en_meta_description_ar),
                 ish7enMetaDescriptionEn: cleanString(row.ish7en_meta_description_en),
-                compareAtPrice: compareAtPrice && !isNaN(compareAtPrice) && compareAtPrice > 0 ? compareAtPrice : undefined,
+                compareAtPrice: compareAtPrice !== undefined && compareAtPrice !== null && !isNaN(Number(compareAtPrice)) && Number(compareAtPrice) > 0 ? Number(compareAtPrice) : undefined,
                 ...(productSku ? { sku: productSku } : {}),
                 ...(productId ? { productId: productId } : {}),
                 barcode: cleanString(row.Barcode),
@@ -1307,7 +1477,7 @@ export default function ProductsManager() {
                 tags: tags.length > 0 ? tags : undefined,
                 brandId: brandId || undefined,
                 categoryIds: categoryId ? [categoryId] : undefined,
-                isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED' && row.Status !== 'draft' && row.Status !== 'archived',
+                isAvailable: row.Status !== 'DRAFT' && row.Status !== 'ARCHIVED' && row.Status !== 'draft' && row.Status !== 'archived' && row.Status !== undefined,
                 featured: row.Featured === 'Yes' || row.Featured === 'true' || row.Featured === 'TRUE' || row.Featured === '1',
                 variants: [variantData]
               };
@@ -1324,20 +1494,21 @@ export default function ProductsManager() {
               await coreApi.createProduct(productData, true);
               successCount++;
               
-            } catch (error: any) {
+            } catch (error: unknown) {
               console.error(`❌ Error uploading product at row ${rowNum}:`, error);
               
               let userFriendlyError = 'حدث خطأ غير معروف';
               let errorColumn = 'General';
               
-              const errorMessage = error?.message || error?.data?.message || error?.response?.data?.message || '';
+              const errorObj = error as { message?: string; data?: { message?: string }; response?: { data?: { message?: string } }; status?: number };
+              const errorMessage = errorObj?.message || errorObj?.data?.message || errorObj?.response?.data?.message || '';
                 
-              if (error?.status === 403) {
+              if (errorObj?.status === 403) {
                 importAbortRef.current = true;
                 userFriendlyError = 'يجب إعداد متجر أولاً.';
-              } else if (error?.status === 400) {
+              } else if (errorObj?.status === 400) {
                 userFriendlyError = 'بيانات غير صحيحة.';
-              } else if (error?.status === 404) {
+              } else if (errorObj?.status === 404) {
                 userFriendlyError = 'الفئة أو العلامة التجارية غير موجودة.';
                 errorColumn = 'Category';
               }
@@ -1436,12 +1607,12 @@ export default function ProductsManager() {
     }
   };
 
-  const stats = {
-    total: products.length,
-    active: products.filter((p: Product) => p.status === 'ACTIVE').length,
-    lowStock: products.filter((p: Product) => p.stock <= (p as any).lowStockThreshold).length,
-    outOfStock: products.filter((p: Product) => p.stock === 0).length,
-  };
+    const stats = {
+      total: products.length,
+      active: products.filter((p: Product) => p.status === 'ACTIVE').length,
+      lowStock: products.filter((p: Product) => p.stock <= p.lowStockThreshold).length,
+      outOfStock: products.filter((p: Product) => p.stock === 0).length,
+    };
 
   return (
     <div className="space-y-6">
@@ -1791,6 +1962,52 @@ export default function ProductsManager() {
                     onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
                     placeholder="123456789"
                   />
+                </div>
+
+                {/* Quantity Slider Section for Supplier API Integration */}
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="enableSlider" className="text-base font-semibold">
+                        شريط الكمية للشراء (Slider)
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        تفعيل شريط اختيار الكمية عند الشراء - جاهز للتكامل مع واجهات الموردين
+                      </p>
+                    </div>
+                    <Switch
+                      id="enableSlider"
+                      checked={formData.enableSlider}
+                      onCheckedChange={(checked) => setFormData({ ...formData, enableSlider: checked })}
+                    />
+                  </div>
+                  
+                  {formData.enableSlider && (
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div>
+                        <Label htmlFor="minQuantity">الحد الأدنى للكمية</Label>
+                        <Input
+                          id="minQuantity"
+                          type="number"
+                          min="1"
+                          value={formData.minQuantity}
+                          onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
+                          placeholder="1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="maxQuantity">الحد الأقصى للكمية</Label>
+                        <Input
+                          id="maxQuantity"
+                          type="number"
+                          min="1"
+                          value={formData.maxQuantity}
+                          onChange={(e) => setFormData({ ...formData, maxQuantity: e.target.value })}
+                          placeholder="100"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
 

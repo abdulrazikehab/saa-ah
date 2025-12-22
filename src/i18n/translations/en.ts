@@ -52,11 +52,17 @@ export const en = {
   },
   landing: {
     hero: {
+      badge: 'Your Digital Markets Platform',
       title: 'Create Your Online Store in',
       titleHighlight: 'Minutes',
       subtitle: 'The easiest and fastest platform to start your e-commerce journey. No technical experience required.',
       cta: 'Start Now for Free',
+      startFree: 'Start Free',
+      watchDemo: 'Watch Demo',
       demo: 'View Demo Store',
+      readyIn5: 'Ready in 5 Minutes',
+      support247: '24/7 Support',
+      noCreditCard: 'No Credit Card Required',
       stats: {
         merchants: '10k+ Merchants',
         sales: '100M+ Sales',

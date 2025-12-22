@@ -11,10 +11,17 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/services/auth.service';
 import { tenantService } from '@/services/tenant.service';
+import { apiClient } from '@/lib/api';
 
 interface MarketFormData {
   name: string;
   description: string;
+  subdomain: string;
+}
+
+interface SubdomainCheckResult {
+  available: boolean;
+  suggestions?: string[];
 }
 
 export default function MarketSetup() {
@@ -29,7 +36,12 @@ export default function MarketSetup() {
   const [formData, setFormData] = useState<MarketFormData>({
     name: '',
     description: '',
+    subdomain: '',
   });
+  const [subdomainSuggestions, setSubdomainSuggestions] = useState<string[]>([]);
+  const [checkingSubdomain, setCheckingSubdomain] = useState(false);
+  const [isSubdomainAvailable, setIsSubdomainAvailable] = useState<boolean | null>(null);
+  const [showSubdomainChoices, setShowSubdomainChoices] = useState(false);
 
   // Check if user can create another market
   useEffect(() => {
@@ -107,11 +119,63 @@ export default function MarketSetup() {
     return subdomain;
   };
 
+  // Check subdomain availability when store name changes
+  useEffect(() => {
+    if (!formData.name || formData.name.trim().length < 3) {
+      setFormData(prev => ({ ...prev, subdomain: '' }));
+      setIsSubdomainAvailable(null);
+      setSubdomainSuggestions([]);
+      setShowSubdomainChoices(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const baseSubdomain = generateSubdomain(formData.name);
+      
+      if (baseSubdomain.length < 3) return;
+
+      setCheckingSubdomain(true);
+      try {
+        const response = await apiClient.get(`/public/check-subdomain?subdomain=${encodeURIComponent(baseSubdomain)}`) as SubdomainCheckResult;
+        
+        if (response.available) {
+          setIsSubdomainAvailable(true);
+          setFormData(prev => ({ ...prev, subdomain: baseSubdomain }));
+          setSubdomainSuggestions([]);
+          setShowSubdomainChoices(false);
+        } else {
+          setIsSubdomainAvailable(false);
+          setSubdomainSuggestions(response.suggestions || []);
+          setShowSubdomainChoices(true);
+          // Don't set subdomain yet, user must pick one
+          setFormData(prev => ({ ...prev, subdomain: '' }));
+        }
+      } catch (error) {
+        console.error('Failed to check subdomain:', error);
+        // On error, assume available and use generated subdomain
+        setIsSubdomainAvailable(true);
+        setFormData(prev => ({ ...prev, subdomain: baseSubdomain }));
+        setSubdomainSuggestions([]);
+        setShowSubdomainChoices(false);
+      } finally {
+        setCheckingSubdomain(false);
+      }
+    }, 600); // Debounce for 600ms
+
+    return () => clearTimeout(timer);
+  }, [formData.name]);
+
   const handleInputChange = (field: keyof MarketFormData, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleSelectSubdomain = (selectedSubdomain: string) => {
+    setFormData(prev => ({ ...prev, subdomain: selectedSubdomain }));
+    setIsSubdomainAvailable(true);
+    setShowSubdomainChoices(false);
   };
 
   const handleSubmit = async () => {
@@ -124,57 +188,33 @@ export default function MarketSetup() {
       return;
     }
 
-    // Auto-generate subdomain from store name
-    let subdomain = generateSubdomain(formData.name);
-    
-    // If subdomain is still too short or invalid, use a fallback
-    if (subdomain.length < 3 || !/^[a-z0-9-]+$/.test(subdomain)) {
-      // Generate a unique subdomain using timestamp
-      const timestamp = Date.now().toString().slice(-6);
-      subdomain = `store-${timestamp}`;
+    // Validate subdomain is selected
+    if (!formData.subdomain || !formData.subdomain.trim()) {
+      toast({
+        title: isRTL ? 'خطأ' : 'Error',
+        description: isRTL ? 'يرجى اختيار عنوان المتجر (Subdomain)' : 'Please select a store subdomain',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate subdomain format
+    if (!/^[a-z0-9-]+$/.test(formData.subdomain) || formData.subdomain.length < 3) {
+      toast({
+        title: isRTL ? 'خطأ' : 'Error',
+        description: isRTL ? 'عنوان المتجر غير صحيح' : 'Invalid subdomain format',
+        variant: 'destructive',
+      });
+      return;
     }
 
     setLoading(true);
     try {
-      // Try to create market with generated subdomain
-      // If subdomain is taken, backend will return 409, and we'll retry with a unique suffix
-      let attempts = 0;
-      const maxAttempts = 5;
-      let created = false;
-      let lastError: any = null;
-
-      while (attempts < maxAttempts && !created) {
-        try {
-          await tenantService.setupMarket({
-            name: formData.name.trim(),
-            description: formData.description.trim() || undefined,
-            subdomain: subdomain,
-          });
-          created = true;
-        } catch (error: any) {
-          lastError = error;
-          
-          // If subdomain conflict (409), generate a new one with random suffix
-          if (error?.status === 409 || error?.data?.message?.includes('already taken') || error?.data?.message?.includes('Subdomain')) {
-            attempts++;
-            if (attempts < maxAttempts) {
-              // Add random suffix to make it unique
-              const randomSuffix = Math.floor(Math.random() * 10000);
-              const baseSubdomain = generateSubdomain(formData.name);
-              subdomain = `${baseSubdomain}-${randomSuffix}`;
-              console.log(`Subdomain conflict, trying: ${subdomain}`);
-              continue; // Retry with new subdomain
-            }
-          } else {
-            // For other errors, throw immediately
-            throw error;
-          }
-        }
-      }
-
-      if (!created) {
-        throw lastError || new Error('Failed to create market after multiple attempts');
-      }
+      await tenantService.setupMarket({
+        name: formData.name.trim(),
+        description: formData.description.trim() || undefined,
+        subdomain: formData.subdomain.trim(),
+      });
 
       // Refresh user to get updated markets
       await refreshUser();
@@ -193,38 +233,39 @@ export default function MarketSetup() {
       console.error('Error creating market:', error);
       
       // Extract error message from various possible formats
-      let errorMessage = error?.message || '';
+      let errorMessage = '';
       
-      // Check for validation errors (400 Bad Request)
-      if (error?.status === 400) {
-        if (error?.data?.message) {
-          if (Array.isArray(error.data.message)) {
-            errorMessage = error.data.message.join(', ');
-          } else {
-            errorMessage = error.data.message;
-          }
-        } else if (error?.response?.data?.message) {
-          if (Array.isArray(error.response.data.message)) {
-            errorMessage = error.response.data.message.join(', ');
-          } else {
-            errorMessage = error.response.data.message;
-          }
-        } else if (typeof error?.data === 'string') {
-          errorMessage = error.data;
+      // 1. Try to get message from error object directly (usually set by ApiError)
+      if (typeof error?.message === 'string') {
+        errorMessage = error.message;
+      }
+      
+      // 2. Check for detailed error response in data
+      if (error?.data?.message) {
+        const msg = error.data.message;
+        if (Array.isArray(msg)) {
+          errorMessage = msg.join(', ');
+        } else if (typeof msg === 'object' && msg !== null) {
+          // Handle nested error object (e.g. { message: "...", error: "...", statusCode: ... })
+          // This fixes the "Objects are not valid as a React child" error
+          errorMessage = (msg as any).message || JSON.stringify(msg);
+        } else if (msg) {
+          errorMessage = String(msg);
         }
-      } else if (error?.data?.message) {
-        errorMessage = Array.isArray(error.data.message) 
-          ? error.data.message.join(', ') 
-          : error.data.message;
       } else if (typeof error?.data === 'string') {
         errorMessage = error.data;
       }
       
-      // If still no message, use default
-      if (!errorMessage || errorMessage === 'An error occurred') {
+      // 3. If still no message, use default
+      if (!errorMessage || errorMessage === 'An error occurred' || errorMessage === '[object Object]') {
         errorMessage = isRTL 
           ? 'فشل إنشاء المتجر. يرجى التحقق من البيانات والمحاولة مرة أخرى.' 
           : 'Failed to create store. Please check the data and try again.';
+      }
+      
+      // 4. Final safety check: Ensure errorMessage is a string
+      if (typeof errorMessage !== 'string') {
+        errorMessage = JSON.stringify(errorMessage);
       }
       
       toast({
@@ -319,20 +360,79 @@ export default function MarketSetup() {
             />
           </div>
 
-          {/* Subdomain preview - auto-generated from store name */}
+          {/* Subdomain Selection Section */}
           {formData.name.trim() && (
-            <div className="space-y-2">
-              <Label>{isRTL ? 'رابط المتجر' : 'Store URL'}</Label>
-              <div className="flex items-center gap-2 p-3 bg-muted rounded-lg border">
-                <span className="font-mono text-sm text-foreground">
-                  {generateSubdomain(formData.name) || 'store'}.saeaa.com
-                </span>
+            <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">
+                  {isRTL ? 'عنوان المتجر (Subdomain)' : 'Store Subdomain'} *
+                </Label>
+                {checkingSubdomain ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                ) : isSubdomainAvailable ? (
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                ) : isSubdomainAvailable === false ? (
+                  <AlertCircle className="h-4 w-4 text-destructive" />
+                ) : null}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {isRTL 
-                  ? 'سيتم إنشاء النطاق الفرعي تلقائياً من اسم المتجر عند الضغط على "إنشاء المتجر"' 
-                  : 'Subdomain will be automatically generated from store name when you click "Create Store"'}
-              </p>
+
+              {/* Show selected/available subdomain */}
+              {formData.subdomain && isSubdomainAvailable && (
+                <div className="flex items-center gap-2 p-3 bg-background rounded-lg border border-success/20">
+                  <span className="font-mono text-sm font-semibold text-foreground">
+                    {formData.subdomain}.saeaa.com
+                  </span>
+                  <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
+                </div>
+              )}
+
+              {/* Show 3 choices if subdomain is duplicate */}
+              {showSubdomainChoices && subdomainSuggestions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-destructive font-medium">
+                    {isRTL 
+                      ? 'هذا العنوان محجوز، اختر واحداً من الاقتراحات التالية:' 
+                      : 'This subdomain is taken, please choose one of the following:'}
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {subdomainSuggestions.slice(0, 3).map((suggestion) => (
+                      <Button
+                        key={suggestion}
+                        type="button"
+                        variant={formData.subdomain === suggestion ? "default" : "outline"}
+                        className="h-auto py-3 justify-start"
+                        onClick={() => handleSelectSubdomain(suggestion)}
+                        disabled={loading}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-mono text-sm">
+                            {suggestion}.saeaa.com
+                          </span>
+                          {formData.subdomain === suggestion && (
+                            <CheckCircle2 className="h-4 w-4 text-success" />
+                          )}
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Show checking message */}
+              {checkingSubdomain && (
+                <p className="text-xs text-muted-foreground">
+                  {isRTL ? 'جاري التحقق من توفر العنوان...' : 'Checking availability...'}
+                </p>
+              )}
+
+              {/* Show preview if no subdomain selected yet */}
+              {!formData.subdomain && !checkingSubdomain && !showSubdomainChoices && (
+                <p className="text-xs text-muted-foreground">
+                  {isRTL 
+                    ? 'سيتم إنشاء العنوان تلقائياً من اسم المتجر' 
+                    : 'Subdomain will be automatically generated from store name'}
+                </p>
+              )}
             </div>
           )}
 

@@ -17,12 +17,14 @@ import { Progress } from '@/components/ui/progress';
 import { ImageUpload } from '@/components/ui/image-upload';
 import { ImportProgressDialog } from '@/components/ui/import-progress-dialog';
 import { ImportErrorDialog, ImportError } from '@/components/ui/import-error-dialog';
+import { CloudinaryImagePicker } from '@/components/dashboard/CloudinaryImagePicker';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
+import { Cloud } from 'lucide-react';
 
 // Interfaces for Customer Tiers & Offers
 interface Customer {
@@ -84,6 +86,7 @@ export default function CategoriesManager() {
   const [showImportErrorDialog, setShowImportErrorDialog] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showCloudinaryPicker, setShowCloudinaryPicker] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     nameAr: '',
@@ -95,6 +98,10 @@ export default function CategoriesManager() {
     parentId: '',
     isActive: true,
     sortOrder: 0,
+    minQuantity: '',
+    maxQuantity: '',
+    enableSlider: false,
+    applySliderToAllProducts: false,
   });
 
   // Active tab
@@ -182,6 +189,10 @@ export default function CategoriesManager() {
         parentId: category.parentId || '',
         isActive: category.isActive !== undefined ? category.isActive : true,
         sortOrder: category.sortOrder || 0,
+        minQuantity: (category as any).minQuantity?.toString() || '',
+        maxQuantity: (category as any).maxQuantity?.toString() || '',
+        enableSlider: (category as any).enableSlider || false,
+        applySliderToAllProducts: (category as any).applySliderToAllProducts || false,
       });
     } else {
       setEditingCategory(null);
@@ -196,6 +207,10 @@ export default function CategoriesManager() {
         parentId: '',
         isActive: true,
         sortOrder: 0,
+        minQuantity: '',
+        maxQuantity: '',
+        enableSlider: false,
+        applySliderToAllProducts: false,
       });
     }
     setDialogOpen(true);
@@ -802,7 +817,11 @@ export default function CategoriesManager() {
                 {t('categories.productCategories.import')}
               </Button>
             </div>
-            <Button onClick={() => handleOpenDialog()} size="lg">
+            <Button 
+              onClick={() => handleOpenDialog()} 
+              size="lg"
+              className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+            >
               <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
               {t('categories.productCategories.addCategory')}
             </Button>
@@ -1268,9 +1287,82 @@ export default function CategoriesManager() {
                     className="[&>div]:aspect-square [&>div]:h-40 mx-auto"
                   />
                 </div>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowCloudinaryPicker(true);
+                    }}
+                    className="gap-2"
+                  >
+                    <Cloud className="h-4 w-4" />
+                    اختر من Cloudinary
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   {t('categories.productCategories.logoHint')}
                 </p>
+              </div>
+
+              {/* Quantity Slider Section for Supplier API Integration */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="enableSlider" className="text-base font-semibold">
+                      شريط الكمية للشراء (Slider)
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      تفعيل شريط اختيار الكمية عند الشراء - سيتم تطبيقه على جميع منتجات هذه الفئة
+                    </p>
+                  </div>
+                  <Switch
+                    id="enableSlider"
+                    checked={formData.enableSlider}
+                    onCheckedChange={(checked) => setFormData({ ...formData, enableSlider: checked })}
+                  />
+                </div>
+                
+                {formData.enableSlider && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div>
+                        <Label htmlFor="minQuantity">الحد الأدنى للكمية</Label>
+                        <Input
+                          id="minQuantity"
+                          type="number"
+                          min="1"
+                          value={formData.minQuantity}
+                          onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
+                          placeholder="1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="maxQuantity">الحد الأقصى للكمية</Label>
+                        <Input
+                          id="maxQuantity"
+                          type="number"
+                          min="1"
+                          value={formData.maxQuantity}
+                          onChange={(e) => setFormData({ ...formData, maxQuantity: e.target.value })}
+                          placeholder="100"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2 pt-2">
+                      <Switch
+                        id="applySliderToAllProducts"
+                        checked={formData.applySliderToAllProducts}
+                        onCheckedChange={(checked) => setFormData({ ...formData, applySliderToAllProducts: checked })}
+                      />
+                      <Label htmlFor="applySliderToAllProducts" className="text-sm">
+                        تطبيق على جميع منتجات هذه الفئة
+                      </Label>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Status Section */}
@@ -1664,6 +1756,24 @@ export default function CategoriesManager() {
         progress={importProgress}
         title="جاري استيراد الفئات"
         description="يرجى الانتظار أثناء استيراد الفئات من ملف Excel..."
+      />
+
+      {/* Cloudinary Image Picker */}
+      <CloudinaryImagePicker
+        open={showCloudinaryPicker}
+        onOpenChange={(open) => {
+          setShowCloudinaryPicker(open);
+        }}
+        onSelect={(images) => {
+          if (images.length > 0) {
+            setFormData({ ...formData, image: images[0] });
+            toast({
+              title: 'تم الاختيار بنجاح',
+              description: `تم اختيار صورة من Cloudinary`,
+            });
+          }
+        }}
+        multiple={false}
       />
 
       {/* Import Errors Dialog - Shows failed rows with details */}

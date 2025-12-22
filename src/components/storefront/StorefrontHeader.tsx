@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useCart } from '@/contexts/CartContext';
 import { cn } from '@/lib/utils';
 import { isMainDomain } from '@/lib/domain';
+import { UserProfile, SiteConfig, Category, Link as SiteLink } from '@/services/types';
 
 interface StorefrontHeaderProps {
   cartItemCount?: number;
@@ -31,9 +32,9 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
   const [searchQuery, setSearchQuery] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [language, setLanguage] = useState<'ar' | 'en'>(i18n.language as 'ar' | 'en' || 'ar');
-  const [customerData, setCustomerData] = useState<any>(null);
-  const [siteConfig, setSiteConfig] = useState<any>(null);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [customerData, setCustomerData] = useState<UserProfile | null>(null);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [showCategories, setShowCategories] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
@@ -49,7 +50,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
   useEffect(() => {
     const isMain = isMainDomain();
 
-    if (location.state && (location.state as any).showLogin && isMain) {
+    if (location.state && (location.state as { showLogin?: boolean }).showLogin && isMain) {
       setShowLogin(true);
       navigate(location.pathname, { replace: true, state: {} });
     }
@@ -91,15 +92,15 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const data = await coreApi.get('/categories');
+        const data = await coreApi.get('/categories', { requireAuth: false });
         if (data && typeof data === 'object' && !('error' in data) && !('statusCode' in data)) {
           if (Array.isArray(data)) {
-            const validCategories = data.filter((c: any) => 
+            const validCategories = data.filter((c: Category) => 
               c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
             );
             setCategories(validCategories);
           } else if (data.categories && Array.isArray(data.categories)) {
-            const validCategories = data.categories.filter((c: any) => 
+            const validCategories = data.categories.filter((c: Category) => 
               c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
             );
             setCategories(validCategories);
@@ -295,7 +296,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                   >
                     <div className="py-2 max-h-96 overflow-y-auto scrollbar-thin">
                       {categories.length > 0 ? (
-                        categories.map((category: any, index: number) => (
+                        categories.map((category: Category, index: number) => (
                           <Link
                             key={category.id}
                             to={`/categories/${category.id}`}
@@ -340,7 +341,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
 
               {/* Desktop Navigation */}
               <nav className="hidden lg:flex items-center gap-1">
-                {headerLinks.map((link: any, index: number) => {
+                {headerLinks.map((link: SiteLink, index: number) => {
                   const label = String(language === 'ar' ? (link?.labelAr || link?.label || '') : (link?.label || ''));
                   const url = String(link?.url || '#');
                   const isActive = isActivePath(url);
@@ -357,7 +358,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                         </button>
                         <div className="absolute top-full left-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
                           <div className="w-48 rounded-xl shadow-xl border border-border/50 overflow-hidden glass-effect-strong">
-                            {link.children?.map((child: any, childIndex: number) => {
+                            {link.children && Array.isArray(link.children) && (link.children as SiteLink[]).map((child: SiteLink, childIndex: number) => {
                               const childLabel = String(language === 'ar' ? (child?.labelAr || child?.label || '') : (child?.label || ''));
                               return (
                                 <Link
@@ -399,7 +400,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                 })}
                 
                 {/* Custom Buttons */}
-                {headerButtons.map((button: any, index: number) => {
+                {headerButtons.map((button: SiteLink & { variant?: string }, index: number) => {
                   const buttonLabel = String(button?.label || '');
                   const buttonUrl = String(button?.url || '#');
                   const isPrimary = button.variant === 'primary';
@@ -593,7 +594,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
         {showMobileMenu && (
           <div className="lg:hidden border-t border-border/30 glass-effect-strong animate-slide-down">
             <nav className="container mx-auto px-4 py-4 flex flex-col gap-2">
-              {headerLinks.map((link: any, index: number) => {
+              {headerLinks.map((link: SiteLink, index: number) => {
                 const label = String(language === 'ar' ? (link?.labelAr || link?.label || '') : (link?.label || ''));
                 const url = String(link?.url || '#');
                 const isActive = isActivePath(url);
@@ -606,7 +607,7 @@ export function StorefrontHeader({ cartItemCount: propCount = 0, onSearch }: Sto
                         <ChevronDown className="h-4 w-4 opacity-50" />
                       </div>
                       <div className="pr-4 border-r-2 border-primary/30 mr-4 space-y-1">
-                        {link.children?.map((child: any, childIndex: number) => {
+                        {link.children && Array.isArray(link.children) && (link.children as SiteLink[]).map((child: SiteLink, childIndex: number) => {
                           const childLabel = String(language === 'ar' ? (child?.labelAr || child?.label || '') : (child?.label || ''));
                           return (
                             <Link

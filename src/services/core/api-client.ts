@@ -221,69 +221,89 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       const data = await response.json().catch(() => ({}));
       
       // Handle 401 Unauthorized with automatic token refresh
-      if (response.status === 401 && requireAuth && !_retry) {
-        if (isRefreshing) {
-          // Wait for the ongoing refresh to complete
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          }).then(() => {
-            // Retry the original request with new token (only once)
-            return fetchApi(url, { ...options, _retry: true });
-          });
-        }
+      if (response.status === 401) {
+        console.log(`[API] 401 Unauthorized: ${url}, requireAuth: ${requireAuth}, _retry: ${_retry}`);
+        
+        if (requireAuth && !_retry) {
+          if (isRefreshing) {
+            // Wait for the ongoing refresh to complete
+            console.log('[API] Waiting for ongoing refresh...');
+            return new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject });
+            }).then(() => {
+              // Retry the original request with new token (only once)
+              return fetchApi(url, { ...options, _retry: true });
+            });
+          }
 
-        isRefreshing = true;
+          isRefreshing = true;
+          console.log('[API] Attempting token refresh...');
 
-        try {
-          const newToken = await refreshAccessToken();
-          
-          if (newToken) {
-            processQueue(null, newToken);
+          try {
+            const newToken = await refreshAccessToken();
+
+            if (newToken) {
+              processQueue(null, newToken);
+              isRefreshing = false;
+              console.log('[API] Refresh successful, retrying request...');
+              return fetchApi(url, { ...options, _retry: true });
+            } else {
+              console.error('[API] Refresh failed: newToken is null');
+              processQueue(new Error('Token refresh failed'), null);
+              isRefreshing = false;
+              
+              // Clear invalid tokens
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+              document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+              document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+              localStorage.removeItem('user');
+              localStorage.removeItem('customerToken');
+              localStorage.removeItem('customerData');
+
+              // Only redirect if auth was strictly required
+              if (requireAuth && !window.location.pathname.includes('/auth/login')) {
+                console.log('[API] Redirecting to login (refresh failed)');
+                window.location.href = '/auth/login';
+              }
+              throw new ApiError(401, 'Session expired. Please login again.');
+            }
+          } catch (refreshError) {
+            console.error('[API] Refresh failed:', refreshError);
+            processQueue(refreshError instanceof Error ? refreshError : new Error('Unknown error'), null);
             isRefreshing = false;
-            // Retry the original request with new token (only once)
-            return fetchApi(url, { ...options, _retry: true });
-          } else {
-            processQueue(new Error('Token refresh failed'), null);
-            isRefreshing = false;
-            // Clear invalid tokens
+            
+            // Refresh failed, clear tokens
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
             document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-            
-            // Only redirect if auth was strictly required
-            if (requireAuth) {
-              const loginPath = isMainDomain() ? '/auth/login' : '/auth/login';
-              window.location.href = loginPath;
+            localStorage.removeItem('user');
+            localStorage.removeItem('customerToken');
+            localStorage.removeItem('customerData');
+
+            if (requireAuth && !window.location.pathname.includes('/auth/login')) {
+              console.log('[API] Redirecting to login (refresh error)');
+              window.location.href = '/auth/login';
             }
             throw new ApiError(401, 'Session expired. Please login again.');
           }
-        } catch (error) {
-          processQueue(error instanceof Error ? error : new Error('Unknown error'), null);
-          isRefreshing = false;
-          // Clear invalid tokens
+        } else if (requireAuth && _retry) {
+          // If we get 401 after retry, don't try again
+          console.log('[API] 401 after retry, clearing tokens');
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
           document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-          // Prevent infinite redirects - only redirect if not already on login page
-          if (requireAuth && !window.location.pathname.includes('/auth/login')) {
+          
+          if (!window.location.pathname.includes('/auth/login')) {
+            console.log('[API] Redirecting to login (retry failed)');
             window.location.href = '/auth/login';
           }
-          throw new ApiError(401, 'Session expired. Please login again.');
+          throw new ApiError(401, 'Authentication failed. Please login again.');
+        } else if (!requireAuth) {
+          console.log('[API] 401 on public endpoint, ignoring redirect');
         }
-      }
-
-      // If we get 401 after retry, don't try again - just throw the error
-      if (response.status === 401 && _retry) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || 'Authentication failed. Please login again.';
-        // Clear tokens as they're invalid
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        throw new ApiError(401, errorMessage, errorData);
       }
 
       let errorMessage = data.message || 'An error occurred';

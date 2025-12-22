@@ -47,7 +47,7 @@ export function SupportTicketsSection({ props }: { props: any }) {
       setLoading(true);
       // Try to fetch actual support tickets first
       try {
-        const ticketsData = await coreApi.get('/support-tickets', { requireAuth: true });
+        const ticketsData = await coreApi.get('/support-tickets', { requireAuth: false });
         if (Array.isArray(ticketsData)) {
           setTickets(ticketsData);
         } else if (ticketsData?.tickets && Array.isArray(ticketsData.tickets)) {
@@ -58,7 +58,7 @@ export function SupportTicketsSection({ props }: { props: any }) {
       } catch (error) {
         // Fallback to orders if support tickets endpoint doesn't exist yet
         console.log('Support tickets endpoint not available, using orders as fallback');
-        const orders = await apiClient.fetch(`${apiClient.coreUrl}/merchant/orders?status=PENDING`, { requireAuth: true }).catch(() => ({ items: [] }));
+        const orders = await apiClient.fetch(`${apiClient.coreUrl}/merchant/orders?status=PENDING`, { requireAuth: false }).catch(() => ({ items: [] }));
         const ticketsData = (orders?.items || []).map((order: any) => ({
           id: order.id,
           dateAdded: order.createdAt,
@@ -306,8 +306,8 @@ export function FavoritesPageSection({ props }: { props: any }) {
     try {
       setLoading(true);
       const [favoritesData, cartData] = await Promise.all([
-        apiClient.fetch(`${apiClient.coreUrl}/merchant/favorites?type=product`, { requireAuth: true }).catch(() => []),
-        apiClient.fetch(`${apiClient.coreUrl}/merchant/cart`, { requireAuth: true }).catch(() => ({ items: [] }))
+        apiClient.fetch(`${apiClient.coreUrl}/merchant/favorites?type=product`, { requireAuth: false }).catch(() => []),
+        apiClient.fetch(`${apiClient.coreUrl}/merchant/cart`, { requireAuth: false }).catch(() => ({ items: [] }))
       ]);
 
       // CRITICAL: Validate data is not error objects before setting state
@@ -523,8 +523,8 @@ export function BalanceOperationsSection({ props }: { props: any }) {
   const loadTransactions = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.fetch(`${apiClient.coreUrl}/merchant/wallet/transactions`, { requireAuth: true })
-        .catch(() => apiClient.fetch(`${apiClient.coreUrl}/transactions`, { requireAuth: true }))
+      const response = await apiClient.fetch(`${apiClient.coreUrl}/merchant/wallet/transactions`, { requireAuth: false })
+        .catch(() => apiClient.fetch(`${apiClient.coreUrl}/transactions`, { requireAuth: false }))
         .catch(() => ({ items: [] }));
       
       setTransactions(response?.items || response?.transactions || []);
@@ -677,7 +677,7 @@ export function EmployeesPageSection({ props }: { props: any }) {
   const loadCustomers = async () => {
     try {
       setLoadingCustomers(true);
-      const response = await coreApi.get('/dashboard/customers', { requireAuth: true });
+      const response = await coreApi.get('/dashboard/customers', { requireAuth: false });
       console.log('🛒 EmployeesPageSection: Customers response:', response);
       
       // Backend returns { customers: [...], total: number, page: number, limit: number }
@@ -725,7 +725,7 @@ export function EmployeesPageSection({ props }: { props: any }) {
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.fetch(`${apiClient.coreUrl}/merchant/employees`, { requireAuth: true }).catch(() => []);
+      const response = await apiClient.fetch(`${apiClient.coreUrl}/merchant/employees`, { requireAuth: false }).catch(() => []);
       const employeesList = Array.isArray(response) ? response : [];
       setAllEmployees(employeesList);
       setEmployees(employeesList);
@@ -1377,7 +1377,7 @@ export function ChargeWalletSection({ props }: { props: any }) {
 
   const loadBanks = async () => {
     try {
-      const response = await apiClient.fetch(`${apiClient.coreUrl}/merchant/wallet/banks`, { requireAuth: true }).catch(() => []);
+      const response = await apiClient.fetch(`${apiClient.coreUrl}/merchant/wallet/banks`, { requireAuth: false }).catch(() => []);
       setBanks(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error('Failed to load banks:', error);
@@ -1647,7 +1647,7 @@ export function ReportsPageSection({ props }: { props: any }) {
       setLoading(true);
       const [brandsData, productReport] = await Promise.all([
         apiClient.fetch(`${apiClient.coreUrl}/brands`, { requireAuth: false }).catch(() => []),
-        apiClient.fetch(`${apiClient.coreUrl}/merchant/dashboard/reports/top-profitable-products`, { requireAuth: true }).catch(() => ({ products: [] }))
+        apiClient.fetch(`${apiClient.coreUrl}/merchant/dashboard/reports/top-profitable-products`, { requireAuth: false }).catch(() => ({ products: [] }))
       ]);
 
       setBrands(Array.isArray(brandsData) ? brandsData : []);
@@ -1830,9 +1830,9 @@ export function ProfilePageSection({ props }: { props: any }) {
     try {
       setLoading(true);
       const [profileData, balanceData, documentsData] = await Promise.all([
-        apiClient.fetch(`${apiClient.coreUrl}/merchant/profile`, { requireAuth: true }).catch(() => null),
-        apiClient.fetch(`${apiClient.coreUrl}/transactions/balance`, { requireAuth: true }).catch(() => ({ balance: 0 })),
-        apiClient.fetch(`${apiClient.coreUrl}/merchant/profile/documents`, { requireAuth: true }).catch(() => [])
+        apiClient.fetch(`${apiClient.coreUrl}/merchant/profile`, { requireAuth: false }).catch(() => null),
+        apiClient.fetch(`${apiClient.coreUrl}/transactions/balance`, { requireAuth: false }).catch(() => ({ balance: 0 })),
+        apiClient.fetch(`${apiClient.coreUrl}/merchant/profile/documents`, { requireAuth: false }).catch(() => [])
       ]);
 
       setProfile(profileData);
