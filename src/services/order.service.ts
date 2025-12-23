@@ -9,10 +9,25 @@ export const orderService = {
       requireAuth: true,
     }),
 
-  getOrders: (): Promise<Order[]> =>
-    apiClient.fetch(`${apiClient.coreUrl}/orders`, {
+  getOrders: async (params?: { page?: number; limit?: number; status?: string }): Promise<Order[] | { data: Order[]; meta: { total: number; page: number; limit: number; totalPages: number } }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.set('page', params.page.toString());
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+    if (params?.status) queryParams.set('status', params.status);
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    
+    const response = await apiClient.fetch(`${apiClient.coreUrl}/orders${queryString}`, {
       requireAuth: true,
-    }),
+    });
+    
+    // Handle paginated response
+    if (response && typeof response === 'object' && 'data' in response && 'meta' in response) {
+      return response as { data: Order[]; meta: { total: number; page: number; limit: number; totalPages: number } };
+    }
+    
+    // Legacy array response
+    return (response as Order[]) || [];
+  },
 
   getOrder: (id: string): Promise<Order> =>
     apiClient.fetch(`${apiClient.coreUrl}/orders/${id}`, {

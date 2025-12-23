@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { coreApi, reportService } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Download, Search, TrendingUp, DollarSign, Receipt, Calendar } from 'lucide-react';
 import { writeFile, utils } from 'xlsx';
 import { formatCurrency } from '@/lib/currency-utils';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface ProductReportItem {
   id: string;
@@ -63,6 +64,17 @@ export default function Reports() {
   const [totalTax, setTotalTax] = useState(0);
   const [totalAfterTax, setTotalAfterTax] = useState(0);
 
+  // Pagination states for each tab
+  const [productsPage, setProductsPage] = useState(1);
+  const [productsPerPage, setProductsPerPage] = useState(20);
+  const [productsTotalItems, setProductsTotalItems] = useState(0);
+  const [productsTotalPages, setProductsTotalPages] = useState(1);
+  const [productsSearch, setProductsSearch] = useState('');
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersPerPage, setOrdersPerPage] = useState(20);
+  const [orderDetailsPage, setOrderDetailsPage] = useState(1);
+  const [orderDetailsPerPage, setOrderDetailsPerPage] = useState(10);
+
   // Load brands
   const loadBrands = useCallback(async () => {
     try {
@@ -74,16 +86,34 @@ export default function Reports() {
     }
   }, []);
 
-  // Load products report
+  // Load products report with server-side pagination
   const loadProductsReport = useCallback(async () => {
     try {
-      const products = await reportService.getProductReport();
-      setProductReport(products);
+      const response = await reportService.getProductReport({
+        page: productsPage,
+        limit: productsPerPage,
+        search: productsSearch || undefined,
+      });
+      
+      // Handle paginated response
+      if (response && 'data' in response && 'meta' in response) {
+        setProductReport(response.data);
+        setProductsTotalItems(response.meta.total);
+        setProductsTotalPages(response.meta.totalPages);
+      } else {
+        // Legacy array response
+        const productsArray = Array.isArray(response) ? response : [];
+        setProductReport(productsArray);
+        setProductsTotalItems(productsArray.length);
+        setProductsTotalPages(1);
+      }
     } catch (error) {
       console.error('Failed to load products report:', error);
       setProductReport([]);
+      setProductsTotalItems(0);
+      setProductsTotalPages(1);
     }
-  }, []);
+  }, [productsPage, productsPerPage, productsSearch]);
 
   // Load orders
   const loadOrders = useCallback(async () => {
@@ -148,21 +178,49 @@ export default function Reports() {
     }
   }, [activeTab, startDate, endDate, searchTerm, loadOrders]);
 
-  // Filter products by brand and search
-  const filteredProducts = productReport.filter(product => {
-    if (searchTerm) {
-      return product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Products are already paginated from server, use directly
+  const paginatedProducts = productReport;
+
+  // Handle product search with debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm !== productsSearch) {
+        setProductsSearch(searchTerm);
+        setProductsPage(1); // Reset to page 1 when search changes
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm, productsSearch]);
+
+  // Reload products when pagination changes
+  useEffect(() => {
+    if (activeTab === 'products') {
+      loadProductsReport();
     }
-    return true;
-  });
+  }, [productsPage, productsPerPage, productsSearch, activeTab, loadProductsReport]);
+
+  // Paginated orders
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (ordersPage - 1) * ordersPerPage;
+    return orders.slice(startIndex, startIndex + ordersPerPage);
+  }, [orders, ordersPage, ordersPerPage]);
+
+  const ordersTotalPages = Math.ceil(orders.length / ordersPerPage);
+
+  // Paginated order details
+  const paginatedOrderDetails = useMemo(() => {
+    const startIndex = (orderDetailsPage - 1) * orderDetailsPerPage;
+    return orders.slice(startIndex, startIndex + orderDetailsPerPage);
+  }, [orders, orderDetailsPage, orderDetailsPerPage]);
+
+  const orderDetailsTotalPages = Math.ceil(orders.length / orderDetailsPerPage);
 
   // Export to Excel
   const handleExportExcel = () => {
     const wb = utils.book_new();
     
     if (activeTab === 'products') {
-      const productsData = filteredProducts.map(product => ({
+      const productsData = productReport.map(product => ({
         [t('dashboard.reports.productName')]: product.name,
         [t('dashboard.reports.sku')]: product.sku || '',
         [t('dashboard.reports.stock')]: product.stock,
@@ -312,32 +370,47 @@ export default function Reports() {
         <TabsContent value="products" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>{t('dashboard.reports.productReport')}</CardTitle>
+              <CardTitle>{t('dashboard.reports.productReport')} ({productsTotalItems})</CardTitle>
             </CardHeader>
             <CardContent>
-              {filteredProducts.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('dashboard.reports.productName')}</TableHead>
-                      <TableHead>{t('dashboard.reports.sku')}</TableHead>
-                      <TableHead>{t('dashboard.reports.stock')}</TableHead>
-                      <TableHead>{t('dashboard.reports.salesCount')}</TableHead>
-                      <TableHead>{t('dashboard.reports.revenue')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredProducts.map((product) => (
-                      <TableRow key={product.id}>
-                        <TableCell>{product.name}</TableCell>
-                        <TableCell>{product.sku || '-'}</TableCell>
-                        <TableCell>{product.stock}</TableCell>
-                        <TableCell>{product.salesCount}</TableCell>
-                        <TableCell>{formatCurrency(product.revenue, 'SAR')}</TableCell>
+              {productsTotalItems > 0 ? (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('dashboard.reports.productName')}</TableHead>
+                        <TableHead>{t('dashboard.reports.sku')}</TableHead>
+                        <TableHead>{t('dashboard.reports.stock')}</TableHead>
+                        <TableHead>{t('dashboard.reports.salesCount')}</TableHead>
+                        <TableHead>{t('dashboard.reports.revenue')}</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedProducts.map((product) => (
+                        <TableRow key={product.id}>
+                          <TableCell>{product.name}</TableCell>
+                          <TableCell>{product.sku || '-'}</TableCell>
+                          <TableCell>{product.stock}</TableCell>
+                          <TableCell>{product.salesCount}</TableCell>
+                          <TableCell>{formatCurrency(product.revenue, 'SAR')}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Pagination for Products */}
+                  <DataTablePagination
+                    currentPage={productsPage}
+                    totalPages={productsTotalPages}
+                    totalItems={productsTotalItems}
+                    itemsPerPage={productsPerPage}
+                    onPageChange={setProductsPage}
+                    onItemsPerPageChange={(val) => { setProductsPerPage(val); setProductsPage(1); }}
+                    itemsPerPageOptions={[10, 20, 50, 100]}
+                    showItemsPerPage={true}
+                    className="border-t mt-4"
+                  />
+                </>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <p>{t('dashboard.reports.noData')}</p>
@@ -351,46 +424,61 @@ export default function Reports() {
         <TabsContent value="orders" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>{t('dashboard.reports.orderReport')}</CardTitle>
+              <CardTitle>{t('dashboard.reports.orderReport')} ({orders.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {orders.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('dashboard.reports.orderNo')}</TableHead>
-                      <TableHead>{t('dashboard.orders.customer')}</TableHead>
-                      <TableHead>{t('dashboard.reports.email')}</TableHead>
-                      <TableHead>{t('dashboard.reports.subtotal')}</TableHead>
-                      <TableHead>{t('dashboard.reports.tax')}</TableHead>
-                      <TableHead>{t('dashboard.reports.total')}</TableHead>
-                      <TableHead>{t('dashboard.orders.status')}</TableHead>
-                      <TableHead>{t('dashboard.reports.orderDate')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell>{order.orderNumber}</TableCell>
-                        <TableCell>{order.customerName || '-'}</TableCell>
-                        <TableCell>{order.customerEmail}</TableCell>
-                        <TableCell>{formatCurrency(order.subtotal || 0, 'SAR')}</TableCell>
-                        <TableCell>{formatCurrency(order.taxAmount || 0, 'SAR')}</TableCell>
-                        <TableCell>{formatCurrency(order.totalAmount, 'SAR')}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded text-xs ${
-                            order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                            order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {order.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('dashboard.reports.orderNo')}</TableHead>
+                        <TableHead>{t('dashboard.orders.customer')}</TableHead>
+                        <TableHead>{t('dashboard.reports.email')}</TableHead>
+                        <TableHead>{t('dashboard.reports.subtotal')}</TableHead>
+                        <TableHead>{t('dashboard.reports.tax')}</TableHead>
+                        <TableHead>{t('dashboard.reports.total')}</TableHead>
+                        <TableHead>{t('dashboard.orders.status')}</TableHead>
+                        <TableHead>{t('dashboard.reports.orderDate')}</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedOrders.map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell>{order.orderNumber}</TableCell>
+                          <TableCell>{order.customerName || '-'}</TableCell>
+                          <TableCell>{order.customerEmail}</TableCell>
+                          <TableCell>{formatCurrency(order.subtotal || 0, 'SAR')}</TableCell>
+                          <TableCell>{formatCurrency(order.taxAmount || 0, 'SAR')}</TableCell>
+                          <TableCell>{formatCurrency(order.totalAmount, 'SAR')}</TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                              order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Pagination for Orders */}
+                  <DataTablePagination
+                    currentPage={ordersPage}
+                    totalPages={ordersTotalPages}
+                    totalItems={orders.length}
+                    itemsPerPage={ordersPerPage}
+                    onPageChange={setOrdersPage}
+                    onItemsPerPageChange={(val) => { setOrdersPerPage(val); setOrdersPage(1); }}
+                    itemsPerPageOptions={[10, 20, 50, 100]}
+                    showItemsPerPage={true}
+                    className="border-t mt-4"
+                  />
+                </>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <p>{t('dashboard.reports.noData')}</p>
@@ -404,61 +492,76 @@ export default function Reports() {
         <TabsContent value="orderDetails" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>{t('dashboard.reports.orderDetails')}</CardTitle>
+              <CardTitle>{t('dashboard.reports.orderDetails')} ({orders.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {orders.length > 0 ? (
-                <div className="space-y-4">
-                  {orders.map((order) => (
-                    <Card key={order.id} className="p-4">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="font-bold">{t('dashboard.reports.orderNo')}: {order.orderNumber}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {order.customerName || order.customerEmail}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleDateString()}
-                          </p>
+                <>
+                  <div className="space-y-4">
+                    {paginatedOrderDetails.map((order) => (
+                      <Card key={order.id} className="p-4">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="font-bold">{t('dashboard.reports.orderNo')}: {order.orderNumber}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {order.customerName || order.customerEmail}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(order.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold">{formatCurrency(order.totalAmount, 'SAR')}</p>
+                            <p className="text-sm text-muted-foreground">{t('dashboard.orders.status')}: {order.status}</p>
+                            <p className="text-sm text-muted-foreground">{t('dashboard.reports.payment')}: {order.paymentStatus}</p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold">{formatCurrency(order.totalAmount, 'SAR')}</p>
-                          <p className="text-sm text-muted-foreground">{t('dashboard.orders.status')}: {order.status}</p>
-                          <p className="text-sm text-muted-foreground">{t('dashboard.reports.payment')}: {order.paymentStatus}</p>
-                        </div>
-                      </div>
-                      {order.items && order.items.length > 0 && (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>{t('dashboard.reports.products')}</TableHead>
-                              <TableHead>{t('dashboard.reports.quantity')}</TableHead>
-                              <TableHead>{t('dashboard.products.price')}</TableHead>
-                              <TableHead>{t('dashboard.reports.itemTotal')}</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {order.items.map((item, index) => (
-                              <TableRow key={index}>
-                                <TableCell>{item.product?.nameAr || item.product?.name || '-'}</TableCell>
-                                <TableCell>{item.quantity}</TableCell>
-                                <TableCell>{formatCurrency(item.price, 'SAR')}</TableCell>
-                                <TableCell>{formatCurrency(item.price * item.quantity, 'SAR')}</TableCell>
+                        {order.items && order.items.length > 0 && (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>{t('dashboard.reports.products')}</TableHead>
+                                <TableHead>{t('dashboard.reports.quantity')}</TableHead>
+                                <TableHead>{t('dashboard.products.price')}</TableHead>
+                                <TableHead>{t('dashboard.reports.itemTotal')}</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <div className="mt-4 pt-4 border-t flex justify-end gap-4">
-                        <div className="text-right">
-                          <p className="text-sm">{t('dashboard.reports.subtotal')}: {formatCurrency(order.subtotal || 0, 'SAR')}</p>
-                          <p className="text-sm">{t('dashboard.reports.tax')}: {formatCurrency(order.taxAmount || 0, 'SAR')}</p>
-                          <p className="font-bold">{t('dashboard.reports.total')}: {formatCurrency(order.totalAmount, 'SAR')}</p>
+                            </TableHeader>
+                            <TableBody>
+                              {order.items.map((item, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{item.product?.nameAr || item.product?.name || '-'}</TableCell>
+                                  <TableCell>{item.quantity}</TableCell>
+                                  <TableCell>{formatCurrency(item.price, 'SAR')}</TableCell>
+                                  <TableCell>{formatCurrency(item.price * item.quantity, 'SAR')}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                        <div className="mt-4 pt-4 border-t flex justify-end gap-4">
+                          <div className="text-right">
+                            <p className="text-sm">{t('dashboard.reports.subtotal')}: {formatCurrency(order.subtotal || 0, 'SAR')}</p>
+                            <p className="text-sm">{t('dashboard.reports.tax')}: {formatCurrency(order.taxAmount || 0, 'SAR')}</p>
+                            <p className="font-bold">{t('dashboard.reports.total')}: {formatCurrency(order.totalAmount, 'SAR')}</p>
+                          </div>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                      </Card>
+                    ))}
+                  </div>
+                  
+                  {/* Pagination for Order Details */}
+                  <DataTablePagination
+                    currentPage={orderDetailsPage}
+                    totalPages={orderDetailsTotalPages}
+                    totalItems={orders.length}
+                    itemsPerPage={orderDetailsPerPage}
+                    onPageChange={setOrderDetailsPage}
+                    onItemsPerPageChange={(val) => { setOrderDetailsPerPage(val); setOrderDetailsPage(1); }}
+                    itemsPerPageOptions={[5, 10, 20, 50]}
+                    showItemsPerPage={true}
+                    className="border-t mt-4"
+                  />
+                </>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <p>{t('dashboard.reports.noData')}</p>

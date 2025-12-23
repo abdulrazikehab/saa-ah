@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, Edit2, Save, X, DollarSign, TrendingUp, TrendingDown, Package, Loader2, Download, Upload, RefreshCw, Plus, Minus } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Search, Filter, Edit2, Save, X, DollarSign, TrendingUp, TrendingDown, Package, Loader2, Download, Upload, RefreshCw, Plus, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface Product {
   id: string;
@@ -61,18 +62,34 @@ export default function PriceManager() {
   const [bulkUpdateDirection, setBulkUpdateDirection] = useState<'increase' | 'decrease'>('increase');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [productsData, categoriesData, brandsData] = await Promise.all([
-        coreApi.getProducts({ limit: '10000' } as any),
+      const [productsResponse, categoriesData, brandsData] = await Promise.all([
+        coreApi.getProducts({ page: currentPage, limit: itemsPerPage }),
         coreApi.getCategories(),
         coreApi.getBrands().catch(() => []),
       ]);
+
+      // Handle paginated response
+      let productsData: any[] = [];
+      if (productsResponse && typeof productsResponse === 'object' && 'data' in productsResponse && 'meta' in productsResponse) {
+        const paginatedResponse = productsResponse as { data: any[]; meta: { total: number; page: number; limit: number; totalPages: number } };
+        productsData = paginatedResponse.data;
+        setTotalItems(paginatedResponse.meta.total);
+        setTotalPages(paginatedResponse.meta.totalPages);
+      } else {
+        // Legacy array response
+        productsData = Array.isArray(productsResponse) ? productsResponse : [];
+        setTotalItems(productsData.length);
+        setTotalPages(1);
+      }
 
       const mappedProducts: Product[] = productsData.map((p: any) => ({
         id: p.id,
@@ -105,7 +122,12 @@ export default function PriceManager() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, currentPage, itemsPerPage]);
+
+  // Load data on mount and when pagination changes
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -614,6 +636,21 @@ export default function PriceManager() {
                 </TableBody>
               </Table>
             </div>
+          )}
+
+          {/* Pagination Controls */}
+          {!loading && totalItems > 0 && (
+            <DataTablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+              itemsPerPageOptions={[10, 20, 50, 100]}
+              showItemsPerPage={true}
+              className="border-t mt-4"
+            />
           )}
         </CardContent>
       </Card>

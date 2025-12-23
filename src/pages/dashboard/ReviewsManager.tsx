@@ -13,6 +13,7 @@ import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface Review {
   id: string;
@@ -48,10 +49,29 @@ export default function ReviewsManager() {
   const [responseText, setResponseText] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const loadReviews = useCallback(async () => {
     try {
-      const data = await coreApi.get('/reviews', { requireAuth: true });
-      setReviews(data.reviews || []);
+      setLoading(true);
+      const response = await coreApi.get(`/reviews?page=${currentPage}&limit=${itemsPerPage}`, { requireAuth: true });
+      
+      // Handle paginated response
+      if (response && 'data' in response && 'meta' in response) {
+        setReviews(response.data);
+        setTotalItems(response.meta.total);
+        setTotalPages(response.meta.totalPages);
+      } else {
+        // Legacy response
+        const reviewsArray = response.reviews || [];
+        setReviews(reviewsArray);
+        setTotalItems(reviewsArray.length);
+        setTotalPages(1);
+      }
     } catch (error) {
       console.error('Failed to load reviews:', error);
       toast({
@@ -62,7 +82,7 @@ export default function ReviewsManager() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, currentPage, itemsPerPage]);
 
   useEffect(() => {
     loadReviews();
@@ -393,21 +413,6 @@ export default function ReviewsManager() {
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />
                         </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Response Dialog */}
-      <Dialog open={isResponseDialogOpen} onOpenChange={setIsResponseDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>الرد على التقييم</DialogTitle>
             <DialogDescription>
               أضف ردك على تقييم العميل
             </DialogDescription>

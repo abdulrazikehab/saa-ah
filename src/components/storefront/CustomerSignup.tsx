@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight, Download, Sparkles } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Lock, User, Eye, EyeOff, X, Phone, Shield, Key, Copy, CheckCircle2, ArrowRight, Download, Sparkles, MessageSquare } from 'lucide-react';
 import { apiClient } from '@/services/core/api-client';
 import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 import { useTranslation } from 'react-i18next';
@@ -32,6 +32,10 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
   const [recoveryId, setRecoveryId] = useState<string | null>(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const [copiedRecovery, setCopiedRecovery] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [signupEmail, setSignupEmail] = useState<string>('');
 
   // Calculate password strength
   useEffect(() => {
@@ -142,20 +146,29 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
         }
       );
       
-      localStorage.setItem('customerToken', response.token);
-      localStorage.setItem('customerData', JSON.stringify(response.customer));
-      
-      if (response.recoveryId) {
-        setRecoveryId(response.recoveryId);
-        setShowRecoveryModal(true);
+      // Check if OTP was sent
+      if (response.verificationCodeSent || response.verificationCode) {
+        setSignupEmail(email);
+        setShowOtpModal(true);
       } else {
-        toast({
-          title: isRTL ? 'تم إنشاء الحساب بنجاح' : 'Account created successfully',
-          description: isRTL ? 'مرحباً بك في متجرنا' : 'Welcome to our store!',
-        });
-        
-        onSignupSuccess?.();
-        onClose();
+        // Fallback: if no OTP needed (shouldn't happen with new flow)
+        if (response.token && response.customer) {
+          localStorage.setItem('customerToken', response.token);
+          localStorage.setItem('customerData', JSON.stringify(response.customer));
+          
+          if (response.recoveryId) {
+            setRecoveryId(response.recoveryId);
+            setShowRecoveryModal(true);
+          } else {
+            toast({
+              title: isRTL ? 'تم إنشاء الحساب بنجاح' : 'Account created successfully',
+              description: isRTL ? 'مرحباً بك في متجرنا' : 'Welcome to our store!',
+            });
+            
+            onSignupSuccess?.();
+            onClose();
+          }
+        }
       }
     } catch (error: unknown) {
       const { title, description } = getProfessionalErrorMessage(
@@ -173,8 +186,244 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
     }
   };
 
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      toast({
+        variant: 'destructive',
+        title: isRTL ? 'خطأ' : 'Error',
+        description: isRTL ? 'يرجى إدخال رمز التحقق المكون من 6 أرقام' : 'Please enter a 6-digit verification code',
+      });
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const tenantContext = getTenantContext();
+      const headers: Record<string, string> = {};
+      if (tenantContext.subdomain) {
+        headers['X-Tenant-Domain'] = tenantContext.domain;
+      }
+
+      const result = await apiClient.post(
+        `${apiClient.authUrl}/customers/verify-email`,
+        {
+          email: signupEmail,
+          code: otpCode,
+        },
+        {
+          requireAuth: false,
+          headers,
+        }
+      );
+      
+      if (result.valid && result.token) {
+        // Store tokens and customer data
+        localStorage.setItem('customerToken', result.token);
+        localStorage.setItem('customerData', JSON.stringify(result.customer));
+        
+        // Close OTP modal
+        setShowOtpModal(false);
+        
+        // Show recovery ID if available
+        if (result.recoveryId) {
+          setRecoveryId(result.recoveryId);
+          setShowRecoveryModal(true);
+        } else {
+          toast({
+            title: isRTL ? 'تم التحقق بنجاح!' : 'Verification successful!',
+            description: isRTL ? 'تم إنشاء حسابك بنجاح. مرحباً بك!' : 'Your account has been created successfully. Welcome!',
+          });
+          
+          onSignupSuccess?.();
+          onClose();
+        }
+      } else {
+        toast({
+          variant: 'destructive',
+          title: isRTL ? 'خطأ' : 'Error',
+          description: result.message || (isRTL ? 'رمز التحقق غير صحيح' : 'Invalid verification code'),
+        });
+      }
+    } catch (error: unknown) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'التحقق' : 'verify', resource: isRTL ? 'البريد الإلكتروني' : 'email' },
+        isRTL
+      );
+      toast({
+        variant: 'destructive',
+        title,
+        description,
+      });
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setOtpLoading(true);
+    try {
+      const tenantContext = getTenantContext();
+      const headers: Record<string, string> = {};
+      if (tenantContext.subdomain) {
+        headers['X-Tenant-Domain'] = tenantContext.domain;
+      }
+
+      await apiClient.post(
+        `${apiClient.authUrl}/customers/resend-verification-code`,
+        {
+          email: signupEmail,
+        },
+        {
+          requireAuth: false,
+          headers,
+        }
+      );
+      
+      toast({
+        title: isRTL ? 'تم الإرسال!' : 'Sent!',
+        description: isRTL ? 'تم إرسال رمز التحقق الجديد إلى بريدك الإلكتروني' : 'A new verification code has been sent to your email',
+      });
+      setOtpCode('');
+    } catch (error: unknown) {
+      const { title, description } = getProfessionalErrorMessage(
+        error,
+        { operation: isRTL ? 'إعادة إرسال' : 'resend', resource: isRTL ? 'رمز التحقق' : 'verification code' },
+        isRTL
+      );
+      toast({
+        variant: 'destructive',
+        title,
+        description,
+      });
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto animate-fade-in">
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div 
+          className="w-full max-w-md relative animate-scale-in z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowOtpModal(false);
+            }
+          }}
+        >
+          <div className="relative overflow-hidden rounded-3xl glass-effect-strong border border-border/50 shadow-2xl">
+            <div className="absolute top-0 left-0 right-0 h-1 gradient-aurora animate-gradient bg-[length:200%_auto]" />
+            
+            <button
+              onClick={() => setShowOtpModal(false)}
+              className="absolute left-4 top-4 p-2.5 rounded-xl bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all z-10"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="relative pt-10 pb-6 px-8 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl gradient-primary shadow-lg">
+                <MessageSquare className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold gradient-text mb-2">
+                {isRTL ? 'تحقق من بريدك الإلكتروني' : 'Verify Your Email'}
+              </h2>
+              <p className="text-muted-foreground">
+                {isRTL ? 'أدخل رمز التحقق المرسل إلى بريدك' : 'Enter the verification code sent to your email'}
+              </p>
+            </div>
+
+            <div className="relative px-8 pb-8">
+              <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <Mail className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-primary">
+                    <p className="font-semibold mb-1">{isRTL ? 'تحقق من بريدك الإلكتروني' : 'Check your email'}</p>
+                    <p>{isRTL ? 'تم إرسال رمز التحقق المكون من 6 أرقام إلى:' : 'A 6-digit verification code has been sent to:'}</p>
+                    <p className="font-mono font-bold mt-1">{signupEmail}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="otp" className="text-sm font-medium">
+                    {isRTL ? 'رمز التحقق' : 'Verification Code'}
+                  </Label>
+                  <Input
+                    id="otp"
+                    type="text"
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setOtpCode(value);
+                    }}
+                    className="h-12 text-center text-2xl font-mono tracking-widest rounded-xl"
+                    maxLength={6}
+                    disabled={otpLoading}
+                  />
+                  <p className="text-xs text-muted-foreground text-center">
+                    {isRTL ? 'يرجى إدخال الرمز المكون من 6 أرقام' : 'Please enter the 6-digit code'}
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Button
+                    onClick={handleVerifyOtp}
+                    className="w-full h-12 text-base font-semibold rounded-xl gradient-primary text-white shadow-lg hover:shadow-glow transition-all"
+                    disabled={otpLoading || otpCode.length !== 6}
+                  >
+                    {otpLoading ? (
+                      <>
+                        <Loader2 className={cn("h-5 w-5 animate-spin", isRTL ? "ml-2" : "mr-2")} />
+                        {isRTL ? 'جاري التحقق...' : 'Verifying...'}
+                      </>
+                    ) : (
+                      <>
+                        {isRTL ? 'التحقق' : 'Verify'}
+                        <ArrowRight className={cn("w-4 h-4", isRTL ? "mr-2" : "ml-2")} />
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    onClick={handleResendOtp}
+                    variant="outline"
+                    className="w-full h-12 rounded-xl"
+                    disabled={otpLoading}
+                  >
+                    {otpLoading ? (
+                      <Loader2 className={cn("h-5 w-5 animate-spin", isRTL ? "ml-2" : "mr-2")} />
+                    ) : (
+                      <>
+                        <Mail className={cn("w-4 h-4", isRTL ? "ml-2" : "mr-2")} />
+                        {isRTL ? 'إعادة إرسال الرمز' : 'Resend Code'}
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    onClick={() => {
+                      setShowOtpModal(false);
+                      setOtpCode('');
+                    }}
+                    variant="ghost"
+                    className="w-full h-12 rounded-xl text-muted-foreground hover:text-foreground"
+                    disabled={otpLoading}
+                  >
+                    <X className={cn("w-4 h-4", isRTL ? "ml-2" : "mr-2")} />
+                    {isRTL ? 'إلغاء' : 'Cancel'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showRecoveryModal && recoveryId ? (
         <div className="w-full max-w-md relative animate-scale-in">
           <div className="relative overflow-hidden rounded-3xl glass-effect-strong border border-border/50 shadow-2xl">

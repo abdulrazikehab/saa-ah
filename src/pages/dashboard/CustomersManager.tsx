@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface Customer {
   id: string;
@@ -61,6 +62,12 @@ export default function CustomersManager() {
     email: '',
     phone: ''
   });
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const openCreateCustomer = () => {
     setCustomerForm({ name: '', email: '', phone: '' });
@@ -132,8 +139,20 @@ export default function CustomersManager() {
   const loadCustomers = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await coreApi.get('/dashboard/customers', { requireAuth: true });
-      setCustomers(Array.isArray(data) ? data : (data.customers || []));
+      const response = await coreApi.get(`/dashboard/customers?page=${currentPage}&limit=${itemsPerPage}`, { requireAuth: true });
+      
+      // Handle paginated response
+      if (response && 'data' in response && 'meta' in response) {
+        setCustomers(response.data);
+        setTotalItems(response.meta.total);
+        setTotalPages(response.meta.totalPages);
+      } else {
+        // Legacy response
+        const customersArray = Array.isArray(response) ? response : (response.customers || []);
+        setCustomers(customersArray);
+        setTotalItems(customersArray.length);
+        setTotalPages(1);
+      }
     } catch (error) {
       console.error('Failed to load customers:', error);
       toast({
@@ -145,7 +164,7 @@ export default function CustomersManager() {
     } finally {
       setLoading(false);
     }
-  }, [toast, t]);
+  }, [toast, t, currentPage, itemsPerPage]);
 
   const loadLoyaltyPrograms = useCallback(async () => {
     try {
@@ -443,6 +462,21 @@ export default function CustomersManager() {
                     ))}
                   </TableBody>
                 </Table>
+              )}
+
+              {/* Pagination Controls */}
+              {!loading && totalItems > 0 && (
+                <DataTablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={setItemsPerPage}
+                  itemsPerPageOptions={[10, 20, 50, 100]}
+                  showItemsPerPage={true}
+                  className="border-t mt-4"
+                />
               )}
             </CardContent>
           </Card>

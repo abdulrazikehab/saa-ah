@@ -35,6 +35,7 @@ import { coreApi, reportService } from '@/lib/api';
 import { ProductReportItem, CustomerReportItem, PaymentReportItem } from '@/services/report.service';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '@/lib/currency-utils';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 const COLORS = ['#06b6d4', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -53,6 +54,13 @@ export default function ReportsPage() {
   const [paymentReport, setPaymentReport] = useState<PaymentReportItem[]>([]);
   const [chartMetric, setChartMetric] = useState<'revenue' | 'orders'>('revenue');
   const [originalSalesData, setOriginalSalesData] = useState<{ name: string; revenue: number; orders: number }[]>([]);
+
+  // Pagination state for products report
+  const [productsPage, setProductsPage] = useState(1);
+  const [productsPerPage, setProductsPerPage] = useState(20);
+  const [productsTotalItems, setProductsTotalItems] = useState(0);
+  const [productsTotalPages, setProductsTotalPages] = useState(1);
+  const [productsLoading, setProductsLoading] = useState(false);
 
   // Calculate date ranges based on selected period
   const getDateRanges = (range: string) => {
@@ -110,7 +118,7 @@ export default function ReportsPage() {
       const [allOrdersData, statsData, productsData, customersData, paymentsData] = await Promise.all([
         coreApi.getOrders(),
         coreApi.get('/dashboard/stats'),
-        reportService.getProductReport(),
+        reportService.getProductReport({ page: productsPage, limit: productsPerPage }),
         reportService.getCustomerReport(),
         reportService.getPaymentReport()
       ]);
@@ -149,7 +157,14 @@ export default function ReportsPage() {
         customerCount: statsData.customerCount, // Customers don't have date-based comparison
       });
 
-      setProductReport(productsData);
+      // Handle paginated product response
+      const productsResult = productsData && 'data' in productsData 
+        ? productsData 
+        : { data: Array.isArray(productsData) ? productsData : [], meta: { total: 0, totalPages: 1 } };
+      
+      setProductReport(productsResult.data);
+      setProductsTotalItems(productsResult.meta?.total || productsResult.data.length);
+      setProductsTotalPages(productsResult.meta?.totalPages || 1);
       setCustomerReport(customersData);
       setPaymentReport(paymentsData);
 
@@ -166,7 +181,37 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange]);
+  }, [dateRange, productsPage, productsPerPage]);
+
+  // Separate function to reload just products when pagination changes
+  const loadProductsReport = useCallback(async () => {
+    try {
+      setProductsLoading(true);
+      const productsData = await reportService.getProductReport({ 
+        page: productsPage, 
+        limit: productsPerPage 
+      });
+      
+      const productsResult = productsData && 'data' in productsData 
+        ? productsData 
+        : { data: Array.isArray(productsData) ? productsData : [], meta: { total: 0, totalPages: 1 } };
+      
+      setProductReport(productsResult.data);
+      setProductsTotalItems(productsResult.meta?.total || productsResult.data.length);
+      setProductsTotalPages(productsResult.meta?.totalPages || 1);
+    } catch (error) {
+      console.error('Failed to load products:', error);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [productsPage, productsPerPage]);
+
+  // Reload products when pagination changes (but not on initial load)
+  useEffect(() => {
+    if (!loading) {
+      loadProductsReport();
+    }
+  }, [productsPage, productsPerPage, loadProductsReport, loading]);
 
   useEffect(() => {
     loadReportData();
@@ -472,28 +517,55 @@ export default function ReportsPage() {
         <TabsContent value="products" className="space-y-6">
           <Card>
             <CardHeader className="border-b">
-              <CardTitle>{t('dashboard.reports.productPerformance')}</CardTitle>
-              <CardDescription>{t('dashboard.reports.topSellingProducts')}</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{t('dashboard.reports.productPerformance')} ({productsTotalItems})</CardTitle>
+                  <CardDescription>{t('dashboard.reports.topSellingProducts')}</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="space-y-8">
-                {productReport.map((product) => (
-                  <div key={product.id} className="flex items-center">
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium leading-none">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {product.salesCount} {t('dashboard.reports.sales')}
-                      </p>
-                    </div>
-                    <div className="text-left font-medium">
-                      {product.revenue.toFixed(2)} {t('common.currency')}
-                    </div>
+              <div className={`space-y-4 ${productsLoading ? 'opacity-50' : ''} transition-opacity`}>
+                {productsLoading && productReport.length === 0 ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                   </div>
-                ))}
-                {productReport.length === 0 && (
-                  <p className="text-center text-muted-foreground py-8">{t('dashboard.reports.noProductData')}</p>
+                ) : (
+                  <>
+                    {productReport.map((product) => (
+                      <div key={product.id} className="flex items-center p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium leading-none">{product.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {product.salesCount} {t('dashboard.reports.sales')} | SKU: {product.sku || 'N/A'}
+                          </p>
+                        </div>
+                        <div className="text-left font-medium">
+                          {product.revenue.toFixed(2)} {t('common.currency')}
+                        </div>
+                      </div>
+                    ))}
+                    {productReport.length === 0 && !productsLoading && (
+                      <p className="text-center text-muted-foreground py-8">{t('dashboard.reports.noProductData')}</p>
+                    )}
+                  </>
                 )}
               </div>
+              
+              {/* Pagination Controls */}
+              {productsTotalItems > 0 && (
+                <DataTablePagination
+                  currentPage={productsPage}
+                  totalPages={productsTotalPages}
+                  totalItems={productsTotalItems}
+                  itemsPerPage={productsPerPage}
+                  onPageChange={setProductsPage}
+                  onItemsPerPageChange={(val) => { setProductsPerPage(val); setProductsPage(1); }}
+                  itemsPerPageOptions={[10, 20, 50, 100]}
+                  showItemsPerPage={true}
+                  className="border-t mt-4 pt-4"
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>

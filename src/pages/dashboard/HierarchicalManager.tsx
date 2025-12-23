@@ -111,14 +111,7 @@ export default function HierarchicalManager() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>المستكشف الهرمي</CardTitle>
-          <CardDescription>
-            المسار: العلامة التجارية → الفئة → الفئة الفرعية → ... → المنتج
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <div className="mt-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
@@ -250,8 +243,7 @@ export default function HierarchicalManager() {
               onProductsUpdate={loadData}
             />
           )}
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

@@ -127,7 +127,9 @@ export default function OrdersManager() {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Top-up requests state
   const [topUpRequests, setTopUpRequests] = useState<TopUpRequest[]>([]);
@@ -140,8 +142,24 @@ export default function OrdersManager() {
   const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.getOrders() as any;
-      setOrders(Array.isArray(response) ? response : (response?.orders || []));
+      const response = await coreApi.getOrders({ 
+        page: currentPage, 
+        limit: itemsPerPage,
+        status: filterStatus !== 'all' ? filterStatus : undefined 
+      });
+      
+      // Handle paginated response
+      if (response && 'data' in response && 'meta' in response) {
+        setOrders(response.data);
+        setTotalItems(response.meta.total);
+        setTotalPages(response.meta.totalPages);
+      } else {
+        // Legacy array response
+        const ordersArray = Array.isArray(response) ? response : ((response as any)?.orders || []);
+        setOrders(ordersArray);
+        setTotalItems(ordersArray.length);
+        setTotalPages(Math.ceil(ordersArray.length / itemsPerPage));
+      }
     } catch (error) {
       console.error('Failed to load orders:', error);
       toast({
@@ -151,7 +169,7 @@ export default function OrdersManager() {
     } finally {
       setLoading(false);
     }
-  }, [toast, t]);
+  }, [toast, t, currentPage, itemsPerPage, filterStatus]);
 
   useEffect(() => {
     loadOrders();
@@ -220,26 +238,21 @@ export default function OrdersManager() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
+  // For client-side search filtering (server already handles status)
   const filteredOrders = orders.filter(order => {
+    if (!searchQuery) return true;
     const matchesSearch = 
       order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customer?.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
-    
-    return matchesSearch && matchesStatus;
+    return matchesSearch;
   });
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
-  const currentOrders = filteredOrders.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Use filtered orders directly since pagination is server-side
+  const currentOrders = filteredOrders;
 
   const stats = {
-    total: orders.length,
+    total: totalItems, // Use totalItems from server response
     pending: orders.filter(o => o.status === 'PENDING').length,
     processing: orders.filter(o => o.status === 'PROCESSING').length,
     shipped: orders.filter(o => o.status === 'SHIPPED').length,

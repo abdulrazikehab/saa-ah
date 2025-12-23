@@ -1,30 +1,25 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Loader2, FolderOpen, Download, Upload, Users, Gift, Percent, Tag, AlertCircle } from 'lucide-react';
+import { Download, Upload, Users, FolderOpen, Gift, Plus, Trash2, Tag, Pencil, Percent, Loader2 } from 'lucide-react';
 import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { ImageUpload } from '@/components/ui/image-upload';
 import { ImportProgressDialog } from '@/components/ui/import-progress-dialog';
 import { ImportErrorDialog, ImportError } from '@/components/ui/import-error-dialog';
-import { CloudinaryImagePicker } from '@/components/dashboard/CloudinaryImagePicker';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
-import { useTabUpdatesContext } from '@/contexts/TabUpdatesContext';
+
 import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
-import { Cloud } from 'lucide-react';
+
+
 
 // Interfaces for Customer Tiers & Offers
 interface Customer {
@@ -72,37 +67,20 @@ export default function CategoriesManager() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const { toast } = useToast();
-  const { addUpdate } = useTabUpdatesContext();
+
   const { user } = useAuth();
   
   // Categories state
-  const [categories, setCategories] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]>([]);
+  const [categories, setCategories] = useState<{id: string; name: string; nameAr?: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<{id: string; name: string; description?: string; slug?: string; image?: string; parentId?: string} | null>(null);
+
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
   const [importErrors, setImportErrors] = useState<ImportError[]>([]);
   const [showImportErrorDialog, setShowImportErrorDialog] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showCloudinaryPicker, setShowCloudinaryPicker] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    nameAr: '',
-    description: '',
-    descriptionAr: '',
-    slug: '',
-    image: '',
-    icon: '',
-    parentId: '',
-    isActive: true,
-    sortOrder: 0,
-    minQuantity: '',
-    maxQuantity: '',
-    enableSlider: false,
-    applySliderToAllProducts: false,
-  });
+
+
+
 
   // Active tab
   const [activeTab, setActiveTab] = useState('categories');
@@ -141,17 +119,159 @@ export default function CategoriesManager() {
     isActive: true,
   });
 
-  // Load categories
+  // Category dialog state
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<{id: string; name: string; nameAr?: string; description?: string; slug?: string; image?: string} | null>(null);
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    nameAr: '',
+    description: '',
+    slug: '',
+    image: '',
+  });
+  
+  // Selected categories for bulk actions
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+
+  // Category handlers
+  const handleOpenCategoryDialog = (category?: {id: string; name: string; nameAr?: string; description?: string; slug?: string; image?: string}) => {
+    if (category) {
+      setEditingCategory(category);
+      setCategoryFormData({
+        name: category.name || '',
+        nameAr: category.nameAr || '',
+        description: category.description || '',
+        slug: category.slug || '',
+        image: category.image || '',
+      });
+    } else {
+      setEditingCategory(null);
+      setCategoryFormData({ name: '', nameAr: '', description: '', slug: '', image: '' });
+    }
+    setShowCategoryDialog(true);
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm(t('categories.productCategories.deleteConfirm'))) return;
+    
+    try {
+      await coreApi.deleteCategory(categoryId);
+      toast({
+        title: t('common.success'),
+        description: t('categories.productCategories.deleteSuccess'),
+      });
+      loadCategories();
+    } catch (error) {
+      console.error('Failed to delete category:', error);
+      toast({
+        title: t('common.error'),
+        description: t('categories.productCategories.deleteError'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveCategory = async () => {
+    try {
+      if (editingCategory) {
+        await coreApi.updateCategory(editingCategory.id, categoryFormData as any);
+        toast({
+          title: t('common.success'),
+          description: t('categories.productCategories.updateSuccess'),
+        });
+      } else {
+        await coreApi.createCategory(categoryFormData as any);
+        toast({
+          title: t('common.success'),
+          description: t('categories.productCategories.addSuccess'),
+        });
+      }
+      setShowCategoryDialog(false);
+      setEditingCategory(null);
+      setCategoryFormData({ name: '', nameAr: '', description: '', slug: '', image: '' });
+      loadCategories();
+    } catch (error) {
+      console.error('Failed to save category:', error);
+      toast({
+        title: t('common.error'),
+        description: t('categories.productCategories.saveError'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Bulk delete categories
+  const handleBulkDeleteCategories = async () => {
+    if (selectedCategories.size === 0) return;
+    
+    if (!confirm(t('categories.productCategories.bulkDeleteConfirm', { count: selectedCategories.size }))) return;
+    
+    try {
+      // Delete all selected categories
+      await Promise.all(
+        Array.from(selectedCategories).map(id => coreApi.deleteCategory(id))
+      );
+      
+      toast({
+        title: t('common.success'),
+        description: t('categories.productCategories.bulkDeleteSuccess', { count: selectedCategories.size }),
+      });
+      
+      setSelectedCategories(new Set());
+      loadCategories();
+    } catch (error) {
+      console.error('Failed to bulk delete categories:', error);
+      toast({
+        title: t('common.error'),
+        description: t('categories.productCategories.bulkDeleteError'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Toggle select all
+  const toggleSelectAll = () => {
+    if (selectedCategories.size === categories.length) {
+      setSelectedCategories(new Set());
+    } else {
+      setSelectedCategories(new Set(categories.map(c => c.id)));
+    }
+  };
+
+  // Toggle single category selection
+  const toggleCategorySelection = (categoryId: string) => {
+    const newSelected = new Set(selectedCategories);
+    if (newSelected.has(categoryId)) {
+      newSelected.delete(categoryId);
+    } else {
+      newSelected.add(categoryId);
+    }
+    setSelectedCategories(newSelected);
+  };
+
+  // Load categories and other data
   const loadCategories = useCallback(async () => {
     try {
-      const data = await coreApi.getCategories() as {id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[] | {categories: {id: string; name: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]};
-      const categoriesList = Array.isArray(data) ? data : (data.categories || []);
+      setLoading(true);
+      
+      const categoriesData = await coreApi.getCategories({ limit: 1000 });
+      
+      let categoriesList: any[] = [];
+      
+      if (categoriesData && 'meta' in categoriesData) {
+        categoriesList = categoriesData.categories;
+      } else {
+        const data = categoriesData as any;
+        categoriesList = Array.isArray(data) ? data : (data.categories || []);
+      }
+
       setCategories(categoriesList.map((c: any) => ({
         ...c,
         parentId: c.parentId || undefined
       })));
+      
     } catch (error) {
-      console.error('Failed to load categories:', error);
+      console.error('Failed to load data:', error);
       toast({
         title: t('common.error'),
         description: t('categories.productCategories.loadError'),
@@ -175,212 +295,21 @@ export default function CategoriesManager() {
     return <MarketSetupPrompt />;
   }
 
-  const handleOpenDialog = (category?: any) => {
-    if (category) {
-      setEditingCategory(category);
-      setFormData({
-        name: category.name || '',
-        nameAr: category.nameAr || '',
-        description: category.description || '',
-        descriptionAr: category.descriptionAr || '',
-        slug: category.slug || '',
-        image: category.image || '',
-        icon: category.icon || '',
-        parentId: category.parentId || '',
-        isActive: category.isActive !== undefined ? category.isActive : true,
-        sortOrder: category.sortOrder || 0,
-        minQuantity: (category as any).minQuantity?.toString() || '',
-        maxQuantity: (category as any).maxQuantity?.toString() || '',
-        enableSlider: (category as any).enableSlider || false,
-        applySliderToAllProducts: (category as any).applySliderToAllProducts || false,
-      });
-    } else {
-      setEditingCategory(null);
-      setFormData({
-        name: '',
-        nameAr: '',
-        description: '',
-        descriptionAr: '',
-        slug: '',
-        image: '',
-        icon: '',
-        parentId: '',
-        isActive: true,
-        sortOrder: 0,
-        minQuantity: '',
-        maxQuantity: '',
-        enableSlider: false,
-        applySliderToAllProducts: false,
-      });
-    }
-    setDialogOpen(true);
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const categoryData: any = {
-        name: formData.name,
-        nameAr: formData.nameAr || undefined,
-        description: formData.description || undefined,
-        descriptionAr: formData.descriptionAr || undefined,
-        slug: formData.slug || undefined,
-        image: formData.image || undefined,
-        icon: formData.icon || undefined,
-        parentId: formData.parentId || undefined,
-        isActive: formData.isActive,
-        sortOrder: formData.sortOrder || 0,
-      };
 
-      if (editingCategory) {
-        await coreApi.updateCategory(editingCategory.id, categoryData);
-        addUpdate('/dashboard/categories', {
-          type: 'updated',
-          message: t('categories.productCategories.updateSuccess'),
-          data: { categoryId: editingCategory.id, ...categoryData },
-        });
-        toast({
-          title: t('common.success'),
-          description: t('categories.productCategories.updateSuccess'),
-        });
-      } else {
-        await coreApi.createCategory(categoryData);
-        addUpdate('/dashboard/categories', {
-          type: 'added',
-          message: t('categories.productCategories.addSuccess'),
-          data: categoryData,
-        });
-        toast({
-          title: t('common.success'),
-          description: t('categories.productCategories.addSuccess'),
-        });
-      }
-      setDialogOpen(false);
-      loadCategories();
-    } catch (error: any) {
-      toast({
-        title: t('common.error'),
-        description: error.message || t('categories.productCategories.saveError'),
-        variant: 'destructive',
-      });
-    }
-  };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('categories.productCategories.deleteConfirm'))) return;
 
-    try {
-      await coreApi.deleteCategory(id);
-      toast({
-        title: t('common.success'),
-        description: t('categories.productCategories.deleteSuccess'),
-      });
-      loadCategories();
-      setSelectedCategories(new Set());
-    } catch (error: any) {
-      toast({
-        title: t('common.error'),
-        description: error.message || t('categories.productCategories.deleteError'),
-        variant: 'destructive',
-      });
-    }
-  };
 
-  const handleBulkDelete = async () => {
-    if (selectedCategories.size === 0) {
-      toast({
-        title: 'لا يوجد فئات محددة',
-        description: 'يرجى تحديد الفئات المراد حذفها',
-        variant: 'destructive',
-      });
-      return;
-    }
 
-    const count = selectedCategories.size;
-    if (!confirm(`هل أنت متأكد من حذف ${count} فئة${count > 1 ? 'ات' : ''}؟`)) return;
 
-    try {
-      setIsDeleting(true);
-      const ids = Array.from(selectedCategories);
-      const result = await coreApi.deleteCategories(ids);
-      
-      if (result.failed > 0) {
-        toast({
-          title: 'تحذير',
-          description: `تم حذف ${result.deleted} من أصل ${count} فئة. عدد المحاولات الفاشلة: ${result.failed}`,
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'نجح',
-          description: result?.message || `تم حذف ${result?.deleted || count} فئة${count > 1 ? 'ات' : ''} بنجاح`,
-        });
-      }
-      
-      if (result?.errors && result.errors.length > 0) {
-        toast({
-          title: 'تحذير',
-          description: `بعض الفئات لم يتم حذفها: ${result.errors.join(', ')}`,
-          variant: 'destructive',
-        });
-      }
-      
-      setSelectedCategories(new Set());
-      loadCategories();
-    } catch (error: any) {
-      console.error('Failed to delete categories:', error);
-      toast({
-        title: 'خطأ',
-        description: error?.response?.data?.message || 'فشل حذف الفئات',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedCategories(new Set(categories.map(c => c.id)));
-    } else {
-      setSelectedCategories(new Set());
-    }
-  };
 
-  const handleSelectAllCategories = async () => {
-    try {
-      // Fetch all categories
-      const allCategoriesData = await coreApi.getCategories();
-      const allCategories = Array.isArray(allCategoriesData) 
-        ? allCategoriesData 
-        : (allCategoriesData as any).categories || [];
-      const allCategoryIds = allCategories.map((c: any) => c.id);
-      setSelectedCategories(new Set(allCategoryIds));
-      toast({
-        title: 'تم التحديد',
-        description: `تم تحديد ${allCategoryIds.length} فئة`,
-      });
-    } catch (error: any) {
-      console.error('Failed to select all categories:', error);
-      toast({
-        title: 'خطأ',
-        description: 'فشل في تحديد جميع الفئات',
-        variant: 'destructive',
-      });
-    }
-  };
 
-  const handleSelectCategory = (id: string, checked: boolean) => {
-    const newSelected = new Set(selectedCategories);
-    if (checked) {
-      newSelected.add(id);
-    } else {
-      newSelected.delete(id);
-    }
-    setSelectedCategories(newSelected);
-  };
 
-  const isAllSelected = categories.length > 0 && categories.every(c => selectedCategories.has(c.id));
+
+
+
+
 
   const handleExport = () => {
     // Define headers for the Excel sheet
@@ -780,157 +709,154 @@ export default function CategoriesManager() {
 
         {/* Product Categories Tab */}
         <TabsContent value="categories">
-          <div className="flex justify-end gap-2 mb-4">
-            <Button 
-              variant="outline" 
-              className="gap-2" 
-              onClick={handleSelectAllCategories}
-              disabled={loading}
-            >
-              <Tag className="h-4 w-4" />
-              تحديد الكل
-            </Button>
-            {selectedCategories.size > 0 && (
-              <Button 
-                variant="destructive" 
-                className="gap-2" 
-                onClick={handleBulkDelete}
-                disabled={isDeleting}
-              >
-                <Trash2 className="h-4 w-4" />
-                {isDeleting ? 'جاري الحذف...' : `حذف ${selectedCategories.size}`}
+          <div className="flex justify-between items-center gap-2 mb-4">
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-semibold">{t('categories.productCategories.allCategories')}</h2>
+              {selectedCategories.size > 0 && (
+                <Badge variant="secondary" className="gap-1">
+                  {selectedCategories.size} {t('common.selected')}
+                </Badge>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {selectedCategories.size > 0 && (
+                <Button 
+                  variant="destructive" 
+                  onClick={handleBulkDeleteCategories} 
+                  className="gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {t('categories.productCategories.deleteSelected')} ({selectedCategories.size})
+                </Button>
+              )}
+              <Button variant="outline" onClick={handleExport} className="gap-2">
+                <Download className="h-4 w-4" />
+                {t('categories.productCategories.export')}
               </Button>
-            )}
-            <Button variant="outline" onClick={handleExport} className="gap-2">
-              <Download className="h-4 w-4" />
-              {t('categories.productCategories.export')}
-            </Button>
-            <div className="relative">
-              <Input
-                type="file"
-                accept=".xlsx, .xls"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                onChange={handleImport}
-              />
-              <Button variant="outline" className="gap-2">
-                <Upload className="h-4 w-4" />
-                {t('categories.productCategories.import')}
+              <div className="relative">
+                <Input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  onChange={handleImport}
+                />
+                <Button variant="outline" className="gap-2">
+                  <Upload className="h-4 w-4" />
+                  {t('categories.productCategories.import')}
+                </Button>
+              </div>
+              <Button onClick={() => setShowCategoryDialog(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                {t('categories.productCategories.addCategory')}
               </Button>
             </div>
-            <Button 
-              onClick={() => handleOpenDialog()} 
-              size="lg"
-              className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 transition-all shadow-lg shadow-primary/20"
-            >
-              <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-              {t('categories.productCategories.addCategory')}
-            </Button>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('categories.productCategories.allCategories')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                </div>
-              ) : categories.length === 0 ? (
-                <div className="text-center py-16">
-                  <FolderOpen className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">{t('categories.productCategories.noCategories')}</h3>
-                  <p className="text-muted-foreground mb-6">
-                    {t('categories.productCategories.noCategoriesDesc')}
-                  </p>
-                  <Button onClick={() => handleOpenDialog()}>
-                    <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-                    {t('categories.productCategories.addCategory')}
-                  </Button>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={isAllSelected}
-                          onCheckedChange={handleSelectAll}
-                          aria-label="Select all"
-                        />
-                      </TableHead>
-                      <TableHead>{t('categories.productCategories.logo')}</TableHead>
-                      <TableHead>{t('categories.productCategories.category')}</TableHead>
-                      <TableHead>Slug</TableHead>
-                      <TableHead>{t('categories.productCategories.productCount')}</TableHead>
-                      <TableHead className="text-left">{t('categories.productCategories.actions')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {categories.map((category) => (
-                      <TableRow key={category.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedCategories.has(category.id)}
-                            onCheckedChange={(checked) => handleSelectCategory(category.id, checked as boolean)}
-                            aria-label={`Select ${category.name}`}
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : categories.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-16">
+                <FolderOpen className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
+                <h3 className="text-xl font-semibold mb-2">{t('categories.productCategories.noCategories')}</h3>
+                <p className="text-muted-foreground mb-6">
+                  {t('categories.productCategories.noCategoriesDesc')}
+                </p>
+                <Button onClick={() => setShowCategoryDialog(true)}>
+                  <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {t('categories.productCategories.addNewCategory')}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="border-b bg-muted/50">
+                      <tr>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground w-12">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            checked={selectedCategories.size === categories.length && categories.length > 0}
+                            onChange={toggleSelectAll}
                           />
-                        </TableCell>
-                        <TableCell>
-                          {category.image ? (
-                            <img 
-                              src={category.image} 
-                              alt={category.name}
-                              className="w-12 h-12 object-cover rounded-lg"
+                        </th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">{t('categories.productCategories.logo')}</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">{t('categories.productCategories.category')}</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Slug</th>
+                        <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t('categories.productCategories.productCount')}</th>
+                        <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t('categories.productCategories.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categories.map((category) => (
+                        <tr key={category.id} className={`border-b hover:bg-muted/30 transition-colors ${selectedCategories.has(category.id) ? 'bg-primary/5' : ''}`}>
+                          <td className="px-4 py-4">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                              checked={selectedCategories.has(category.id)}
+                              onChange={() => toggleCategorySelection(category.id)}
                             />
-                          ) : (
-                            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
-                              <FolderOpen className="h-6 w-6 text-muted-foreground" />
+                          </td>
+                          <td className="px-4 py-4">
+                            {(category as any).image ? (
+                              <img 
+                                src={(category as any).image} 
+                                alt={category.name}
+                                className="w-10 h-10 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                                <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            <div>
+                              <p className="font-medium">{(category as any).nameAr || category.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {category.description || t('categories.productCategories.noDescription')}
+                              </p>
                             </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-lg">{category.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {category.description || t('categories.productCategories.noDescription')}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {category.slug || '-'}
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-semibold">
-                            {category.productCount || 0}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-left">
-                          <div className="flex justify-start gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleOpenDialog(category)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(category.id)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                          </td>
+                          <td className="px-4 py-4 text-muted-foreground font-mono text-sm">
+                            {category.slug || '-'}
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <Badge variant="secondary">{category.productCount || 0}</Badge>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenCategoryDialog(category)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleDeleteCategory(category.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Customer Tiers Tab */}
@@ -1141,262 +1067,7 @@ export default function CategoriesManager() {
         </TabsContent>
       </Tabs>
 
-      {/* Category Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[95vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-6 pb-2">
-            <DialogTitle className="text-2xl">
-              {editingCategory ? t('categories.productCategories.editCategory') : t('categories.productCategories.addNewCategory')}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCategory ? t('categories.productCategories.editCategoryDesc') : t('categories.productCategories.addCategoryDesc')}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-2">
-            <div className="grid gap-6 py-4">
-              {/* Names Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-sm font-bold">{t('categories.productCategories.categoryName')} *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                    className="h-11"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nameAr" className="text-sm font-bold">اسم الفئة (عربي)</Label>
-                  <Input
-                    id="nameAr"
-                    value={formData.nameAr}
-                    onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
-                    className="h-11"
-                  />
-                </div>
-              </div>
 
-              {/* Slug Section */}
-              <div className="space-y-2">
-                <Label htmlFor="slug" className="text-sm font-bold">{t('categories.productCategories.slug')}</Label>
-                <Input
-                  id="slug"
-                  value={formData.slug}
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  placeholder="electronics"
-                  className="h-11 text-left direction-ltr"
-                />
-                <p className="text-xs text-muted-foreground italic">
-                  {t('categories.productCategories.slugHint')}
-                </p>
-              </div>
-
-              {/* Descriptions Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="description" className="text-sm font-bold">{t('categories.productCategories.description')}</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={4}
-                    className="resize-none"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="descriptionAr" className="text-sm font-bold">الوصف (عربي)</Label>
-                  <Textarea
-                    id="descriptionAr"
-                    value={formData.descriptionAr}
-                    onChange={(e) => setFormData({ ...formData, descriptionAr: e.target.value })}
-                    rows={4}
-                    className="resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Icon and Sort Order Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label htmlFor="icon" className="text-sm font-bold">الأيقونة (Icon/Emoji)</Label>
-                  <Input
-                    id="icon"
-                    value={formData.icon}
-                    onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                    placeholder="📱 أو category-icon"
-                    className="h-11"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    يمكنك استخدام إيموجي أو اسم أيقونة
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sortOrder" className="text-sm font-bold">ترتيب العرض</Label>
-                  <Input
-                    id="sortOrder"
-                    type="number"
-                    min="0"
-                    value={formData.sortOrder}
-                    onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-                    className="h-11"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    الرقم الأقل يظهر أولاً
-                  </p>
-                </div>
-              </div>
-
-              {/* Parent Category Section */}
-              <div className="space-y-2">
-                <Label htmlFor="parentId" className="text-sm font-bold">
-                  {t('categories.productCategories.parentCategory', 'الفئة الرئيسية (اختياري)')}
-                </Label>
-                <Select
-                  value={formData.parentId || "__none__"}
-                  onValueChange={(value) => setFormData({ ...formData, parentId: value === "__none__" ? '' : value })}
-                >
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder={t('categories.productCategories.selectParentCategory', 'اختر فئة رئيسية (اختياري)')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">{t('categories.productCategories.noParent', 'لا توجد فئة رئيسية')}</SelectItem>
-                    {categories
-                      .filter(cat => !editingCategory || cat.id !== editingCategory.id)
-                      .map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t('categories.productCategories.parentCategoryHint', 'اختر فئة رئيسية لجعل هذه الفئة فئة فرعية')}
-                </p>
-              </div>
-
-              {/* Image Upload Section */}
-              <div className="space-y-2">
-                <Label htmlFor="image" className="text-sm font-bold">{t('categories.productCategories.categoryLogo')}</Label>
-                <div className="border-2 border-dashed border-border rounded-xl p-4 bg-muted/30">
-                  <ImageUpload
-                    value={formData.image}
-                    onChange={(url) => setFormData({ ...formData, image: url })}
-                    placeholder={t('categories.productCategories.uploadLogo')}
-                    className="[&>div]:aspect-square [&>div]:h-40 mx-auto"
-                  />
-                </div>
-                <div className="flex items-center justify-center gap-2 mt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowCloudinaryPicker(true);
-                    }}
-                    className="gap-2"
-                  >
-                    <Cloud className="h-4 w-4" />
-                    اختر من Cloudinary
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  {t('categories.productCategories.logoHint')}
-                </p>
-              </div>
-
-              {/* Quantity Slider Section for Supplier API Integration */}
-              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="enableSlider" className="text-base font-semibold">
-                      شريط الكمية للشراء (Slider)
-                    </Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      تفعيل شريط اختيار الكمية عند الشراء - سيتم تطبيقه على جميع منتجات هذه الفئة
-                    </p>
-                  </div>
-                  <Switch
-                    id="enableSlider"
-                    checked={formData.enableSlider}
-                    onCheckedChange={(checked) => setFormData({ ...formData, enableSlider: checked })}
-                  />
-                </div>
-                
-                {formData.enableSlider && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                      <div>
-                        <Label htmlFor="minQuantity">الحد الأدنى للكمية</Label>
-                        <Input
-                          id="minQuantity"
-                          type="number"
-                          min="1"
-                          value={formData.minQuantity}
-                          onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
-                          placeholder="1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="maxQuantity">الحد الأقصى للكمية</Label>
-                        <Input
-                          id="maxQuantity"
-                          type="number"
-                          min="1"
-                          value={formData.maxQuantity}
-                          onChange={(e) => setFormData({ ...formData, maxQuantity: e.target.value })}
-                          placeholder="100"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 pt-2">
-                      <Switch
-                        id="applySliderToAllProducts"
-                        checked={formData.applySliderToAllProducts}
-                        onCheckedChange={(checked) => setFormData({ ...formData, applySliderToAllProducts: checked })}
-                      />
-                      <Label htmlFor="applySliderToAllProducts" className="text-sm">
-                        تطبيق على جميع منتجات هذه الفئة
-                      </Label>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Status Section */}
-              <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/20 rounded-xl">
-                <div className="space-y-0.5">
-                  <Label htmlFor="isActive" className="text-base font-bold">حالة الفئة</Label>
-                  <p className="text-sm text-muted-foreground">
-                    تفعيل أو تعطيل الفئة في المتجر
-                  </p>
-                </div>
-                <Switch
-                  id="isActive"
-                  checked={formData.isActive}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-                />
-              </div>
-            </div>
-            
-            <div className="h-4" /> {/* Bottom spacing */}
-          </form>
-
-          <DialogFooter className="p-6 pt-2 border-t bg-muted/20">
-            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="h-11 px-8">
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" onClick={(e) => {
-              e.preventDefault();
-              handleSubmit(e as any);
-            }} className="h-11 px-8">
-              {editingCategory ? t('categories.productCategories.update') : t('categories.productCategories.add')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Tier Dialog */}
       <Dialog open={tierDialogOpen} onOpenChange={setTierDialogOpen}>
@@ -1743,6 +1414,99 @@ export default function CategoriesManager() {
         </DialogContent>
       </Dialog>
 
+      {/* Category Create/Edit Dialog */}
+      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingCategory 
+                ? t('categories.productCategories.editCategory')
+                : t('categories.productCategories.addNewCategory')}
+            </DialogTitle>
+            <DialogDescription>
+              {editingCategory 
+                ? t('categories.productCategories.editCategoryDesc')
+                : t('categories.productCategories.addCategoryDesc')}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="categoryName">{t('categories.productCategories.name')} (English) *</Label>
+                <Input
+                  id="categoryName"
+                  value={categoryFormData.name}
+                  onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                  placeholder="Category Name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="categoryNameAr">{t('categories.productCategories.name')} (العربية)</Label>
+                <Input
+                  id="categoryNameAr"
+                  value={categoryFormData.nameAr}
+                  onChange={(e) => setCategoryFormData({ ...categoryFormData, nameAr: e.target.value })}
+                  placeholder="اسم الفئة"
+                  dir="rtl"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="categorySlug">{t('categories.productCategories.slug')}</Label>
+              <Input
+                id="categorySlug"
+                value={categoryFormData.slug}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, slug: e.target.value })}
+                placeholder="category-slug"
+              />
+              <p className="text-xs text-muted-foreground">{t('categories.productCategories.slugHint')}</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="categoryDescription">{t('categories.productCategories.description')}</Label>
+              <Input
+                id="categoryDescription"
+                value={categoryFormData.description}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                placeholder={t('categories.productCategories.description')}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>{t('categories.productCategories.categoryLogo')}</Label>
+              <Input
+                type="url"
+                value={categoryFormData.image}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, image: e.target.value })}
+                placeholder="https://example.com/logo.png"
+              />
+              <p className="text-xs text-muted-foreground">{t('categories.productCategories.logoHint')}</p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCategoryDialog(false);
+                setEditingCategory(null);
+                setCategoryFormData({ name: '', nameAr: '', description: '', slug: '', image: '' });
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleSaveCategory}
+              disabled={!categoryFormData.name.trim()}
+            >
+              {editingCategory ? t('categories.productCategories.update') : t('categories.productCategories.add')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Import Progress Dialog - New Reusable Component */}
       <ImportProgressDialog
         open={isImporting}
@@ -1758,23 +1522,7 @@ export default function CategoriesManager() {
         description="يرجى الانتظار أثناء استيراد الفئات من ملف Excel..."
       />
 
-      {/* Cloudinary Image Picker */}
-      <CloudinaryImagePicker
-        open={showCloudinaryPicker}
-        onOpenChange={(open) => {
-          setShowCloudinaryPicker(open);
-        }}
-        onSelect={(images) => {
-          if (images.length > 0) {
-            setFormData({ ...formData, image: images[0] });
-            toast({
-              title: 'تم الاختيار بنجاح',
-              description: `تم اختيار صورة من Cloudinary`,
-            });
-          }
-        }}
-        multiple={false}
-      />
+
 
       {/* Import Errors Dialog - Shows failed rows with details */}
       <ImportErrorDialog

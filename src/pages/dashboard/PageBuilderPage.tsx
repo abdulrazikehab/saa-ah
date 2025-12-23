@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { PageBuilder, Section } from '@/components/builder/PageBuilder';
 import { coreApi } from '@/lib/api';
@@ -25,6 +26,7 @@ export default function PageBuilderPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   
   // State declarations
   const [title, setTitle] = useState('');
@@ -346,16 +348,16 @@ export default function PageBuilderPage() {
             className="dark:hover:bg-gray-800"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Pages
+            {t('builder.backToPages')}
           </Button>
           <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
-            / {id ? 'Edit Page' : 'New Page'}
+            / {id ? t('builder.editPage') : t('builder.newPage')}
             {templateName && (
               <>
                 <span>•</span>
                 <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
                   <Sparkles className="w-4 h-4" />
-                  Using "{templateName}" template
+                  {t('builder.usingTemplate', { name: templateName })}
                 </span>
               </>
             )}
@@ -363,7 +365,7 @@ export default function PageBuilderPage() {
         </div>
         <div className="grid grid-cols-2 gap-4 max-w-2xl">
           <div>
-            <Label className="text-gray-700 dark:text-gray-300">Page Title</Label>
+            <Label className="text-gray-700 dark:text-gray-300">{t('builder.pageTitle')}</Label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -372,7 +374,7 @@ export default function PageBuilderPage() {
             />
           </div>
           <div>
-            <Label className="text-gray-700 dark:text-gray-300">URL Slug</Label>
+            <Label className="text-gray-700 dark:text-gray-300">{t('builder.urlSlug')}</Label>
             <Input
               value={slug}
               onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
@@ -415,20 +417,20 @@ export default function PageBuilderPage() {
       <Dialog open={showHistory} onOpenChange={setShowHistory}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Page History</DialogTitle>
+            <DialogTitle>{t('builder.pageHistory')}</DialogTitle>
             <DialogDescription>
-              Restore a previous version of this page.
+              {t('builder.restoreVersion')}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="h-[300px] mt-4">
             <div className="space-y-4">
               {history.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">No history available</p>
+                <p className="text-center text-gray-500 py-8">{t('builder.noHistory')}</p>
               ) : (
                 history.map((version) => (
                   <div key={version.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <p className="font-medium">Version {version.version}</p>
+                      <p className="font-medium">{t('builder.version')} {version.version}</p>
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <Clock className="w-3 h-3" />
                         {new Date(version.createdAt).toLocaleString()}
@@ -439,7 +441,7 @@ export default function PageBuilderPage() {
                       size="sm"
                       onClick={() => handleRestore(version.id)}
                     >
-                      Restore
+                      {t('builder.restore')}
                     </Button>
                   </div>
                 ))
@@ -455,13 +457,13 @@ export default function PageBuilderPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 dark:text-gray-100">
               <Code className="w-5 h-5" />
-              Code Editor
+              {t('builder.codeEditorTitle')}
             </DialogTitle>
             <DialogDescription className="dark:text-gray-400">
-              Edit the page structure directly in JSON format. Be careful - invalid JSON will not be applied.
+              {t('builder.codeEditorDesc')}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 border dark:border-gray-700 rounded-lg overflow-hidden mt-4 relative" style={{ backgroundColor: '#1e1e1e', height: 'calc(80vh - 250px)', minHeight: '400px' }}>
+          <div className="flex-1 border dark:border-gray-700 rounded-lg overflow-hidden mt-4 relative text-left" style={{ backgroundColor: '#1e1e1e', height: 'calc(80vh - 250px)', minHeight: '400px' }} dir="ltr">
             <div style={{ color: '#d4d4d4', height: '100%', width: '100%' }}>
               <Editor
                 key={showCodeEditor ? 'code-editor-open' : 'code-editor-closed'}
@@ -486,7 +488,7 @@ export default function PageBuilderPage() {
                     editor.layout();
                   }, 300);
                 }}
-                loading={<div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-300"><Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading Editor...</div>}
+                loading={<div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-300"><Loader2 className="w-6 h-6 animate-spin mr-2" /> {t('builder.loadingEditor')}</div>}
                 options={{
                   minimap: { enabled: false },
                   fontSize: 14,
@@ -514,11 +516,11 @@ export default function PageBuilderPage() {
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setShowCodeEditor(false)} className="dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700 dark:hover:bg-gray-700">
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={applyCodeChanges} className="gap-2 dark:bg-blue-600 dark:hover:bg-blue-700">
               <Code className="w-4 h-4" />
-              Apply Changes
+              {t('builder.applyChanges')}
             </Button>
           </div>
         </DialogContent>

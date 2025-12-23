@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
 import { CloudinaryImagePicker } from '@/components/dashboard/CloudinaryImagePicker';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface Category {
   id: string;
@@ -154,7 +155,9 @@ export default function ProductsManager() {
   const [showImportErrorDialog, setShowImportErrorDialog] = useState(false);
   const importAbortRef = useRef<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -266,6 +269,12 @@ export default function ProductsManager() {
     setCurrentPage(1);
   }, [searchQuery, filterStatus, filterCategory, activeTab]);
   
+  // Reload data when pagination changes
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, itemsPerPage]);
+  
   // Show market setup prompt if no market (must be after all hooks)
   if (!hasMarket) {
     return <MarketSetupPrompt />;
@@ -275,14 +284,49 @@ export default function ProductsManager() {
     try {
       setLoading(true);
       console.log('🔍 Calling coreApi.getProducts()...');
-      const [productsData, categoriesData, unitsData, brandsData, suppliersData] = await Promise.all([
-        coreApi.getProducts({ limit: 1000 }, true),
+      
+      // Build query params with pagination
+      const queryParams: Record<string, string | number> = {
+        page: currentPage,
+        limit: itemsPerPage,
+      };
+      
+      if (searchQuery) {
+        queryParams.search = searchQuery;
+      }
+      
+      if (filterCategory !== 'all') {
+        queryParams.categoryId = filterCategory;
+      }
+      
+      if (filterStatus !== 'all') {
+        queryParams.isActive = filterStatus === 'active';
+      }
+      
+      const [productsResponse, categoriesData, unitsData, brandsData, suppliersData] = await Promise.all([
+        coreApi.getProducts(queryParams, true),
         coreApi.getCategories(),
         // Protected endpoints: require auth so Authorization header is attached
         coreApi.get('/units', { requireAuth: true }).catch(() => []),
         coreApi.getBrands(true).catch(() => []), // Brands: attach auth when available for correct tenant
         coreApi.get('/suppliers', { requireAuth: true }).catch(() => [])
       ]);
+      
+      // Handle paginated response
+      let productsData: ProductApiResponse[] = [];
+      if (productsResponse && typeof productsResponse === 'object' && 'data' in productsResponse && 'meta' in productsResponse) {
+        // Paginated response
+        const paginatedResponse = productsResponse as unknown as { data: ProductApiResponse[]; meta: { total: number; page: number; limit: number; totalPages: number } };
+        productsData = paginatedResponse.data;
+        setTotalItems(paginatedResponse.meta.total);
+        setTotalPages(paginatedResponse.meta.totalPages);
+        setCurrentPage(paginatedResponse.meta.page);
+      } else {
+        // Non-paginated response (backward compatibility)
+        productsData = Array.isArray(productsResponse) ? (productsResponse as ProductApiResponse[]) : [];
+        setTotalItems(productsData.length);
+        setTotalPages(1);
+      }
 
       // Validate categoriesData
       let validCategories: CategoryResponse[] = [];
@@ -825,6 +869,8 @@ export default function ProductsManager() {
     return <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">متوفر</Badge>;
   };
 
+  // Client-side filtering (search, status, category) - applied after backend pagination
+  // Note: For better performance, these filters should be moved to backend
   const filteredProducts = products.filter(product => {
     const matchesSearch = (product.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (product.nameAr || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -843,14 +889,14 @@ export default function ProductsManager() {
   });
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+  // Use filtered products directly (backend handles pagination)
+  // Note: Client-side filtering is applied after backend pagination
+  // For better performance, move filters to backend query params
+  const displayProducts = filteredProducts;
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedProducts(new Set(paginatedProducts.map(p => p.id)));
+      setSelectedProducts(new Set(displayProducts.map(p => p.id)));
     } else {
       setSelectedProducts(new Set());
     }
@@ -859,7 +905,10 @@ export default function ProductsManager() {
   const handleSelectAllProducts = async () => {
     try {
       // Fetch all products with a very large limit to get all IDs
-      const allProducts = await coreApi.getProducts({ limit: 10000 });
+      const allProductsResponse = await coreApi.getProducts({ limit: 10000 });
+      const allProducts = Array.isArray(allProductsResponse) 
+        ? allProductsResponse 
+        : (allProductsResponse as { data: Product[] })?.data || [];
       const allProductIds = allProducts.map((p) => p.id);
       setSelectedProducts(new Set(allProductIds));
       toast({
@@ -877,8 +926,8 @@ export default function ProductsManager() {
     }
   };
 
-  const isAllSelected = paginatedProducts.length > 0 && paginatedProducts.every(p => selectedProducts.has(p.id));
-  const isSomeSelected = selectedProducts.size > 0 && selectedProducts.size < paginatedProducts.length;
+  const isAllSelected = displayProducts.length > 0 && displayProducts.every(p => selectedProducts.has(p.id));
+  const isSomeSelected = selectedProducts.size > 0 && selectedProducts.size < displayProducts.length;
 
   // Export products to Excel with all order-related fields
   const handleExportProducts = async () => {
@@ -1500,17 +1549,31 @@ export default function ProductsManager() {
               let userFriendlyError = 'حدث خطأ غير معروف';
               let errorColumn = 'General';
               
-              const errorObj = error as { message?: string; data?: { message?: string }; response?: { data?: { message?: string } }; status?: number };
-              const errorMessage = errorObj?.message || errorObj?.data?.message || errorObj?.response?.data?.message || '';
-                
+              const errorObj = error as { message?: string; data?: { message?: string | string[] }; response?: { data?: { message?: string | string[]; error?: string } }; status?: number };
+              const responseData = errorObj?.response?.data;
+              const errorMessage = responseData?.message || errorObj?.message || '';
+              
+              // Prefer detailed error message from backend
+              if (errorMessage) {
+                if (Array.isArray(errorMessage)) {
+                  userFriendlyError = errorMessage.join(', ');
+                } else {
+                  userFriendlyError = errorMessage;
+                }
+              }
+
+              // Handle specific status codes if no specific message was found or to override
               if (errorObj?.status === 403) {
                 importAbortRef.current = true;
                 userFriendlyError = 'يجب إعداد متجر أولاً.';
-              } else if (errorObj?.status === 400) {
-                userFriendlyError = 'بيانات غير صحيحة.';
               } else if (errorObj?.status === 404) {
-                userFriendlyError = 'الفئة أو العلامة التجارية غير موجودة.';
-                errorColumn = 'Category';
+                if (!responseData?.message) {
+                   userFriendlyError = 'الفئة أو العلامة التجارية غير موجودة.';
+                   errorColumn = 'Category';
+                }
+              } else if (errorObj?.status === 409) {
+                 userFriendlyError = 'المنتج موجود بالفعل (تكرار SKU أو الاسم)';
+                 errorColumn = 'SKU';
               }
                 
               uploadErrors.push({ row: rowNum, column: errorColumn, productName: productName.toString(), error: userFriendlyError });
@@ -2387,7 +2450,7 @@ export default function ProductsManager() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedProducts.map((product, index) => (
+                {displayProducts.map((product, index) => (
                   <TableRow 
                     key={product.id} 
                     className="group hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent dark:hover:from-gray-800 dark:hover:to-transparent transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
@@ -2485,57 +2548,18 @@ export default function ProductsManager() {
           )}
           
           {/* Pagination Controls */}
-          {!loading && filteredProducts.length > itemsPerPage && (
-            <div className="flex items-center justify-between px-6 py-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                عرض {startIndex + 1} - {Math.min(endIndex, filteredProducts.length)} من {filteredProducts.length} منتج
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  السابق
-                </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
-                        className="min-w-[40px]"
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  التالي
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+          {!loading && totalItems > 0 && (
+            <DataTablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemsPerPage={itemsPerPage}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={setItemsPerPage}
+              itemsPerPageOptions={[10, 20, 50, 100]}
+              showItemsPerPage={true}
+              className="border-t"
+            />
           )}
         </CardContent>
         </Card>
@@ -2760,6 +2784,9 @@ export default function ProductsManager() {
         onOpenChange={(open) => {
           console.log('🔔 Error dialog onOpenChange:', open, 'Current errors:', importErrors.length);
           setShowImportErrorDialog(open);
+          if (!open) {
+            setImportErrors([]);
+          }
         }}
       >
         <DialogContent className="max-w-6xl max-h-[90vh]">
@@ -2866,7 +2893,10 @@ export default function ProductsManager() {
           <DialogFooter className="gap-2">
             <Button 
               variant="outline" 
-              onClick={() => setShowImportErrorDialog(false)}
+              onClick={() => {
+                setShowImportErrorDialog(false);
+                setImportErrors([]);
+              }}
               className="min-w-[100px]"
             >
               إغلاق

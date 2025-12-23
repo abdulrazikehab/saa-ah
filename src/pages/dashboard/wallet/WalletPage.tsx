@@ -47,10 +47,11 @@ import {
   RefreshCw,
   TrendingUp,
   TrendingDown,
-  History
+  History,
+  type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { coreApi, walletService, type Bank, type CreateBankDto } from '@/lib/api';
+import { coreApi, walletService, type Bank, type CreateBankDto, type Wallet as WalletType } from '@/lib/api';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -88,7 +89,7 @@ interface TopUpRequest {
 }
 
 
-const transactionTypeConfig: Record<string, { label: string; labelAr: string; icon: any; color: string }> = {
+const transactionTypeConfig: Record<string, { label: string; labelAr: string; icon: LucideIcon; color: string }> = {
   TOPUP: { label: 'Top Up', labelAr: 'إيداع', icon: ArrowDownLeft, color: 'text-green-500' },
   PURCHASE: { label: 'Purchase', labelAr: 'شراء', icon: ArrowUpRight, color: 'text-red-500' },
   REFUND: { label: 'Refund', labelAr: 'استرداد', icon: ArrowDownLeft, color: 'text-green-500' },
@@ -97,7 +98,7 @@ const transactionTypeConfig: Record<string, { label: string; labelAr: string; ic
   ADJUSTMENT: { label: 'Adjustment', labelAr: 'تعديل', icon: RefreshCw, color: 'text-blue-500' },
 };
 
-const statusConfig: Record<string, { label: string; labelAr: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any }> = {
+const statusConfig: Record<string, { label: string; labelAr: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: LucideIcon }> = {
   PENDING: { label: 'Pending', labelAr: 'معلق', variant: 'secondary', icon: Clock },
   APPROVED: { label: 'Approved', labelAr: 'موافق عليه', variant: 'default', icon: CheckCircle },
   COMPLETED: { label: 'Completed', labelAr: 'مكتمل', variant: 'default', icon: CheckCircle },
@@ -118,12 +119,8 @@ export default function WalletPage() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [allBanks, setAllBanks] = useState<Bank[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showTopUpDialog, setShowTopUpDialog] = useState(false);
   const [showAddBankDialog, setShowAddBankDialog] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
-  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
-  const [topUpAmount, setTopUpAmount] = useState('');
-  const [proofImage, setProofImage] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   
   // Bank form state
@@ -154,7 +151,7 @@ export default function WalletPage() {
       try {
         setLoading(true);
         const [walletRes, transactionsRes, topUpRes, banksRes, allBanksRes] = await Promise.all([
-          walletService.getBalance().catch(() => ({ balance: 0, currency: 'SAR' })),
+          walletService.getBalance().catch(() => ({ id: '', balance: 0, currency: 'SAR', updatedAt: new Date().toISOString() } as Partial<WalletType> & { balance: number; currency: string; updatedAt: string })),
           walletService.getTransactions(1, 50).catch(() => ({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 })),
           walletService.getTopUpRequests().catch(() => []),
           walletService.getBanks().catch(() => []),
@@ -234,9 +231,10 @@ export default function WalletPage() {
       ]);
       setBanks(Array.isArray(banksRes) ? banksRes : []);
       setAllBanks(Array.isArray(allBanksRes) ? allBanksRes : []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving bank:', error);
-      toast.error(error?.message || (isRTL ? 'فشل حفظ البنك' : 'Failed to save bank'));
+      const errorMessage = error instanceof Error ? error.message : (isRTL ? 'فشل حفظ البنك' : 'Failed to save bank');
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -259,9 +257,10 @@ export default function WalletPage() {
       ]);
       setBanks(Array.isArray(banksRes) ? banksRes : []);
       setAllBanks(Array.isArray(allBanksRes) ? allBanksRes : []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting bank:', error);
-      toast.error(error?.message || (isRTL ? 'فشل حذف البنك' : 'Failed to delete bank'));
+      const errorMessage = error instanceof Error ? error.message : (isRTL ? 'فشل حذف البنك' : 'Failed to delete bank');
+      toast.error(errorMessage);
     }
   };
 
@@ -283,59 +282,6 @@ export default function WalletPage() {
     setShowAddBankDialog(true);
   };
 
-  // Submit top-up request
-  const handleTopUpSubmit = async () => {
-    if (!selectedBank || !topUpAmount || parseFloat(topUpAmount) <= 0) {
-      toast.error(isRTL ? 'يرجى ملء جميع الحقول' : 'Please fill all fields');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      
-      const formData = new FormData();
-      formData.append('amount', topUpAmount);
-      formData.append('bankId', selectedBank.id);
-      formData.append('paymentMethod', 'BANK_TRANSFER');
-      if (proofImage) {
-        formData.append('proofImage', proofImage);
-      }
-      
-      // Convert File to base64 if image provided
-      let receiptImageUrl: string | undefined;
-      if (proofImage) {
-        const reader = new FileReader();
-        receiptImageUrl = await new Promise<string>((resolve, reject) => {
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(proofImage);
-        });
-      }
-
-      await walletService.createTopUpRequest({
-        amount: parseFloat(topUpAmount),
-        currency: 'SAR',
-        paymentMethod: 'BANK_TRANSFER',
-        bankId: selectedBank.id,
-        receiptImage: receiptImageUrl,
-      });
-      
-      toast.success(isRTL ? 'تم إرسال طلب الشحن بنجاح' : 'Top-up request submitted successfully');
-      setShowTopUpDialog(false);
-      setTopUpAmount('');
-      setSelectedBank(null);
-      setProofImage(null);
-      
-      // Refresh data
-      const topUpRes = await walletService.getTopUpRequests();
-      setTopUpRequests(Array.isArray(topUpRes) ? topUpRes : []);
-    } catch (error) {
-      console.error('Error submitting top-up:', error);
-      toast.error(isRTL ? 'فشل إرسال طلب الشحن' : 'Failed to submit top-up request');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -351,194 +297,48 @@ export default function WalletPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Wallet className="h-6 w-6" />
-          {isRTL ? 'محفظتي' : 'My Wallet'}
+          {isRTL ? 'البنوك و المعاملات' : 'Banks and Transactions'}
         </h1>
       </div>
 
-      {/* Balance Card */}
-      <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/20">
+      {/* Info Card - Banks and Transactions */}
+      <Card className="bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-background border-blue-500/20">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">
-                {isRTL ? 'الرصيد المتاح' : 'Available Balance'}
-              </p>
-              <div className="text-4xl font-bold text-primary">
-                {wallet?.balance.toFixed(2) || '0.00'}
-                <span className="text-xl ml-2">{wallet?.currency || 'SAR'}</span>
+            <div className="flex items-center gap-4">
+              <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                <Building2 className="h-8 w-8 text-blue-600" />
               </div>
-              {wallet?.lastUpdated && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  {isRTL ? 'آخر تحديث: ' : 'Last updated: '}
-                  {formatDate(wallet.lastUpdated)}
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-1">
+                  {isRTL ? 'البنوك و المعاملات' : 'Banks and Transactions'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {isRTL 
+                    ? 'إدارة البنوك وعرض سجل المعاملات المالية' 
+                    : 'Manage banks and view financial transaction history'
+                  }
                 </p>
-              )}
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Dialog open={showTopUpDialog} onOpenChange={setShowTopUpDialog}>
-                <DialogTrigger asChild>
-                  <Button size="lg" className="gap-2">
-                    <Plus className="h-5 w-5" />
-                    {isRTL ? 'شحن الرصيد' : 'Top Up'}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <Building2 className="h-5 w-5" />
-                      {isRTL ? 'شحن الرصيد عبر التحويل البنكي' : 'Top Up via Bank Transfer'}
-                    </DialogTitle>
-                    <DialogDescription>
-                      {isRTL 
-                        ? 'اختر البنك وأدخل المبلغ ثم قم بالتحويل وأرفق صورة الإيصال'
-                        : 'Select a bank, enter the amount, transfer, and upload the receipt'
-                      }
-                    </DialogDescription>
-                  </DialogHeader>
-                  
-                  <div className="space-y-4">
-                    {/* Bank Selection */}
-                    <div className="space-y-2">
-                      <Label>{isRTL ? 'اختر البنك' : 'Select Bank'}</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {banks.map((bank) => (
-                          <Card
-                            key={bank.id}
-                            className={cn(
-                              'p-3 cursor-pointer transition-all hover:border-primary',
-                              selectedBank?.id === bank.id && 'border-primary bg-primary/5'
-                            )}
-                            onClick={() => setSelectedBank(bank)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 rounded bg-muted flex items-center justify-center overflow-hidden">
-                                {bank.logoUrl ? (
-                                  <img src={bank.logoUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <Building2 className="h-5 w-5 text-muted-foreground" />
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">
-                                  {isRTL ? bank.nameAr || bank.name : bank.name}
-                                </p>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Bank Details */}
-                    {selectedBank && (
-                      <Card className="bg-muted">
-                        <CardContent className="p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-muted-foreground">
-                              {isRTL ? 'اسم الحساب' : 'Account Name'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{selectedBank.accountName}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => copyToClipboard(selectedBank.accountName)}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-muted-foreground">
-                              {isRTL ? 'رقم الحساب' : 'Account Number'}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium font-mono">{selectedBank.accountNumber}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => copyToClipboard(selectedBank.accountNumber)}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                          {selectedBank.iban && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-muted-foreground">IBAN</span>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium font-mono text-xs">{selectedBank.iban}</span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => copyToClipboard(selectedBank.iban || '')}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Amount */}
-                    <div className="space-y-2">
-                      <Label>{isRTL ? 'المبلغ (ريال)' : 'Amount (SAR)'}</Label>
-                      <Input
-                        type="number"
-                        min="1"
-                        placeholder={isRTL ? 'أدخل المبلغ' : 'Enter amount'}
-                        value={topUpAmount}
-                        onChange={(e) => setTopUpAmount(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Proof Upload */}
-                    <div className="space-y-2">
-                      <Label>{isRTL ? 'صورة الإيصال (اختياري)' : 'Receipt Image (optional)'}</Label>
-                      <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                        {proofImage ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                            <span className="text-sm">{proofImage.name}</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setProofImage(null)}
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <label className="cursor-pointer">
-                            <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                            <span className="text-sm text-muted-foreground">
-                              {isRTL ? 'اضغط لرفع الصورة' : 'Click to upload'}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => setProofImage(e.target.files?.[0] || null)}
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowTopUpDialog(false)}>
-                      {isRTL ? 'إلغاء' : 'Cancel'}
-                    </Button>
-                    <Button onClick={handleTopUpSubmit} disabled={submitting || !selectedBank || !topUpAmount}>
-                      {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {isRTL ? 'إرسال الطلب' : 'Submit Request'}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground mb-1">
+                  {isRTL ? 'إجمالي البنوك' : 'Total Banks'}
+                </p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {banks.length}
+                </p>
+              </div>
+              <div className="h-12 w-px bg-border" />
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground mb-1">
+                  {isRTL ? 'إجمالي المعاملات' : 'Total Transactions'}
+                </p>
+                <p className="text-3xl font-bold text-indigo-600">
+                  {transactions.length}
+                </p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -628,10 +428,6 @@ export default function WalletPage() {
                   <h3 className="text-lg font-semibold mb-2">
                     {isRTL ? 'لا توجد طلبات شحن' : 'No top-up requests'}
                   </h3>
-                  <Button variant="outline" onClick={() => setShowTopUpDialog(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {isRTL ? 'شحن الرصيد' : 'Top Up'}
-                  </Button>
                 </div>
               ) : (
                 <Table>

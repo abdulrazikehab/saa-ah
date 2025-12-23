@@ -11,13 +11,18 @@ import type {
 
 export const productService = {
   // Products
-  getProducts: async (params?: ProductQueryParams, requireAuth = false): Promise<Product[]> => {
+  getProducts: async (params?: ProductQueryParams, requireAuth = false): Promise<Product[] | { data: Product[]; meta: { total: number; page: number; limit: number; totalPages: number } }> => {
     const url = `${apiClient.coreUrl}/products?${new URLSearchParams(params as Record<string, string>)}`;
     const response = await apiClient.fetch(url, {
       requireAuth,
     });
-    // Backend returns { data: [...], meta: {...} } or just [...]
+    // Backend returns { data: [...], meta: {...} } for paginated or just [...] for non-paginated
     // After central unwrapping, response is already the data object
+    if (response && typeof response === 'object' && 'data' in response && 'meta' in response) {
+      // Paginated response
+      return response as { data: Product[]; meta: { total: number; page: number; limit: number; totalPages: number } };
+    }
+    // Non-paginated response (backward compatibility)
     return (response as { data: Product[] })?.data || (response as Product[]) || [];
   },
 
@@ -67,12 +72,16 @@ export const productService = {
   },
 
   // Categories
-  getCategories: async (): Promise<Category[]> => {
-    const response = await apiClient.fetch(`${apiClient.coreUrl}/categories`, {
-      requireAuth: false, // Public access for storefront
+  getCategories: async (params?: { page?: number; limit?: number; all?: boolean }): Promise<Category[] | { categories: Category[]; meta: any }> => {
+    const queryString = params ? `?${new URLSearchParams(params as any)}` : '';
+    const response = await apiClient.fetch(`${apiClient.coreUrl}/categories${queryString}`, {
+      requireAuth: false, 
     });
-    // Backend returns { categories: [...] }
-    // After central unwrapping, response is { categories: [...] }
+    
+    if (response && typeof response === 'object' && 'categories' in response && 'meta' in response) {
+       return response as { categories: Category[]; meta: any };
+    }
+
     return (response as { categories: Category[] })?.categories || (response as Category[]) || [];
   },
 
@@ -160,6 +169,10 @@ export const productService = {
     const response = await apiClient.fetch(`${apiClient.coreUrl}/brands`, {
       requireAuth,
     });
+    // Handle paginated response { data: [...], meta: ... }
+    if (response && typeof response === 'object' && 'data' in response) {
+      return (response as { data: any[] }).data;
+    }
     return Array.isArray(response) ? response : [];
   },
 

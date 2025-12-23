@@ -377,11 +377,15 @@ export interface SiteConfig {
 
 // Query Params
 export interface ProductQueryParams {
+  page?: number;
   limit?: number;
   offset?: number;
   categoryId?: string;
   search?: string;
   market?: boolean;
+  minPrice?: number;
+  maxPrice?: number;
+  isActive?: boolean;
 }
 
 export interface SalesReportParams {

@@ -26,6 +26,7 @@ import {
   Headphones,
   Rocket,
   Wallet,
+  Receipt,
   X,
   Building2,
   DollarSign,
@@ -296,7 +297,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
         )}
       </div>
 
-      {/* Balance Section - Click to view wallet details */}
+      {/* Transactions Section - Click to view wallet details */}
       <div className={cn(
         "border-b transition-all",
         collapsed ? "px-2 py-3" : "px-4 py-3"
@@ -304,28 +305,24 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
         <div 
           onClick={() => navigate('/dashboard/wallet')}
           className={cn(
-            "rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/20 p-3 cursor-pointer hover:from-green-500/20 hover:to-emerald-500/20 transition-all",
+            "rounded-xl bg-green-50 dark:bg-green-950/20 p-4 cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/30 transition-all shadow-sm",
             collapsed && "p-2"
           )}
           title={t('dashboard.sidebar.clickToViewWallet')}
         >
-          <div className={cn("flex items-center gap-2", collapsed && "flex-col gap-1 justify-center")}>
-            <div className="p-1.5 rounded-lg bg-green-500/20">
-              <Wallet className={cn("text-green-600", collapsed ? "h-4 w-4" : "h-5 w-5")} />
+          <div className={cn(
+            "flex items-center justify-between",
+            collapsed && "flex-col gap-2 justify-center"
+          )}>
+            <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+              {isRTL ? 'المعاملات' : 'Transactions'}
+            </span>
+            <div className={cn(
+              "rounded-full bg-green-100 dark:bg-green-900/40 p-2.5 flex items-center justify-center",
+              collapsed && "mt-1"
+            )}>
+              <Receipt className="h-5 w-5 text-green-600 dark:text-green-500" />
             </div>
-            {!collapsed && (
-              <div className="flex flex-col">
-                <span className="text-xs text-muted-foreground">{t('dashboard.sidebar.yourBalance')}</span>
-                <span className="text-lg font-bold text-green-600">
-                  {formatCurrency(balance, defaultCurrency)}
-                </span>
-              </div>
-            )}
-            {collapsed && (
-              <span className="text-xs font-bold text-green-600">
-                {formatCurrency(balance, defaultCurrency)}
-              </span>
-            )}
           </div>
         </div>
       </div>
