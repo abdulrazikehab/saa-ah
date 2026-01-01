@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { coreApi } from '@/lib/api';
+import { coreApi, authApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
+import { validateImageSignature } from '@/lib/utils';
 
 interface ProfileData {
   name: string;
@@ -49,10 +50,16 @@ export default function ProfilePage() {
   const [logoPreview, setLogoPreview] = useState<string>('');
   const [avatarPreview, setAvatarPreview] = useState<string>('');
 
+  // Password change states
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const loadProfile = useCallback(async () => {
     try {
       const data = await coreApi.get('/profile');
-      setProfileData(data.profile || profileData);
+      setProfileData(prev => data.profile || prev);
       setLogoPreview(data.profile?.logo || '');
       setAvatarPreview(data.profile?.avatar || '');
     } catch (error) {
@@ -71,9 +78,21 @@ export default function ProfilePage() {
     loadProfile();
   }, [loadProfile]);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Security Check
+      const { isValid, reason } = await validateImageSignature(file);
+      if (!isValid) {
+        toast({
+          title: 'ملف غير آمن',
+          description: reason || 'تم رفض الملف لأسباب أمنية',
+          variant: 'destructive',
+        });
+        e.target.value = ''; // Reset input
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -84,9 +103,21 @@ export default function ProfilePage() {
     }
   };
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Security Check
+      const { isValid, reason } = await validateImageSignature(file);
+      if (!isValid) {
+        toast({
+          title: 'ملف غير آمن',
+          description: reason || 'تم رفض الملف لأسباب أمنية',
+          variant: 'destructive',
+        });
+        e.target.value = ''; // Reset input
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -116,6 +147,38 @@ export default function ProfilePage() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'خطأ',
+        description: 'كلمات المرور الجديدة غير متطابقة',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      await authApi.changePassword(currentPassword, newPassword);
+      toast({
+        title: 'نجح',
+        description: 'تم تحديث كلمة المرور بنجاح',
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      console.error('Failed to change password:', error);
+      toast({
+        title: 'فشل تحديث كلمة المرور',
+        description: error.message || 'حدث خطأ أثناء تحديث كلمة المرور',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -228,9 +291,10 @@ export default function ProfilePage() {
 
       {/* Tabs */}
       <Tabs defaultValue="personal" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="personal">المعلومات الشخصية</TabsTrigger>
           <TabsTrigger value="store">معلومات المتجر</TabsTrigger>
+          <TabsTrigger value="security">الأمان</TabsTrigger>
         </TabsList>
 
         {/* Personal Info Tab */}
@@ -388,6 +452,53 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Security Tab */}
+        <TabsContent value="security" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>تغيير كلمة المرور</CardTitle>
+              <CardDescription>قم بتحديث كلمة مرور حسابك</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 max-w-md">
+              <div className="space-y-2">
+                <Label>كلمة المرور الحالية</Label>
+                <Input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>كلمة المرور الجديدة</Label>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>تأكيد كلمة المرور الجديدة</Label>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+              <Button 
+                onClick={handleChangePassword} 
+                disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+                className="w-full"
+              >
+                {isChangingPassword && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                تحديث كلمة المرور
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

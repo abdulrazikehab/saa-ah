@@ -210,35 +210,35 @@ export default function CustomersManager() {
 
   const handleExport = () => {
     const headers = [
-      'ID',
-      'Name',
-      'Email',
-      'Phone',
-      'TotalOrders',
-      'TotalSpent',
-      'LoyaltyPoints',
-      'LoyaltyTier',
-      'CreatedAt',
-      'LastOrderDate'
+      t('dashboard.customers.exportHeaders.id'),
+      t('dashboard.customers.exportHeaders.name'),
+      t('dashboard.customers.exportHeaders.email'),
+      t('dashboard.customers.exportHeaders.phone'),
+      t('dashboard.customers.exportHeaders.totalOrders'),
+      t('dashboard.customers.exportHeaders.totalSpent'),
+      t('dashboard.customers.exportHeaders.loyaltyPoints'),
+      t('dashboard.customers.exportHeaders.loyaltyTier'),
+      t('dashboard.customers.exportHeaders.createdAt'),
+      t('dashboard.customers.exportHeaders.lastOrderDate')
     ];
 
     const exportData = customers.map(c => ({
-      ID: c.id,
-      Name: c.name,
-      Email: c.email,
-      Phone: c.phone || '',
-      TotalOrders: c.totalOrders || 0,
-      TotalSpent: c.totalSpent || 0,
-      LoyaltyPoints: c.loyaltyPoints || 0,
-      LoyaltyTier: c.loyaltyTier || '',
-      CreatedAt: c.createdAt || '',
-      LastOrderDate: c.lastOrderDate || ''
+      [t('dashboard.customers.exportHeaders.id')]: c.id,
+      [t('dashboard.customers.exportHeaders.name')]: c.name,
+      [t('dashboard.customers.exportHeaders.email')]: c.email,
+      [t('dashboard.customers.exportHeaders.phone')]: c.phone || '',
+      [t('dashboard.customers.exportHeaders.totalOrders')]: c.totalOrders || 0,
+      [t('dashboard.customers.exportHeaders.totalSpent')]: c.totalSpent || 0,
+      [t('dashboard.customers.exportHeaders.loyaltyPoints')]: c.loyaltyPoints || 0,
+      [t('dashboard.customers.exportHeaders.loyaltyTier')]: c.loyaltyTier || '',
+      [t('dashboard.customers.exportHeaders.createdAt')]: c.createdAt || '',
+      [t('dashboard.customers.exportHeaders.lastOrderDate')]: c.lastOrderDate || ''
     }));
 
-    const ws = utils.json_to_sheet(exportData, { header: headers });
+    const ws = utils.json_to_sheet(exportData);
     const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Customers");
-    writeFile(wb, "customers_export.xlsx");
+    utils.book_append_sheet(wb, ws, t('dashboard.customers.title'));
+    writeFile(wb, `${t('dashboard.customers.title')}_export.xlsx`);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -252,13 +252,14 @@ export default function CustomersManager() {
       const jsonData = utils.sheet_to_json(worksheet);
       
       toast({ 
-        title: 'Import Processed', 
-        description: `Read ${jsonData.length} records. Bulk import backend implementation required.` 
+        title: t('dashboard.customers.importProcessed'), 
+        description: t('dashboard.customers.importProcessedDesc', { count: jsonData.length }) 
       });
       
       e.target.value = '';
-    } catch (error: any) {
-      toast({ title: 'Error', description: error?.message || 'Failed to import file', variant: 'destructive' });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : t('common.errorOccurred');
+      toast({ title: t('common.error'), description: errorMessage, variant: 'destructive' });
     }
   };
 
@@ -279,8 +280,8 @@ export default function CustomersManager() {
       {/* Tabs */}
       <Tabs defaultValue="customers" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="customers">{t('dashboard.customers.title')} ({customers.length})</TabsTrigger>
-          <TabsTrigger value="loyalty">{t('dashboard.customers.loyaltyPrograms')} ({loyaltyPrograms.length})</TabsTrigger>
+          <TabsTrigger value="customers">{t('dashboard.customers.tabs.customers')} ({customers.length})</TabsTrigger>
+          <TabsTrigger value="loyalty">{t('dashboard.customers.tabs.loyalty')} ({loyaltyPrograms.length})</TabsTrigger>
         </TabsList>
 
         {/* Customers Tab */}

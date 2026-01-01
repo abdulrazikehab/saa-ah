@@ -87,12 +87,12 @@ interface PropertyPanelProps {
   onClose: () => void;
 }
 
-export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps) {
-  const { t } = useTranslation();
+export const PropertyPanel = ({ section, onUpdate, onClose }: PropertyPanelProps) => {
   const { type, props } = section;
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const { t } = useTranslation();
   const [codeEditorValue, setCodeEditorValue] = useState('');
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [editorMounted, setEditorMounted] = useState(false);
 
   const handleOpenCodeEditor = () => {
@@ -121,13 +121,13 @@ export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps
           // Validate data is not an error object
           if (data && typeof data === 'object') {
             if (Array.isArray(data)) {
-              const validCategories = data.filter((c: any) => 
-                c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+              const validCategories = data.filter((c: unknown) => 
+                c && typeof c === 'object' && 'id' in c && !('error' in c) && !('statusCode' in c)
               );
               setCategories(validCategories);
             } else if (data.categories && Array.isArray(data.categories)) {
-              const validCategories = data.categories.filter((c: any) => 
-                c && typeof c === 'object' && c.id && !('error' in c) && !('statusCode' in c)
+              const validCategories = data.categories.filter((c: unknown) => 
+                c && typeof c === 'object' && 'id' in c && !('error' in c) && !('statusCode' in c)
               );
               setCategories(validCategories);
             } else {
@@ -1016,25 +1016,10 @@ export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps
                 <SelectContent>
                   <SelectItem value="slide">{t('properties.animations.slide', 'Slide')}</SelectItem>
                   <SelectItem value="fade">{t('properties.animations.fade', 'Fade')}</SelectItem>
-                  <SelectItem value="zoom">{t('properties.animations.zoom', 'Zoom')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        );
-
-      case 'content-slider':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label>{t('properties.title', 'Title')}</Label>
-              <Input
-                value={(props.title as string) || ''}
-                onChange={(e) => handleChange('title', e.target.value)}
-                className="mt-1.5"
-              />
-            </div>
-
+            
             {/* Items Management */}
             <div className="space-y-3">
               <Label>{t('properties.items', 'Content Items')}</Label>
@@ -1247,6 +1232,58 @@ export function PropertyPanel({ section, onUpdate, onClose }: PropertyPanelProps
                 <Plus className="w-4 h-4 mr-2" />
                 {t('properties.addLink', 'Add Link')}
               </Button>
+            </div>
+          </div>
+        );
+
+      case 'merchant-dashboard':
+      case 'product-list':
+      case 'store-page':
+      case 'support-tickets':
+      case 'favorites-page':
+      case 'balance-operations':
+      case 'employees-page':
+      case 'charge-wallet':
+      case 'reports-page':
+      case 'profile-page':
+      case 'categories-hierarchy':
+      case 'testimonials':
+      case 'pricing':
+      case 'team':
+      case 'stats':
+      case 'faq':
+      case 'newsletter':
+      case 'video':
+      case 'countdown':
+      case 'brands':
+      case 'contact':
+      case 'payments':
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label>{t('properties.title', 'Title')}</Label>
+              <Input
+                value={(props.title as string) || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="mt-1.5"
+                placeholder={t('properties.titlePlaceholder', 'Enter section title')}
+              />
+            </div>
+            <div>
+              <Label>{t('properties.subtitle', 'Subtitle')}</Label>
+              <Input
+                value={(props.subtitle as string) || ''}
+                onChange={(e) => handleChange('subtitle', e.target.value)}
+                className="mt-1.5"
+                placeholder={t('properties.subtitlePlaceholder', 'Enter section subtitle')}
+              />
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <Label>{t('properties.showTitle', 'Show Title')}</Label>
+              <Switch
+                checked={(props.showTitle as boolean) !== false}
+                onCheckedChange={(checked) => handleChange('showTitle', checked)}
+              />
             </div>
           </div>
         );

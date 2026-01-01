@@ -9,6 +9,8 @@ import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { getTenantContext } from '@/lib/storefront-utils';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
+import { OptimizedImage } from '@/components/ui/OptimizedImage';
 
 interface CustomerSignupProps {
   onClose: () => void;
@@ -20,6 +22,7 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
   const { toast } = useToast();
   const { i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
+  const { settings } = useStoreSettings();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -221,6 +224,11 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
         localStorage.setItem('customerToken', result.token);
         localStorage.setItem('customerData', JSON.stringify(result.customer));
         
+        // Dispatch custom event to notify other components that login was successful
+        window.dispatchEvent(new CustomEvent('customerLogin', { 
+          detail: { token: result.token, customer: result.customer } 
+        }));
+        
         // Close OTP modal
         setShowOtpModal(false);
         
@@ -324,14 +332,34 @@ export function CustomerSignup({ onClose, onSwitchToLogin, onSignupSuccess }: Cu
             </button>
 
             <div className="relative pt-10 pb-6 px-8 text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl gradient-primary shadow-lg">
-                <MessageSquare className="h-8 w-8 text-white" />
+              <div className="flex flex-col items-center gap-4 mb-6">
+                <div className="w-24 h-24 rounded-2xl overflow-hidden bg-white shadow-xl border-2 border-primary/10 p-2">
+                  <OptimizedImage 
+                    src={settings.storeLogoUrl || settings.logoUrl || ''} 
+                    alt={isRTL ? settings.storeNameAr || settings.storeName : settings.storeName}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-bold gradient-text">
+                    {isRTL ? settings.storeNameAr || settings.storeName : settings.storeName}
+                  </h2>
+                  <p className="text-sm text-muted-foreground line-clamp-2 max-w-[250px] mx-auto">
+                    {isRTL ? settings.storeDescriptionAr || settings.storeDescription : settings.storeDescription}
+                  </p>
+                </div>
               </div>
-              <h2 className="text-2xl font-bold gradient-text mb-2">
+              
+              <div className="inline-flex items-center justify-center w-12 h-12 mb-4 rounded-xl bg-primary/10 text-primary">
+                <MessageSquare className="h-6 w-6" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">
                 {isRTL ? 'تحقق من بريدك الإلكتروني' : 'Verify Your Email'}
-              </h2>
-              <p className="text-muted-foreground">
-                {isRTL ? 'أدخل رمز التحقق المرسل إلى بريدك' : 'Enter the verification code sent to your email'}
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                {isRTL 
+                  ? `لقد أرسلنا رمز التحقق إلى ${signupEmail}` 
+                  : `We've sent a verification code to ${signupEmail}`}
               </p>
             </div>
 

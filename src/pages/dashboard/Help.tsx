@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { HelpCircle, Mail, Phone, MessageSquare, Book, Video, FileText } from 'lucide-react';
+import { HelpCircle, Mail, Phone, MessageSquare, Book, Video, FileText, Play } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { AIChatHelper } from '@/components/chat/AIChatHelper';
@@ -96,6 +96,24 @@ export default function Help() {
               </div>
               <h3 className="font-semibold">الوثائق</h3>
               <p className="text-sm text-muted-foreground">اقرأ الوثائق التقنية</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className="hover:shadow-md transition-shadow cursor-pointer"
+          onClick={() => {
+            localStorage.removeItem('tour_completed');
+            window.location.href = '/dashboard';
+          }}
+        >
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center text-center space-y-2">
+              <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
+                <Play className="h-6 w-6 text-yellow-600" />
+              </div>
+              <h3 className="font-semibold">جولة تعريفية</h3>
+              <p className="text-sm text-muted-foreground">ابدأ الجولة التعريفية للمنصة</p>
             </div>
           </CardContent>
         </Card>

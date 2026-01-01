@@ -3,20 +3,39 @@ import { useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { coreApi } from '@/lib/api';
 import { SectionRenderer } from '@/components/builder/SectionRenderer';
 import { Section } from '@/components/builder/PageBuilder';
+import { Page } from '@/services/types';
 import { Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+import { StorefrontLoading } from '@/components/storefront/StorefrontLoading';
+
+interface PageContent {
+  sections: Section[];
+  backgroundColor?: string;
+  isDarkMode?: boolean;
+  [key: string]: any;
+}
 
 export default function DynamicPage() {
   const { slug: slugFromParams } = useParams<{ slug: string }>();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === 'true';
-  const [page, setPage] = useState<any>(null);
+  const [page, setPage] = useState<Page | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Get slug from params or extract from pathname (remove leading/trailing slashes)
+  // Handle both /page/:slug and /:slug routes
   const slug = useMemo(() => {
-    return slugFromParams || location.pathname.replace(/^\//, '').replace(/\/$/, '');
+    if (slugFromParams) {
+      return slugFromParams;
+    }
+    // Remove leading/trailing slashes and 'page/' prefix if present
+    let path = location.pathname.replace(/^\//, '').replace(/\/$/, '');
+    if (path.startsWith('page/')) {
+      path = path.replace('page/', '');
+    }
+    return path;
   }, [slugFromParams, location.pathname]);
 
   useEffect(() => {
@@ -47,12 +66,7 @@ export default function DynamicPage() {
   }, [slug, isPreview]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen text-primary">
-        <Loader2 className="animate-spin w-12 h-12 mr-4" />
-        <span className="text-xl font-medium">Loading page…</span>
-      </div>
-    );
+    return <StorefrontLoading />;
   }
 
   if (!page) {
@@ -64,10 +78,42 @@ export default function DynamicPage() {
     );
   }
 
-  const content = (isPreview && page.draftContent) ? page.draftContent : page.content;
+  const rawContent = (isPreview && page.draftContent) ? page.draftContent : page.content;
+  const content = rawContent as unknown as PageContent;
   const sections: Section[] = content?.sections ?? [];
-  const backgroundColor = (content?.backgroundColor as string) || '#ffffff';
-  const isDarkMode = (content?.isDarkMode as boolean) || false;
+
+  // List of section types that require the premium dark theme (Cards template)
+  const CARDS_SECTION_TYPES = [
+    'merchant-dashboard',
+    'product-list',
+    'store-page',
+    'support-tickets',
+    'favorites-page',
+    'balance-operations',
+    'employees-page',
+    'permissions-page',
+    'charge-wallet',
+    'reports-page',
+    'profile-page',
+    'categories-hierarchy',
+    'bank-accounts'
+  ];
+
+  // Check if the page contains any of the Cards template sections
+  const isCardsPage = sections.some(section => CARDS_SECTION_TYPES.includes(section.type));
+
+  // Force transparent background for Cards pages to ensure premium look
+  // regardless of legacy database settings
+  const backgroundColor = isCardsPage 
+    ? 'transparent' 
+    : ((content?.backgroundColor as string) || '#ffffff');
+    
+  // For Cards pages, we want to respect the global theme (light/dark)
+  // so we force isDarkMode to false here to prevent the 'dark' class from being added locally
+  // The content will then inherit the theme from the parent (html/body)
+  const isDarkMode = isCardsPage 
+    ? false 
+    : ((content?.isDarkMode as boolean) || false);
 
   return (
     <motion.div

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, CheckCircle2, Loader2, LogIn, Key, ArrowLeft } from 'lucide-react';
@@ -8,28 +8,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { InteractiveFace, FaceState } from '@/components/ui/InteractiveFace';
 import { useTranslation } from 'react-i18next';
 import { authService } from '@/services/auth.service';
 import { coreApi, apiClient } from '@/lib/api';
 import { getLogoUrl, BRAND_NAME_AR, BRAND_NAME_EN, BRAND_TAGLINE_AR, BRAND_TAGLINE_EN } from '@/config/logo.config';
 import { VersionFooter } from '@/components/common/VersionFooter';
 import { getProfessionalErrorMessage } from '@/lib/toast-errors';
+import { isMainDomain } from '@/lib/domain';
 
 export default function Login() {
   const { t, i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, loginWithTokens } = useAuth();
   const { toast } = useToast();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [faceState, setFaceState] = useState<FaceState>('excited');
-  const [isFocused, setIsFocused] = useState(false);
-  const [passwordFieldActive, setPasswordFieldActive] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>(getLogoUrl());
+  const [brandNameAr, setBrandNameAr] = useState(BRAND_NAME_AR);
+  const [brandNameEn, setBrandNameEn] = useState(BRAND_NAME_EN);
+  const [brandTaglineAr, setBrandTaglineAr] = useState(BRAND_TAGLINE_AR);
+  const [brandTaglineEn, setBrandTaglineEn] = useState(BRAND_TAGLINE_EN);
   
   // Recovery ID states
   const [showRecoveryMode, setShowRecoveryMode] = useState(false);
@@ -37,13 +39,26 @@ export default function Login() {
   const [recoveryPassword, setRecoveryPassword] = useState('');
   const [recoveredEmail, setRecoveredEmail] = useState<string | null>(null);
 
-  // Fetch site configuration to get logo
+  // Fetch site configuration to get logo and branding
   useEffect(() => {
     const fetchSiteConfig = async () => {
+      // If on main domain, keep default branding
+      if (isMainDomain()) return;
+
       try {
         const config = await coreApi.get('/site-config');
-        if (config?.settings?.storeLogoUrl) {
-          setLogoUrl(config.settings.storeLogoUrl);
+        if (config?.settings) {
+          if (config.settings.storeLogoUrl) {
+            setLogoUrl(config.settings.storeLogoUrl);
+          }
+          if (config.settings.storeName) {
+            setBrandNameAr(config.settings.storeName);
+            setBrandNameEn(config.settings.storeName);
+          }
+          if (config.settings.description) {
+            setBrandTaglineAr(config.settings.description);
+            setBrandTaglineEn(config.settings.description);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch site config:', error);
@@ -52,24 +67,8 @@ export default function Login() {
     fetchSiteConfig();
   }, []);
 
-  // Handle focus state changes for face
-  useEffect(() => {
-    if (faceState === 'happy' || faceState === 'sad') return;
-    
-    if (passwordFieldActive) {
-      setFaceState('sleeping');
-    } else if (isFocused) {
-      setFaceState('attention');
-    } else {
-      setFaceState('excited');
-    }
-  }, [isFocused, passwordFieldActive, faceState]);
-
   const handleInputChange = (setter: (val: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setter(e.target.value);
-    if (faceState === 'sad') {
-      setFaceState('attention');
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,8 +76,17 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(identifier, password);
-      setFaceState('happy');
+      const mustChangePassword = await login(identifier, password);
+      
+      // If password change required, redirect to change password page
+      if (mustChangePassword) {
+        toast({
+          title: isRTL ? 'تم تسجيل الدخول' : 'Login successful',
+          description: isRTL ? 'يرجى تغيير كلمة المرور للمتابعة' : 'Please change your password to continue',
+        });
+        navigate('/auth/change-password', { replace: true });
+        return;
+      }
       
       // Check if user has a tenant after login
       // Wait a bit for user state to update
@@ -93,11 +101,19 @@ export default function Login() {
         });
         
         setTimeout(() => {
-          navigate(hasTenant ? '/dashboard' : '/setup');
+          const state = location.state as { from?: { pathname: string } } | null;
+          const from = state?.from?.pathname;
+          
+          // If we have a return path that isn't login/auth, go there
+          if (from && !from.includes('/login') && !from.includes('/auth/')) {
+            navigate(from, { replace: true });
+          } else {
+            // Otherwise go to dashboard or setup
+            navigate(hasTenant ? '/dashboard' : '/setup');
+          }
         }, 500);
       }, 100);
     } catch (error: unknown) {
-      setFaceState('sad');
       const { title, description } = getProfessionalErrorMessage(
         error,
         { operation: isRTL ? 'تسجيل الدخول' : 'login', resource: isRTL ? 'الحساب' : 'account' },
@@ -127,7 +143,6 @@ export default function Login() {
         localStorage.setItem('refreshToken', result.refreshToken);
       }
       
-      setFaceState('happy');
       // Check if user has a tenant, if not redirect to setup
       const hasTenant = result.tenantId && result.tenantId !== 'default';
       toast({
@@ -140,7 +155,6 @@ export default function Login() {
         navigate(hasTenant ? '/dashboard' : '/setup');
       }, 1500);
     } catch (error: unknown) {
-      setFaceState('sad');
       const { title, description } = getProfessionalErrorMessage(
         error,
         { operation: isRTL ? 'تسجيل الدخول' : 'login', resource: isRTL ? 'باستخدام رمز الاسترداد' : 'using recovery ID' },
@@ -220,11 +234,11 @@ export default function Login() {
                 <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
               <div className="flex flex-col">
-                <h1 className="text-4xl font-heading font-bold text-white">{BRAND_NAME_AR}</h1>
-                <p className="text-xl font-semibold text-white/80">{BRAND_NAME_EN}</p>
+                <h1 className="text-4xl font-heading font-bold text-white">{brandNameAr}</h1>
+                <p className="text-xl font-semibold text-white/80">{brandNameEn}</p>
               </div>
             </div>
-            <p className="text-white/70 text-sm">{BRAND_TAGLINE_AR} | {BRAND_TAGLINE_EN}</p>
+            <p className="text-white/70 text-sm">{brandTaglineAr} | {brandTaglineEn}</p>
           </Link>
         </div>
 
@@ -271,24 +285,27 @@ export default function Login() {
           <Link to="/" className="lg:hidden flex flex-col items-center gap-3 mb-8 group">
             <div className="flex items-center gap-3">
               <div className="w-28 h-28 md:w-32 md:h-32 rounded-xl overflow-hidden bg-card border border-border shadow-lg">
-                <img src={logoUrl} alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
+                <img src={logoUrl} alt={`${brandNameEn} - ${brandNameAr}`} className="w-full h-full object-contain p-2 group-hover:scale-110 transition-transform" />
               </div>
               <div className="flex flex-col">
-                <h1 className="text-3xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</h1>
-                <p className="text-lg font-semibold text-primary">{BRAND_NAME_EN}</p>
+                <h1 className="text-3xl font-heading font-bold gradient-text">{brandNameAr}</h1>
+                <p className="text-lg font-semibold text-primary">{brandNameEn}</p>
               </div>
             </div>
-            <p className="text-muted-foreground text-xs text-center">{BRAND_TAGLINE_AR} | {BRAND_TAGLINE_EN}</p>
+            <p className="text-muted-foreground text-xs text-center">{brandTaglineAr} | {brandTaglineEn}</p>
           </Link>
 
           <Card className="shadow-2xl border-border/50 bg-card/50 backdrop-blur-sm">
             <CardHeader className="space-y-2 text-center pb-6">
               {/* Interactive Face */}
-              <div className="flex justify-center mb-2">
-                <InteractiveFace 
-                  state={faceState} 
-                  className="transform hover:scale-105 transition-transform" 
-                />
+              <div className="flex justify-center mb-6">
+                <div className="w-24 h-24 rounded-xl overflow-hidden bg-card border border-border/50 shadow-lg">
+                  <img 
+                    src={logoUrl} 
+                    alt={`${brandNameEn} - ${brandNameAr}`} 
+                    className="w-full h-full object-contain p-2 hover:scale-110 transition-transform duration-300" 
+                  />
+                </div>
               </div>
               
               <CardTitle className="text-3xl font-heading font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
@@ -343,8 +360,6 @@ export default function Login() {
                           placeholder="name@example.com or username"
                           value={identifier}
                           onChange={handleInputChange(setIdentifier)}
-                          onFocus={() => setIsFocused(true)}
-                          onBlur={() => setIsFocused(false)}
                           required
                           className="h-12 pr-10 border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                         />
@@ -362,14 +377,6 @@ export default function Login() {
                           type={showPassword ? 'text' : 'password'}
                           value={password}
                           onChange={handleInputChange(setPassword)}
-                          onFocus={() => {
-                            setIsFocused(true);
-                            setPasswordFieldActive(true);
-                          }}
-                          onBlur={() => {
-                            setIsFocused(false);
-                            setPasswordFieldActive(false);
-                          }}
                           required
                           className="h-12 pl-10 pr-10 border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                         />
@@ -448,8 +455,6 @@ export default function Login() {
                           placeholder="XXXX-XXXX-XXXX-XXXX"
                           value={recoveryId}
                           onChange={handleInputChange(setRecoveryId)}
-                          onFocus={() => setIsFocused(true)}
-                          onBlur={() => setIsFocused(false)}
                           className="h-11 pr-10 border-border focus:border-primary focus:ring-primary font-mono text-center tracking-wider"
                         />
                       </div>

@@ -5,9 +5,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GuestCheckoutForm } from '@/components/checkout/GuestCheckoutForm';
 import { UserPlus, LogIn, ShoppingBag } from 'lucide-react';
+import { useEffect, useState as useReactState } from 'react';
+import { coreApi } from '@/lib/api';
+import { SiteSettings } from '@/services/types';
+import { useTranslation } from 'react-i18next';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
 
 export default function CheckoutPage() {
+  const { t, i18n } = useTranslation();
+  const { settings: contextSettings } = useStoreSettings();
   const [checkoutType, setCheckoutType] = useState<'guest' | 'login' | 'register'>('guest');
+  const [settings, setSettings] = useReactState<SiteSettings | null>(null);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const data = await coreApi.get('/site-config');
+        setSettings(data.settings);
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      }
+    };
+    loadSettings();
+  }, [setSettings]);
+
+  const isShippingEnabled = settings?.shippingEnabled === true && settings?.storeType !== 'DIGITAL_CARDS';
+  const isTaxEnabled = settings?.taxEnabled !== false;
   
   // Mock cart data - replace with actual cart from context/state
   const cartItems = [
@@ -35,25 +58,25 @@ export default function CheckoutPage() {
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-3xl">إتمام الطلب</CardTitle>
+                <CardTitle className="text-3xl">{t('checkout.title', 'Checkout')}</CardTitle>
                 <CardDescription>
-                  اختر طريقة الدفع وأكمل طلبك
+                  {t('checkout.description', 'Choose your payment method and complete your order')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs value={checkoutType} onValueChange={(v) => setCheckoutType(v as any)}>
+                <Tabs value={checkoutType} onValueChange={(v) => setCheckoutType(v as 'guest' | 'login' | 'register')}>
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="guest" className="flex items-center gap-2">
                       <ShoppingBag className="h-4 w-4" />
-                      ضيف
+                      {t('checkout.guest', 'Guest')}
                     </TabsTrigger>
                     <TabsTrigger value="login" className="flex items-center gap-2">
                       <LogIn className="h-4 w-4" />
-                      تسجيل دخول
+                      {t('auth.login', 'Login')}
                     </TabsTrigger>
                     <TabsTrigger value="register" className="flex items-center gap-2">
                       <UserPlus className="h-4 w-4" />
-                      إنشاء حساب
+                      {t('auth.signup', 'Sign Up')}
                     </TabsTrigger>
                   </TabsList>
 
@@ -70,20 +93,20 @@ export default function CheckoutPage() {
                   <TabsContent value="login" className="mt-6">
                     <Card>
                       <CardHeader>
-                        <CardTitle>تسجيل الدخول</CardTitle>
+                        <CardTitle>{t('auth.login', 'Login')}</CardTitle>
                         <CardDescription>
-                          سجل دخولك للوصول إلى عنوانك المحفوظ وتتبع طلباتك
+                          {t('checkout.loginDesc', 'Log in to access your saved addresses and track your orders')}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="text-center py-8">
                           <p className="text-gray-600 dark:text-gray-400 mb-4">
-                            هل لديك حساب؟
+                            {t('auth.haveAccount', 'Already have an account?')}
                           </p>
                           <Link to="/login">
                             <Button size="lg" className="w-full max-w-sm">
                               <LogIn className="mr-2 h-5 w-5" />
-                              تسجيل الدخول
+                              {t('auth.login', 'Login')}
                             </Button>
                           </Link>
                         </div>
@@ -95,20 +118,20 @@ export default function CheckoutPage() {
                   <TabsContent value="register" className="mt-6">
                     <Card>
                       <CardHeader>
-                        <CardTitle>إنشاء حساب جديد</CardTitle>
+                        <CardTitle>{t('auth.createNewAccount', 'Create New Account')}</CardTitle>
                         <CardDescription>
-                          أنشئ حسابًا لتتبع طلباتك والحصول على عروض حصرية
+                          {t('checkout.registerDesc', 'Create an account to track your orders and get exclusive offers')}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="text-center py-8">
                           <p className="text-gray-600 dark:text-gray-400 mb-4">
-                            ليس لديك حساب؟
+                            {t('auth.noAccount', "Don't have an account?")}
                           </p>
                           <Link to="/signup">
                             <Button size="lg" className="w-full max-w-sm">
                               <UserPlus className="mr-2 h-5 w-5" />
-                              إنشاء حساب
+                              {t('auth.signup', 'Sign Up')}
                             </Button>
                           </Link>
                         </div>
@@ -124,7 +147,7 @@ export default function CheckoutPage() {
           <div className="lg:col-span-1">
             <Card className="sticky top-4">
               <CardHeader>
-                <CardTitle>ملخص الطلب</CardTitle>
+                <CardTitle>{t('checkout.orderSummary', 'Order Summary')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Cart Items */}
@@ -134,33 +157,37 @@ export default function CheckoutPage() {
                       <div className="flex-1">
                         <p className="font-medium">{item.productName}</p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          الكمية: {item.quantity}
+                          {t('common.quantity', 'Quantity')}: {item.quantity}
                         </p>
                       </div>
-                      <p className="font-semibold">{item.price * item.quantity} ر.س</p>
+                      <p className="font-semibold">{item.price * item.quantity} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}</p>
                     </div>
                   ))}
                 </div>
 
                 <div className="border-t pt-4 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">المجموع الفرعي</span>
-                    <span>{totalAmount} ر.س</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t('cart.subtotal', 'Subtotal')}</span>
+                    <span>{totalAmount} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">الشحن</span>
-                    <span>مجاني</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">الضريبة</span>
-                    <span>0 ر.س</span>
-                  </div>
+                  {isShippingEnabled && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">{t('cart.shipping', 'Shipping')}</span>
+                      <span>{t('common.free', 'Free')}</span>
+                    </div>
+                  )}
+                  {isTaxEnabled && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">{t('cart.tax', 'Tax')}</span>
+                      <span>0 {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t pt-4">
                   <div className="flex justify-between text-lg font-bold">
-                    <span>الإجمالي</span>
-                    <span className="text-indigo-600">{totalAmount} ر.س</span>
+                    <span>{t('cart.total', 'Total')}</span>
+                    <span className="text-indigo-600">{totalAmount} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}</span>
                   </div>
                 </div>
 
@@ -170,20 +197,24 @@ export default function CheckoutPage() {
                     <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>دفع آمن ومشفر</span>
+                    <span>{t('checkout.securePayment', 'Secure and encrypted payment')}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>شحن سريع</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>إرجاع مجاني خلال 14 يوم</span>
-                  </div>
+                  {isShippingEnabled && (
+                    <>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>{t('checkout.fastShipping', 'Fast shipping')}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>{t('checkout.freeReturns', 'Free returns within 14 days')}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>

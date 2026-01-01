@@ -9,8 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Slider } from '@/components/ui/slider';
 import { useTranslation } from 'react-i18next';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
 
+import { StorefrontLoading } from '@/components/storefront/StorefrontLoading';
 import { ProductCard } from '@/components/storefront/ProductCard';
 import { coreApi } from '@/lib/api';
 import { useCart } from '@/contexts/CartContext';
@@ -20,6 +23,7 @@ import { BRAND_NAME_AR, BRAND_NAME_EN } from '@/config/logo.config';
 
 export default function ProductDetail() {
   const { t, i18n } = useTranslation();
+  const { settings } = useStoreSettings();
   const { id, productId } = useParams();
   // Handle both /products/:id and /products/:tenantId/:productId patterns
   const actualProductId = productId || id;
@@ -50,6 +54,7 @@ export default function ProductDetail() {
   };
 
   const loadProduct = async () => {
+    const isRtl = i18n.language === 'ar';
     try {
       setLoading(true);
       const data = await coreApi.getProduct(actualProductId!);
@@ -78,8 +83,10 @@ export default function ProductDetail() {
     } catch (error) {
       console.error('Failed to load product:', error);
       toast({
-        title: 'تعذر تحميل المنتج',
-        description: 'حدث خطأ أثناء تحميل بيانات المنتج. يرجى المحاولة مرة أخرى.',
+        title: isRtl ? 'تعذر تحميل المنتج' : 'Failed to Load Product',
+        description: isRtl 
+          ? 'حدث خطأ أثناء تحميل بيانات المنتج. يرجى المحاولة مرة أخرى.'
+          : 'An error occurred while loading product data. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -89,6 +96,7 @@ export default function ProductDetail() {
 
   const handleAddToCart = async () => {
     if (!product) return;
+    const isRtl = i18n.language === 'ar';
     
     try {
       // If product has variants but none is selected, use the first variant automatically
@@ -101,14 +109,18 @@ export default function ProductDetail() {
       
       await addToCart(product.id, quantity, variantId);
       toast({
-        title: 'تمت الإضافة!',
-        description: `تمت إضافة ${product.name} إلى السلة`,
+        title: isRtl ? 'تمت الإضافة!' : 'Added!',
+        description: isRtl 
+          ? `تمت إضافة ${product.name} إلى السلة`
+          : `${product.name} added to cart`,
       });
     } catch (error) {
       console.error('Failed to add to cart:', error);
       toast({
-        title: 'تعذرت الإضافة للسلة',
-        description: 'حدث خطأ أثناء إضافة المنتج للسلة. يرجى المحاولة مرة أخرى.',
+        title: isRtl ? 'تعذرت الإضافة للسلة' : 'Failed to Add to Cart',
+        description: isRtl 
+          ? 'حدث خطأ أثناء إضافة المنتج للسلة. يرجى المحاولة مرة أخرى.'
+          : 'An error occurred while adding the product to cart. Please try again.',
         variant: 'destructive',
       });
     }
@@ -137,16 +149,7 @@ export default function ProductDetail() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-
-        <div className="container py-20">
-          <div className="flex items-center justify-center">
-            <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
-          </div>
-        </div>
-      </div>
-    );
+    return <StorefrontLoading />;
   }
 
   if (!product) {
@@ -156,12 +159,18 @@ export default function ProductDetail() {
         <div className="container py-20">
           <Card className="p-12 text-center border-0 shadow-lg">
             <Package className="h-20 w-20 mx-auto text-gray-400 mb-4" />
-            <h2 className="text-2xl font-bold mb-2">المنتج غير موجود</h2>
+            <h2 className="text-2xl font-bold mb-2">
+              {isRtl ? 'المنتج غير موجود' : 'Product Not Found'}
+            </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              عذراً، لم نتمكن من العثور على هذا المنتج
+              {isRtl 
+                ? 'عذراً، لم نتمكن من العثور على هذا المنتج'
+                : 'Sorry, we couldn\'t find this product'}
             </p>
             <Link to="/products">
-              <Button>العودة إلى المنتجات</Button>
+              <Button>
+                {isRtl ? 'العودة إلى المنتجات' : 'Back to Products'}
+              </Button>
             </Link>
           </Card>
         </div>
@@ -189,6 +198,28 @@ export default function ProductDetail() {
   const isRtl = i18n.language === 'ar';
   const SeparatorIcon = isRtl ? ChevronLeft : ChevronRight;
 
+  const handleShare = async () => {
+    const shareData = {
+      title: product.nameAr || product.name,
+      text: product.descriptionAr || product.description,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast({
+          title: isRtl ? 'تم نسخ الرابط' : 'Link Copied',
+          description: isRtl ? 'تم نسخ رابط المنتج إلى الحافظة' : 'Product link copied to clipboard',
+        });
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 animate-fade-in">
 
@@ -199,7 +230,9 @@ export default function ProductDetail() {
             to="/" 
             className="text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-medium"
           >
-            {isRtl ? BRAND_NAME_AR : BRAND_NAME_EN}
+            {isRtl 
+              ? (settings?.storeNameAr || settings?.storeName || BRAND_NAME_AR) 
+              : (settings?.storeName || BRAND_NAME_EN)}
           </Link>
           
           <SeparatorIcon className="h-4 w-4 text-gray-400" />
@@ -210,13 +243,15 @@ export default function ProductDetail() {
                 to={`/categories/${cat.id}`}
                 className="text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
               >
-                {cat.name}
+                {isRtl ? (cat.nameAr || cat.name) : (cat.name || cat.nameAr)}
               </Link>
               <SeparatorIcon className="h-4 w-4 text-gray-400" />
             </div>
           ))}
           
-          <span className="text-indigo-600 font-medium truncate max-w-[200px]">{product.name}</span>
+          <span className="text-indigo-600 font-medium truncate max-w-[200px]">
+            {isRtl ? (product.nameAr || product.name) : (product.name || product.nameAr)}
+          </span>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 mb-16">
@@ -287,16 +322,16 @@ export default function ProductDetail() {
             {/* Title & Price */}
             <div>
               <h1 className="text-3xl md:text-4xl font-bold mb-4 text-gray-900 dark:text-white">
-                {product.name}
+                {isRtl ? (product.nameAr || product.name) : (product.name || product.nameAr)}
               </h1>
               
               <div className="flex items-baseline gap-4 mb-4">
                 <span className="text-4xl font-bold text-indigo-600">
-                  {Number(currentPrice || 0).toFixed(2)} ر.س
+                  {Number(currentPrice || 0).toFixed(2)} {isRtl ? 'ر.س' : (settings?.currency || 'SAR')}
                 </span>
-                {comparePrice && Number(comparePrice) > Number(currentPrice) && (
+                {comparePrice > 0 && Number(comparePrice) > Number(currentPrice) && (
                   <span className="text-2xl text-gray-500 line-through">
-                    {Number(comparePrice).toFixed(2)} ر.س
+                    {Number(comparePrice).toFixed(2)} {isRtl ? 'ر.س' : (settings?.currency || 'SAR')}
                   </span>
                 )}
               </div>
@@ -316,7 +351,7 @@ export default function ProductDetail() {
                   ))}
                 </div>
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  4.5 (128 تقييم)
+                  4.5 (128 {isRtl ? 'تقييم' : 'reviews'})
                 </span>
               </div>
 
@@ -325,10 +360,14 @@ export default function ProductDetail() {
                 {product.isAvailable ? (
                   <>
                     <Check className="h-5 w-5 text-green-600" />
-                    <span className="text-green-600 font-medium">متوفر في المخزون</span>
+                    <span className="text-green-600 font-medium">
+                      {isRtl ? 'متوفر في المخزون' : 'In Stock'}
+                    </span>
                   </>
                 ) : (
-                  <Badge variant="destructive">غير متوفر</Badge>
+                  <Badge variant="destructive">
+                    {isRtl ? 'غير متوفر' : 'Out of Stock'}
+                  </Badge>
                 )}
               </div>
             </div>
@@ -337,32 +376,48 @@ export default function ProductDetail() {
 
             {/* Description */}
             <div>
-              <h3 className="font-semibold text-lg mb-3">الوصف</h3>
+              <h3 className="font-semibold text-lg mb-3">
+                {isRtl ? 'الوصف' : 'Description'}
+              </h3>
               <div 
                 className="text-gray-600 dark:text-gray-400 leading-relaxed prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: product.description || 'لا يوجد وصف متاح لهذا المنتج.' }}
+                dangerouslySetInnerHTML={{ 
+                  __html: isRtl 
+                    ? (product.descriptionAr || product.description || 'لا يوجد وصف متاح لهذا المنتج.')
+                    : (product.description || product.descriptionAr || 'No description available for this product.')
+                }}
               />
             </div>
 
             {/* Additional Info (Weight, Dimensions, Tags) */}
             {(product.weight || product.dimensions || (product.tags && product.tags.length > 0)) && (
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 space-y-3">
-                <h3 className="font-semibold text-lg mb-2">معلومات إضافية</h3>
+                <h3 className="font-semibold text-lg mb-2">
+                  {isRtl ? 'معلومات إضافية' : 'Additional Information'}
+                </h3>
                 {product.weight && (
                   <div className="flex justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
-                    <span className="text-gray-600 dark:text-gray-400">الوزن</span>
-                    <span className="font-medium">{product.weight} كجم</span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {isRtl ? 'الوزن' : 'Weight'}
+                    </span>
+                    <span className="font-medium">
+                      {product.weight} {isRtl ? 'كجم' : 'kg'}
+                    </span>
                   </div>
                 )}
                 {product.dimensions && (
                   <div className="flex justify-between border-b border-gray-200 dark:border-gray-700 pb-2">
-                    <span className="text-gray-600 dark:text-gray-400">الأبعاد</span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {isRtl ? 'الأبعاد' : 'Dimensions'}
+                    </span>
                     <span className="font-medium">{product.dimensions}</span>
                   </div>
                 )}
                 {product.tags && product.tags.length > 0 && (
                   <div className="pt-2">
-                    <span className="text-gray-600 dark:text-gray-400 block mb-2">الوسوم</span>
+                    <span className="text-gray-600 dark:text-gray-400 block mb-2">
+                      {isRtl ? 'الوسوم' : 'Tags'}
+                    </span>
                     <div className="flex flex-wrap gap-2">
                       {product.tags.map((tag, index) => (
                         <Badge key={index} variant="secondary" className="bg-white dark:bg-gray-700">
@@ -377,49 +432,62 @@ export default function ProductDetail() {
             )}
 
             {/* Variants */}
-            {product.variants?.length > 0 && (
+            {product.variants?.length > 0 && 
+             product.variants.some((variant: ProductVariant) => 
+               variant.name?.toLowerCase() !== 'default' && 
+               variant.name?.toLowerCase() !== 'افتراضي'
+             ) && (
               <div>
                 <label className="block font-semibold text-lg mb-3">
-                  الخيارات
+                  {isRtl ? 'الخيارات' : 'Options'}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  {product.variants.map((variant: ProductVariant) => (
-                    <Button
-                      key={variant.id}
-                      variant={selectedVariant?.id === variant.id ? 'default' : 'outline'}
-                      onClick={() => setSelectedVariant(variant)}
-                      className={`h-12 border-2 ${selectedVariant?.id === variant.id ? 'border-indigo-600' : ''}`}
-                    >
-                      {variant.name}
-                    </Button>
-                  ))}
+                  {product.variants
+                    .filter((variant: ProductVariant) => 
+                      variant.name?.toLowerCase() !== 'default' && 
+                      variant.name?.toLowerCase() !== 'افتراضي'
+                    )
+                    .map((variant: ProductVariant) => (
+                      <Button
+                        key={variant.id}
+                        variant={selectedVariant?.id === variant.id ? 'default' : 'outline'}
+                        onClick={() => setSelectedVariant(variant)}
+                        className={`h-12 border-2 ${selectedVariant?.id === variant.id ? 'border-indigo-600' : ''}`}
+                      >
+                        {variant.name}
+                      </Button>
+                    ))}
                 </div>
               </div>
             )}
 
-            {/* Quantity */}
+            {/* Quantity Slider */}
             <div>
-              <label className="block font-semibold text-lg mb-3">الكمية</label>
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-12 w-12 border-2"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                >
-                  <Minus className="h-5 w-5" />
-                </Button>
-                <span className="w-16 text-center text-xl font-semibold">
-                  {quantity}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-12 w-12 border-2"
-                  onClick={() => setQuantity(quantity + 1)}
-                >
-                  <Plus className="h-5 w-5" />
-                </Button>
+              <div className="flex justify-between items-center mb-3">
+                <label className="font-semibold text-lg">
+                  {isRtl ? 'الكمية' : 'Quantity'}
+                </label>
+                <span className="text-xl font-bold text-indigo-600">{quantity}</span>
+              </div>
+              
+              <div className="py-4">
+                <Slider
+                  defaultValue={[1]}
+                  value={[quantity]}
+                  min={1}
+                  max={product.stock || 50}
+                  step={1}
+                  disabled={!product.isActive}
+                  onValueChange={(vals) => setQuantity(vals[0])}
+                  className={`py-4 ${!product.isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                />
+                {!product.isActive && (
+                  <p className="text-sm text-red-500 mt-2">
+                    {isRtl 
+                      ? 'لا يمكن تغيير الكمية لهذا المنتج (قيمة ثابتة)'
+                      : 'Cannot change quantity for this product (fixed value)'}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -450,7 +518,9 @@ export default function ProductDetail() {
                 disabled={!product.isAvailable}
               >
                 <ShoppingCart className="ml-2 h-5 w-5" />
-                {product.isAvailable ? 'أضف إلى السلة' : 'غير متوفر'}
+                {product.isAvailable 
+                  ? (isRtl ? 'أضف إلى السلة' : 'Add to Cart')
+                  : (isRtl ? 'غير متوفر' : 'Out of Stock')}
               </Button>
               <Button
                 size="lg"
@@ -466,31 +536,34 @@ export default function ProductDetail() {
                 size="lg"
                 variant="outline"
                 className="h-14 w-14 border-2"
+                onClick={handleShare}
               >
                 <Share2 className="h-6 w-6" />
               </Button>
             </div>
 
-            {/* Features */}
-            <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border-0">
-              <div className="space-y-4">
-                {features.map((feature, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                      <feature.icon className="h-5 w-5 text-indigo-600" />
+            {/* Features - Hide for digital stores as they don't have delivery/returns */}
+            {settings?.storeType !== 'DIGITAL_CARDS' && (
+              <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border-0">
+                <div className="space-y-4">
+                  {features.map((feature, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                        <feature.icon className="h-5 w-5 text-indigo-600" />
+                      </div>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {feature.text}
+                      </span>
                     </div>
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {feature.text}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {/* SKU */}
             {product.sku && (
               <p className="text-sm text-gray-500">
-                رمز المنتج: <span className="font-mono">{product.sku}</span>
+                {isRtl ? 'رمز المنتج:' : 'Product Code:'} <span className="font-mono">{product.sku}</span>
               </p>
             )}
           </div>
@@ -499,7 +572,9 @@ export default function ProductDetail() {
         {/* Related Products */}
         {relatedProducts.length > 0 && (
           <div className="mt-20 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-            <h2 className="text-2xl font-bold mb-8">منتجات قد تعجبك</h2>
+            <h2 className="text-2xl font-bold mb-8">
+              {isRtl ? 'منتجات قد تعجبك' : 'You May Also Like'}
+            </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {relatedProducts.map((relatedProduct) => (
                 <ProductCard key={relatedProduct.id} product={relatedProduct} />

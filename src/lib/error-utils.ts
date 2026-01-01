@@ -21,7 +21,7 @@ export function getErrorMessage(error: unknown): string {
   if (typeof error === 'object') {
     // Check for NestJS error format: { message, error, statusCode }
     if ('message' in error) {
-      const message = (error as any).message;
+      const message = (error as { message: unknown }).message;
       if (typeof message === 'string') {
         return message;
       }
@@ -33,7 +33,7 @@ export function getErrorMessage(error: unknown): string {
 
     // Check for ApiError format: { status, message, data }
     if ('status' in error && 'message' in error) {
-      const message = (error as any).message;
+      const message = (error as { message: unknown }).message;
       if (typeof message === 'string') {
         return message;
       }
@@ -41,7 +41,7 @@ export function getErrorMessage(error: unknown): string {
 
     // Check for axios error format: { response: { data: { message } } }
     if ('response' in error) {
-      const response = (error as any).response;
+      const response = (error as { response: { data?: { message?: unknown } } }).response;
       if (response?.data?.message) {
         return typeof response.data.message === 'string' 
           ? response.data.message 

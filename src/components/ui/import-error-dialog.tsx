@@ -38,6 +38,40 @@ export function ImportErrorDialog({
 }: ImportErrorDialogProps) {
   const [expandedGroups, setExpandedGroups] = React.useState<Set<string>>(new Set());
 
+  const [showTechnical, setShowTechnical] = React.useState<Record<string, boolean>>({});
+
+  const getFriendlyErrorMessage = (error: string) => {
+    if (error.includes('Unique constraint failed') && (error.includes('slug') || error.includes('productTag'))) {
+      return "هذا العنصر موجود بالفعل أو هناك تكرار في الروابط (Slug) أو الأوسمة.";
+    }
+    if (error.includes('Unique constraint failed') && error.includes('sku')) {
+      return "كود المنتج (SKU) مكرر بالفعل. يرجى استخدام كود فريد لكل منتج.";
+    }
+    if (error.includes('Unique constraint failed') && error.includes('barcode')) {
+      return "الباركود مكرر بالفعل. يرجى استخدام باركود فريد.";
+    }
+    if (error.includes('Foreign key constraint failed')) {
+      return "فشل الربط مع بيانات أخرى. تأكد من أن الفئة أو العلامة التجارية المذكورة موجودة بالفعل.";
+    }
+    if (error.includes('is missing')) {
+      return "هناك بيانات مطلوبة ناقصة في هذا الصف.";
+    }
+    if (error.includes('Invalid value') || error.includes('must be')) {
+      return "القيمة المدخلة غير صالحة. يرجى التأكد من نوع البيانات (مثلاً الأرقام في حقول السعر).";
+    }
+    if (error.includes('prisma') || error.includes('invocation') || error.includes('constraint')) {
+      return "حدث خطأ تقني أثناء معالجة البيانات. يرجى مراجعة صحة البيانات في هذا الصف.";
+    }
+    return error;
+  };
+
+  const toggleTechnical = (id: string) => {
+    setShowTechnical(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   // Group errors by column
   const errorsByColumn = React.useMemo(() => {
     const groups: Record<string, ImportError[]> = {};
@@ -107,7 +141,7 @@ export function ImportErrorDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="py-4 max-h-[70vh] overflow-y-auto space-y-4">
+        <div className="py-4 max-h-[70vh] overflow-y-auto space-y-4 text-right" dir="rtl">
           {/* Summary Card */}
           <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-2 border-red-200 dark:border-red-800 rounded-lg p-5">
             <div className="flex items-center justify-between flex-wrap gap-4">
@@ -183,25 +217,51 @@ export function ImportErrorDialog({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {columnErrors.map((err, index) => (
-                          <TableRow 
-                            key={index} 
-                            className="hover:bg-red-50/50 dark:hover:bg-red-950/20 border-b border-red-100 dark:border-red-900/50"
-                          >
-                            <TableCell className="font-mono font-bold text-center text-lg bg-red-50 dark:bg-red-950/30">
-                              {err.row}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              <span className="font-semibold">{err.productName || err.itemName || '(لا يوجد اسم)'}</span>
-                            </TableCell>
-                            <TableCell className="text-red-700 dark:text-red-400 font-medium">
-                              <div className="flex items-start gap-2">
-                                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                                <span>{err.error}</span>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {columnErrors.map((err, index) => {
+                          const errorId = `${column}-${index}`;
+                          const isTechnical = err.error.includes('prisma') || err.error.includes('invocation') || err.error.includes('constraint');
+                          
+                          return (
+                            <TableRow 
+                              key={index} 
+                              className="hover:bg-red-50/50 dark:hover:bg-red-950/20 border-b border-red-100 dark:border-red-900/50"
+                            >
+                              <TableCell className="font-mono font-bold text-center text-lg bg-red-50 dark:bg-red-950/30">
+                                {err.row}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                <span className="font-semibold">{err.productName || err.itemName || '(لا يوجد اسم)'}</span>
+                              </TableCell>
+                              <TableCell className="text-red-700 dark:text-red-400 font-medium">
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex items-start gap-2">
+                                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                    <span>{getFriendlyErrorMessage(err.error)}</span>
+                                  </div>
+                                  
+                                  {isTechnical && (
+                                    <div className="mt-1">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-7 text-[10px] px-2 bg-red-100/50 hover:bg-red-200/50 dark:bg-red-900/30 dark:hover:bg-red-800/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800"
+                                        onClick={() => toggleTechnical(errorId)}
+                                      >
+                                        {showTechnical[errorId] ? 'إخفاء التفاصيل التقنية' : 'Dev (تفاصيل تقنية)'}
+                                      </Button>
+                                      
+                                      {showTechnical[errorId] && (
+                                        <div className="mt-2 p-3 bg-gray-900 text-gray-100 rounded text-[10px] font-mono whitespace-pre-wrap border border-gray-700 overflow-x-auto text-left" dir="ltr">
+                                          {err.error}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -231,33 +291,59 @@ export function ImportErrorDialog({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {errors.map((err, index) => (
-                        <TableRow 
-                          key={index} 
-                          className="hover:bg-red-50/50 dark:hover:bg-red-950/20 border-b border-red-100 dark:border-red-900/50"
-                        >
-                          <TableCell className="font-mono font-bold text-center text-lg bg-red-50 dark:bg-red-950/30">
-                            {err.row}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <span className="font-semibold">{err.productName || err.itemName || '(لا يوجد اسم)'}</span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant="outline" 
-                              className={cn("font-semibold", getColumnColor(err.column || 'عام'))}
-                            >
-                              {err.column || 'عام'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-red-700 dark:text-red-400 font-medium">
-                            <div className="flex items-start gap-2">
-                              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                              <span>{err.error}</span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {errors.map((err, index) => {
+                        const errorId = `full-${index}`;
+                        const isTechnical = err.error.includes('prisma') || err.error.includes('invocation') || err.error.includes('constraint');
+
+                        return (
+                          <TableRow 
+                            key={index} 
+                            className="hover:bg-red-50/50 dark:hover:bg-red-950/20 border-b border-red-100 dark:border-red-900/50"
+                          >
+                            <TableCell className="font-mono font-bold text-center text-lg bg-red-50 dark:bg-red-950/30">
+                              {err.row}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              <span className="font-semibold">{err.productName || err.itemName || '(لا يوجد اسم)'}</span>
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant="outline" 
+                                className={cn("font-semibold", getColumnColor(err.column || 'عام'))}
+                              >
+                                {err.column || 'عام'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-red-700 dark:text-red-400 font-medium">
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-start gap-2">
+                                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                  <span>{getFriendlyErrorMessage(err.error)}</span>
+                                </div>
+
+                                {isTechnical && (
+                                  <div className="mt-1">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      className="h-7 text-[10px] px-2 bg-red-100/50 hover:bg-red-200/50 dark:bg-red-900/30 dark:hover:bg-red-800/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800"
+                                      onClick={() => toggleTechnical(errorId)}
+                                    >
+                                      {showTechnical[errorId] ? 'إخفاء التفاصيل التقنية' : 'Dev (تفاصيل تقنية)'}
+                                    </Button>
+
+                                    {showTechnical[errorId] && (
+                                      <div className="mt-2 p-3 bg-gray-900 text-gray-100 rounded text-[10px] font-mono whitespace-pre-wrap border border-gray-700 overflow-x-auto text-left" dir="ltr">
+                                        {err.error}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

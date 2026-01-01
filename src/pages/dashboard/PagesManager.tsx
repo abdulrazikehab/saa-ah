@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
   Plus, Edit, Trash2, Search, Eye, Copy, FileText, 
-  Sparkles, LayoutTemplate, Globe, Calendar, Loader2, Store, AlertCircle,
+  Sparkles, LayoutTemplate, Globe, Calendar, Loader2, Store, AlertCircle, Shield,
   Zap, ShoppingBag, RefreshCw
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -27,6 +27,7 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
+import { tenantService } from '@/services/tenant.service';
 
 export default function PagesManager() {
   const [pages, setPages] = useState<Page[]>([]);
@@ -44,25 +45,33 @@ export default function PagesManager() {
 
   // Helper function to extract subdomain from hostname
   const extractSubdomainFromHostname = (hostname: string): string | null => {
-    // For local development
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      const parts = hostname.split('.');
-      if (parts.length > 1 && parts[0] !== 'localhost' && parts[0] !== '127') {
+    // Remove port if present
+    const cleanHostname = hostname.split(':')[0];
+    
+    // For local development with subdomain (e.g., asus1.localhost or tenant-508aeb7f.localhost)
+    if (cleanHostname.includes('.localhost')) {
+      const parts = cleanHostname.split('.localhost');
+      if (parts[0] && parts[0] !== 'localhost' && parts[0] !== '127') {
         return parts[0];
       }
       return null;
     }
     
+    // For localhost without subdomain or 127.0.0.1
+    if (cleanHostname === 'localhost' || cleanHostname === '127.0.0.1') {
+      return null;
+    }
+    
     // For production subdomains (e.g., market.saeaa.com)
-    if (hostname.endsWith('.saeaa.com') && hostname !== 'saeaa.com' && hostname !== 'www.saeaa.com') {
-      const parts = hostname.split('.');
+    if (cleanHostname.endsWith('.saeaa.com') && cleanHostname !== 'saeaa.com' && cleanHostname !== 'www.saeaa.com') {
+      const parts = cleanHostname.split('.');
       if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'app') {
         return parts[0];
       }
     }
     
-    if (hostname.endsWith('.saeaa.net') && hostname !== 'saeaa.net' && hostname !== 'www.saeaa.net') {
-      const parts = hostname.split('.');
+    if (cleanHostname.endsWith('.saeaa.net') && cleanHostname !== 'saeaa.net' && cleanHostname !== 'www.saeaa.net') {
+      const parts = cleanHostname.split('.');
       if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'app') {
         return parts[0];
       }
@@ -77,9 +86,35 @@ export default function PagesManager() {
     const port = window.location.port;
     const portPart = port ? `:${port}` : '';
     
-    // Try to get subdomain from: 1. API response, 2. Current hostname, 3. User's tenant
+    // Priority: 1. tenantSubdomain (from API), 2. user.tenantSubdomain, 3. extracted from hostname (only if it's a valid subdomain)
+    // Don't use extractedSubdomain if it looks like a tenant ID (e.g., tenant-508aeb7f)
     const extractedSubdomain = extractSubdomainFromHostname(hostname);
-    const subdomain = tenantSubdomain || extractedSubdomain || user?.tenantSubdomain || 'default';
+    
+    // Determine the correct subdomain to use
+    let subdomain: string;
+    if (tenantSubdomain) {
+      // Use the subdomain from API (most reliable)
+      subdomain = tenantSubdomain;
+    } else if (user?.tenantSubdomain) {
+      // Use user's tenantSubdomain from auth context
+      subdomain = user.tenantSubdomain;
+    } else if (extractedSubdomain && !extractedSubdomain.startsWith('tenant-')) {
+      // Only use extracted subdomain if it doesn't look like a tenant ID
+      subdomain = extractedSubdomain;
+    } else {
+      // Last resort: use 'default' or show error
+      console.warn('No valid subdomain found for preview URL. Using default.');
+      subdomain = 'default';
+    }
+    
+    console.log('🔗 Generating preview URL:', {
+      slug,
+      tenantSubdomain,
+      userTenantSubdomain: user?.tenantSubdomain,
+      extractedSubdomain,
+      finalSubdomain: subdomain,
+      hostname
+    });
     
     // Detect base domain from current hostname
     let baseDomain = 'saeaa.com';
@@ -90,7 +125,7 @@ export default function PagesManager() {
     }
     
     // For local development
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('.localhost')) {
       return `${protocol}//${subdomain}.localhost${portPart}/${slug}`;
     }
     
@@ -110,24 +145,59 @@ export default function PagesManager() {
   
   const loadTenantInfo = async () => {
     try {
-      const config = await coreApi.get('/site-config', { requireAuth: true });
-      if (config?.settings?.subdomain) {
-        setTenantSubdomain(config.settings.subdomain);
-      } else {
-        // Fallback: Extract subdomain from current hostname
-        const hostname = window.location.hostname;
-        const extracted = extractSubdomainFromHostname(hostname);
-        if (extracted) {
-          setTenantSubdomain(extracted);
+      console.log('🔍 Loading tenant info for preview URLs...');
+      
+      // First, try to get subdomain from tenant API (most reliable)
+      const tenant = await tenantService.getCurrentUserTenant();
+      console.log('📡 Tenant API response:', tenant);
+      
+      if (tenant?.subdomain) {
+        console.log('✅ Using subdomain from tenant API:', tenant.subdomain);
+        setTenantSubdomain(tenant.subdomain);
+        return;
+      }
+      
+      // Fallback: Try to get from site-config
+      try {
+        const config = await coreApi.get('/site-config', { requireAuth: true });
+        console.log('📡 Site-config response:', config);
+        if (config?.settings?.subdomain) {
+          console.log('✅ Using subdomain from site-config:', config.settings.subdomain);
+          setTenantSubdomain(config.settings.subdomain);
+          return;
         }
+      } catch (configError) {
+        console.warn('⚠️ Failed to load subdomain from site-config:', configError);
+      }
+      
+      // Fallback: Use user's tenantSubdomain if available
+      if (user?.tenantSubdomain) {
+        console.log('✅ Using subdomain from user context:', user.tenantSubdomain);
+        setTenantSubdomain(user.tenantSubdomain);
+        return;
+      }
+      
+      // Last fallback: Extract subdomain from current hostname (only if it's not a tenant ID)
+      const hostname = window.location.hostname;
+      const extracted = extractSubdomainFromHostname(hostname);
+      if (extracted && !extracted.startsWith('tenant-')) {
+        console.log('✅ Using extracted subdomain from hostname:', extracted);
+        setTenantSubdomain(extracted);
+      } else {
+        console.warn('⚠️ Could not determine subdomain. Preview URLs may not work correctly.');
       }
     } catch (error) {
-      console.error('Failed to load tenant info:', error);
+      console.error('❌ Failed to load tenant info:', error);
       // Fallback: Extract subdomain from current hostname
       const hostname = window.location.hostname;
       const extracted = extractSubdomainFromHostname(hostname);
-      if (extracted) {
+      if (extracted && !extracted.startsWith('tenant-')) {
+        console.log('✅ Using extracted subdomain as fallback:', extracted);
         setTenantSubdomain(extracted);
+      } else if (user?.tenantSubdomain) {
+        // Use user's tenantSubdomain as last resort
+        console.log('✅ Using user tenantSubdomain as last resort:', user.tenantSubdomain);
+        setTenantSubdomain(user.tenantSubdomain);
       }
     }
   };
@@ -366,16 +436,17 @@ export default function PagesManager() {
           {
             type: 'product-list',
             props: {
-              title: 'إدارة المنتجات',
-              titleAr: 'إدارة المنتجات',
+              title: 'قائمة المنتجات',
+              titleAr: 'قائمة المنتجات',
               showFilters: true,
               showSearch: true,
               showExport: true,
-              layout: 'professional'
+              layout: 'professional',
+              itemsPerPage: 10
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -401,15 +472,14 @@ export default function PagesManager() {
           {
             type: 'store-page',
             props: {
-              title: 'منصة التجارة الإلكترونية',
-              titleAr: 'منصة التجارة الإلكترونية',
+              title: 'المتجر',
               showCart: true,
-              showCategories: true,
+              showBrands: true,
               layout: 'grid'
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -419,14 +489,13 @@ export default function PagesManager() {
           {
             type: 'support-tickets',
             props: {
-              title: 'مركز الدعم والمساعدة',
-              titleAr: 'مركز الدعم والمساعدة',
-              showNewTicketButton: true,
-              showStatusBadges: true
+              title: 'تذاكر الدعم الفني',
+              showCreateButton: true,
+              showStatusFilter: true
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -436,14 +505,13 @@ export default function PagesManager() {
           {
             type: 'favorites-page',
             props: {
-              title: 'البطاقات المفضلة',
-              titleAr: 'البطاقات المفضلة',
-              emptyStateText: 'لا توجد بطاقات مفضلة حالياً',
-              showAddToCart: true
+              title: 'المفضلة',
+              showCart: true,
+              layout: 'grid'
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -453,14 +521,13 @@ export default function PagesManager() {
           {
             type: 'balance-operations',
             props: {
-              title: 'سجل العمليات المالية',
-              titleAr: 'سجل العمليات المالية',
+              title: 'سجل العمليات',
               showFilters: true,
-              showExport: true
+              itemsPerPage: 20
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -471,13 +538,12 @@ export default function PagesManager() {
             type: 'employees-page',
             props: {
               title: 'إدارة فريق العمل',
-              titleAr: 'إدارة فريق العمل',
               showGroups: true,
               showPermissions: true
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -488,13 +554,12 @@ export default function PagesManager() {
             type: 'charge-wallet',
             props: {
               title: 'شحن رصيد المحفظة',
-              titleAr: 'شحن رصيد المحفظة',
               showBankTransfer: true,
               showOnlinePayment: true
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -505,14 +570,13 @@ export default function PagesManager() {
             type: 'reports-page',
             props: {
               title: 'التقارير والتحليلات',
-              titleAr: 'التقارير والتحليلات',
               showCharts: true,
               showSummary: true,
               dateRange: 'last_30_days'
             }
           }
         ],
-        backgroundColor: '#f5f5f5',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -523,13 +587,12 @@ export default function PagesManager() {
             type: 'profile-page',
             props: {
               title: 'إعدادات الحساب',
-              titleAr: 'إعدادات الحساب',
               showSecuritySettings: true,
               showNotificationSettings: true
             }
           }
         ],
-        backgroundColor: '#f5f5f5',
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -551,7 +614,23 @@ export default function PagesManager() {
             }
           }
         ],
-        backgroundColor: '#ffffff',
+        backgroundColor: 'transparent',
+        isDarkMode: false
+      };
+
+      // 12. Bank Accounts Page
+      const bankAccountsPageContent = {
+        sections: [
+          {
+            type: 'bank-accounts',
+            props: {
+              title: 'حساباتي البنكية',
+              showAddButton: true,
+              showEditButton: true
+            }
+          }
+        ],
+        backgroundColor: 'transparent',
         isDarkMode: false
       };
 
@@ -571,7 +650,8 @@ export default function PagesManager() {
         { slug: 'charge-wallet', content: chargeWalletPageContent, title: 'شحن الرصيد', seoTitle: 'شحن الرصيد', seoDescription: 'شحن رصيد المحفظة' },
         { slug: 'reports', content: reportsPageContent, title: 'التقارير', seoTitle: 'التقارير', seoDescription: 'تقارير المنتجات والطلبات' },
         { slug: 'profile', content: profilePageContent, title: 'الملف الشخصي', seoTitle: 'الملف الشخصي', seoDescription: 'الملف الشخصي للتاجر' },
-        { slug: 'categories', content: categoriesHierarchyPageContent, title: 'الفئات والمنتجات', seoTitle: 'الفئات والمنتجات', seoDescription: 'تصفح الفئات والفئات الفرعية والمنتجات' }
+        { slug: 'categories', content: categoriesHierarchyPageContent, title: 'الفئات والمنتجات', seoTitle: 'الفئات والمنتجات', seoDescription: 'تصفح الفئات والفئات الفرعية والمنتجات' },
+        { slug: 'bank-accounts', content: bankAccountsPageContent, title: 'حساباتي البنكية', seoTitle: 'حساباتي البنكية', seoDescription: 'إدارة الحسابات البنكية للعميل' }
       ].filter(page => !existingSlugs.has(page.slug));
 
       if (pagesToCreate.length === 0) {
@@ -613,6 +693,85 @@ export default function PagesManager() {
       toast({
         title: 'خطأ في الإنشاء',
         description: err?.message || 'حدث خطأ أثناء إنشاء الصفحات. يرجى المحاولة مرة أخرى.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAutoGeneratePermissionsPage = async () => {
+    try {
+      setLoading(true);
+      
+      // Ensure we have a valid tenant
+      if (!user?.tenantId || user.tenantId === 'default' || user.tenantId === 'system') {
+        toast({
+          title: 'خطأ في الإعداد',
+          description: 'يجب إعداد المتجر أولاً قبل إنشاء الصفحات. يرجى الانتقال إلى إعداد المتجر.',
+          variant: 'destructive',
+        });
+        navigate('/dashboard/market-setup');
+        return;
+      }
+      
+      // Check if permissions page already exists
+      const existingPages = await coreApi.getPages().catch(() => [] as Page[]);
+      const existingSlugs = new Set((Array.isArray(existingPages) ? existingPages : []).map((p: Page) => p.slug));
+      
+      if (existingSlugs.has('permissions')) {
+        toast({
+          title: 'الصفحة موجودة بالفعل',
+          description: 'صفحة الصلاحيات موجودة بالفعل. يمكنك تعديلها من القائمة.',
+          variant: 'default',
+        });
+        return;
+      }
+
+      // Permissions Page Content
+      const permissionsPageContent = {
+        sections: [
+          {
+            id: `section-${Date.now()}`,
+            type: 'permissions-page',
+            props: {
+              title: 'صلاحياتي',
+              titleAr: 'صلاحياتي',
+              subtitle: 'عرض ما يمكنك رؤيته والوصول إليه في لوحة التحكم',
+              subtitleAr: 'عرض ما يمكنك رؤيته والوصول إليه في لوحة التحكم'
+            }
+          }
+        ],
+        backgroundColor: '#f9fafb',
+        isDarkMode: false
+      };
+
+      // Create the permissions page
+      await coreApi.createPage({
+        title: 'صلاحيات الموظفين',
+        slug: 'permissions',
+        content: permissionsPageContent,
+        isPublished: true,
+        seoTitle: 'صلاحيات الموظفين',
+        seoDescription: 'عرض صلاحيات الموظفين - ما يمكنهم رؤيته والوصول إليه في المتجر'
+      });
+
+      toast({
+        title: 'تم الإنشاء بنجاح',
+        description: 'تم إنشاء صفحة الصلاحيات بنجاح. يمكن للموظفين الآن عرض صلاحياتهم.',
+        variant: 'default',
+      });
+
+      // Reload pages after a short delay
+      setTimeout(() => {
+        loadPages();
+      }, 500);
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error('Failed to auto-generate permissions page:', err);
+      toast({
+        title: 'خطأ في الإنشاء',
+        description: err?.message || 'حدث خطأ أثناء إنشاء صفحة الصلاحيات. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -676,9 +835,20 @@ export default function PagesManager() {
             إنشاء صفحات المنتجات تلقائياً
           </Button>
 
+          <Button 
+            variant="outline" 
+            size="lg" 
+            className="border-2 border-purple-500/20 hover:border-purple-500/40 text-purple-600 dark:text-purple-400"
+            onClick={handleAutoGeneratePermissionsPage}
+            disabled={loading}
+          >
+            <Shield className="h-5 w-5 ml-2" />
+            إنشاء صفحة الصلاحيات تلقائياً
+          </Button>
+
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
             <DialogTrigger asChild>
-              <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
+              <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" id="tour-pages-add-btn">
                 <Plus className="h-5 w-5 ml-2" />
                 صفحة جديدة
               </Button>

@@ -4,8 +4,10 @@ import { read, utils, writeFile } from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
+import { CategoryForm, CategoryFormData } from '@/components/dashboard/CategoryForm';
 
 
 
@@ -71,8 +74,15 @@ export default function CategoriesManager() {
   const { user } = useAuth();
   
   // Categories state
+  const [brands, setBrands] = useState<{id: string; name: string; nameAr?: string; code?: string}[]>([]);
   const [categories, setCategories] = useState<{id: string; name: string; nameAr?: string; description?: string; slug?: string; image?: string; productCount?: number; parentId?: string}[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+
+  // Add Category Dialog state
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
 
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, currentItem: '' });
@@ -119,145 +129,26 @@ export default function CategoriesManager() {
     isActive: true,
   });
 
-  // Category dialog state
-  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<{id: string; name: string; nameAr?: string; description?: string; slug?: string; image?: string} | null>(null);
-  const [categoryFormData, setCategoryFormData] = useState({
-    name: '',
-    nameAr: '',
-    description: '',
-    slug: '',
-    image: '',
-  });
-  
-  // Selected categories for bulk actions
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
 
-  // Category handlers
-  const handleOpenCategoryDialog = (category?: {id: string; name: string; nameAr?: string; description?: string; slug?: string; image?: string}) => {
-    if (category) {
-      setEditingCategory(category);
-      setCategoryFormData({
-        name: category.name || '',
-        nameAr: category.nameAr || '',
-        description: category.description || '',
-        slug: category.slug || '',
-        image: category.image || '',
-      });
-    } else {
-      setEditingCategory(null);
-      setCategoryFormData({ name: '', nameAr: '', description: '', slug: '', image: '' });
-    }
-    setShowCategoryDialog(true);
-  };
 
-  const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm(t('categories.productCategories.deleteConfirm'))) return;
-    
-    try {
-      await coreApi.deleteCategory(categoryId);
-      toast({
-        title: t('common.success'),
-        description: t('categories.productCategories.deleteSuccess'),
-      });
-      loadCategories();
-    } catch (error) {
-      console.error('Failed to delete category:', error);
-      toast({
-        title: t('common.error'),
-        description: t('categories.productCategories.deleteError'),
-        variant: 'destructive',
-      });
-    }
-  };
 
-  const handleSaveCategory = async () => {
-    try {
-      if (editingCategory) {
-        await coreApi.updateCategory(editingCategory.id, categoryFormData as any);
-        toast({
-          title: t('common.success'),
-          description: t('categories.productCategories.updateSuccess'),
-        });
-      } else {
-        await coreApi.createCategory(categoryFormData as any);
-        toast({
-          title: t('common.success'),
-          description: t('categories.productCategories.addSuccess'),
-        });
-      }
-      setShowCategoryDialog(false);
-      setEditingCategory(null);
-      setCategoryFormData({ name: '', nameAr: '', description: '', slug: '', image: '' });
-      loadCategories();
-    } catch (error) {
-      console.error('Failed to save category:', error);
-      toast({
-        title: t('common.error'),
-        description: t('categories.productCategories.saveError'),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // Bulk delete categories
-  const handleBulkDeleteCategories = async () => {
-    if (selectedCategories.size === 0) return;
-    
-    if (!confirm(t('categories.productCategories.bulkDeleteConfirm', { count: selectedCategories.size }))) return;
-    
-    try {
-      // Delete all selected categories
-      await Promise.all(
-        Array.from(selectedCategories).map(id => coreApi.deleteCategory(id))
-      );
-      
-      toast({
-        title: t('common.success'),
-        description: t('categories.productCategories.bulkDeleteSuccess', { count: selectedCategories.size }),
-      });
-      
-      setSelectedCategories(new Set());
-      loadCategories();
-    } catch (error) {
-      console.error('Failed to bulk delete categories:', error);
-      toast({
-        title: t('common.error'),
-        description: t('categories.productCategories.bulkDeleteError'),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // Toggle select all
-  const toggleSelectAll = () => {
-    if (selectedCategories.size === categories.length) {
-      setSelectedCategories(new Set());
-    } else {
-      setSelectedCategories(new Set(categories.map(c => c.id)));
-    }
-  };
-
-  // Toggle single category selection
-  const toggleCategorySelection = (categoryId: string) => {
-    const newSelected = new Set(selectedCategories);
-    if (newSelected.has(categoryId)) {
-      newSelected.delete(categoryId);
-    } else {
-      newSelected.add(categoryId);
-    }
-    setSelectedCategories(newSelected);
-  };
 
   // Load categories and other data
-  const loadCategories = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       
-      const categoriesData = await coreApi.getCategories({ limit: 1000 });
+      const [brandsData, categoriesData, productsData] = await Promise.all([
+        coreApi.getBrands().catch(() => []),
+        coreApi.getCategories({ limit: 1000 }),
+        coreApi.getProducts({ limit: '1000' } as any).catch(() => []),
+      ]);
       
+      // Process Brands
+      setBrands(Array.isArray(brandsData) ? brandsData : []);
+
+      // Process Categories
       let categoriesList: any[] = [];
-      
       if (categoriesData && 'meta' in categoriesData) {
         categoriesList = categoriesData.categories;
       } else {
@@ -267,14 +158,53 @@ export default function CategoriesManager() {
 
       setCategories(categoriesList.map((c: any) => ({
         ...c,
-        parentId: c.parentId || undefined
+        parentId: typeof c.parentId === 'object' ? c.parentId?.id : c.parentId,
       })));
+
+      // Process Products
+      const productsList = Array.isArray(productsData) 
+        ? productsData 
+        : ((productsData as any).products || []);
+        
+      setProducts(productsList.map((p: any) => {
+        // Normalize categories
+        let normalizedCategories = [];
+        if (p.categories && Array.isArray(p.categories)) {
+          normalizedCategories = p.categories.map((cat: any) => {
+            if (typeof cat === 'string') {
+              return { categoryId: cat };
+            }
+            return {
+              categoryId: cat.categoryId || cat.id || cat.category?.id,
+              category: cat.category,
+              id: cat.id,
+            };
+          });
+        }
+        
+        return {
+          id: p.id,
+          name: p.name,
+          nameAr: p.nameAr || p.name,
+          brandId: p.brandId || p.brand?.id,
+          categories: normalizedCategories,
+          price: p.price,
+          description: p.description,
+          status: p.status,
+          images: p.images,
+          stock: p.stock,
+          sku: p.sku,
+          barcode: p.barcode,
+          cost: p.cost,
+          compareAtPrice: p.compareAtPrice,
+        };
+      }));
       
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
         title: t('common.error'),
-        description: t('categories.productCategories.loadError'),
+        description: t('dashboard.categories.productCategories.loadError'),
         variant: 'destructive',
       });
       setCategories([]);
@@ -284,8 +214,10 @@ export default function CategoriesManager() {
   }, [t, toast]);
 
   useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
+    loadData();
+  }, [loadData]);
+
+
   
   // Check if user has a market set up (must be after all hooks)
   const hasMarket = !!(user?.tenantId && user.tenantId !== 'default' && user.tenantId !== 'system');
@@ -311,52 +243,209 @@ export default function CategoriesManager() {
 
 
 
-  const handleExport = () => {
-    // Define headers for the Excel sheet
-    const headers = [
-      'ID',
-      'Name',
-      'NameAr',
-      'Description',
-      'DescriptionAr',
-      'Slug',
-      'Image',
-      'Icon',
-      'ParentId',
-      'IsActive',
-      'SortOrder',
-      'ProductCount',
-      'CreatedAt',
-      'UpdatedAt'
-    ];
-    
-    const exportData = categories.map(c => ({
-      ID: c.id,
-      Name: c.name || '',
-      NameAr: (c as any).nameAr || '',
-      Description: c.description || '',
-      DescriptionAr: (c as any).descriptionAr || '',
-      Slug: c.slug || '',
-      Image: (c as any).image || '',
-      Icon: (c as any).icon || '',
-      ParentId: (c as any).parentId || '',
-      IsActive: (c as any).isActive !== undefined ? ((c as any).isActive ? 'Yes' : 'No') : 'Yes',
-      SortOrder: (c as any).sortOrder || 0,
-      ProductCount: c.productCount || 0,
-      CreatedAt: (c as any).createdAt || '',
-      UpdatedAt: (c as any).updatedAt || '',
-    }));
+  const handleExport = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all categories with all fields - use a high limit to get all
+      const categoriesData = await coreApi.get(`/categories?limit=10000&allFields=true`);
+      let allCategories: any[] = [];
+      if (categoriesData && 'categories' in categoriesData) {
+        allCategories = categoriesData.categories;
+      } else {
+        allCategories = Array.isArray(categoriesData) ? categoriesData : [];
+      }
 
-    // Create worksheet with headers
-    const ws = utils.json_to_sheet(exportData, { header: headers });
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Categories");
-    writeFile(wb, "categories_export.xlsx");
-    
-    toast({
-      title: t('common.success'),
-      description: t('categories.productCategories.exportSuccess'),
-    });
+      // If paginated, fetch all pages
+      if (categoriesData && 'meta' in categoriesData && categoriesData.meta.totalPages > 1) {
+        const totalPages = categoriesData.meta.totalPages;
+        const allPages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, i) => 
+            coreApi.get(`/categories?limit=10000&page=${i + 2}&allFields=true`)
+          )
+        );
+        allPages.forEach((pageData: any) => {
+          if (pageData && 'categories' in pageData) {
+            allCategories = [...allCategories, ...pageData.categories];
+          }
+        });
+      }
+
+      // Fetch all products to get SKUs - fetch in batches if needed
+      let allProducts: any[] = [];
+      try {
+        const productsData = await coreApi.getProducts({ limit: 10000 } as any);
+        
+        // Handle paginated response
+        if (productsData && typeof productsData === 'object' && 'data' in productsData) {
+          allProducts = productsData.data || [];
+          
+          // If paginated, fetch all pages
+          if (productsData.meta && productsData.meta.totalPages > 1) {
+            const totalPages = productsData.meta.totalPages;
+            const allProductPages = await Promise.all(
+              Array.from({ length: totalPages - 1 }, (_, i) => 
+                coreApi.getProducts({ limit: 10000, page: i + 2 } as any)
+              )
+            );
+            allProductPages.forEach((pageData: any) => {
+              if (pageData && typeof pageData === 'object' && 'data' in pageData) {
+                allProducts = [...allProducts, ...(pageData.data || [])];
+              } else if (Array.isArray(pageData)) {
+                allProducts = [...allProducts, ...pageData];
+              }
+            });
+          }
+        } else if (Array.isArray(productsData)) {
+          // Non-paginated array response
+          allProducts = productsData;
+        } else if (productsData && 'products' in productsData) {
+          // Legacy format
+          allProducts = (productsData as any).products || [];
+        }
+      } catch (error) {
+        console.warn('Could not fetch all products for export:', error);
+        // Use already loaded products as fallback
+        allProducts = products;
+      }
+
+      // Create a map of category ID to product SKUs
+      const categoryProductMap = new Map<string, string[]>();
+      
+      allProducts.forEach((product: any) => {
+        if (product.categories && Array.isArray(product.categories)) {
+          product.categories.forEach((cat: any) => {
+            const categoryId = cat.categoryId || cat.id || cat.category?.id;
+            if (categoryId && product.sku) {
+              if (!categoryProductMap.has(categoryId)) {
+                categoryProductMap.set(categoryId, []);
+              }
+              categoryProductMap.get(categoryId)!.push(product.sku);
+            }
+          });
+        }
+      });
+
+      // Create a map of category ID to category data for path building
+      const categoryMap = new Map<string, any>();
+      allCategories.forEach((cat: any) => {
+        if (cat.id) {
+          categoryMap.set(cat.id, cat);
+        }
+      });
+
+      // Helper function to build category path (full hierarchy)
+      const buildCategoryPath = (category: any, useArabic: boolean = false): string => {
+        const path: string[] = [];
+        let current: any = category;
+        
+        // Build path from current to root
+        while (current) {
+          const name = useArabic ? ((current.nameAr || current.name) || '') : (current.name || '');
+          if (name) {
+            path.unshift(name);
+          }
+          
+          if (current.parentId && categoryMap.has(current.parentId)) {
+            current = categoryMap.get(current.parentId);
+          } else {
+            break;
+          }
+        }
+        
+        return path.join(' > ');
+      };
+
+      // Define headers for the Excel sheet - Arabic column names
+      const headers = [
+        'مسار الفئة', // Category Path
+        'الاسم', // Name
+        'الاسم (عربي)', // NameAr
+        'الوصف', // Description
+        'الوصف (عربي)', // DescriptionAr
+        'الرابط', // Slug
+        'الصورة', // Image
+        'الأيقونة', // Icon
+        'نشط', // IsActive
+        'ترتيب العرض', // SortOrder
+        'الحد الأدنى للكمية', // MinQuantity
+        'الحد الأقصى للكمية', // MaxQuantity
+        'تفعيل السلايدر', // EnableSlider
+        'تطبيق السلايدر على جميع المنتجات', // ApplySliderToAllProducts
+        'عدد المنتجات', // ProductCount
+        'أكواد المنتجات' // ProductSKUs
+      ];
+      
+      const exportData = allCategories.map(c => {
+        const categoryId = c.id;
+        const productSKUs = categoryProductMap.get(categoryId) || [];
+        const skusString = productSKUs.join(', ');
+        
+        // Build full category path in Arabic
+        const categoryPath = buildCategoryPath(c, true);
+        
+        return {
+          'مسار الفئة': categoryPath, // Full path: Category > Subcategory > Subcategory...
+          'الاسم': c.name || '',
+          'الاسم (عربي)': (c as any).nameAr || '',
+          'الوصف': c.description || '',
+          'الوصف (عربي)': (c as any).descriptionAr || '',
+          'الرابط': c.slug || '',
+          'الصورة': (c as any).image || '',
+          'الأيقونة': (c as any).icon || '',
+          'نشط': (c as any).isActive !== undefined ? ((c as any).isActive ? 'نعم' : 'لا') : 'نعم',
+          'ترتيب العرض': (c as any).sortOrder || 0,
+          'الحد الأدنى للكمية': (c as any).minQuantity || '',
+          'الحد الأقصى للكمية': (c as any).maxQuantity || '',
+          'تفعيل السلايدر': (c as any).enableSlider !== undefined ? ((c as any).enableSlider ? 'نعم' : 'لا') : 'لا',
+          'تطبيق السلايدر على جميع المنتجات': (c as any).applySliderToAllProducts !== undefined ? ((c as any).applySliderToAllProducts ? 'نعم' : 'لا') : 'لا',
+          'عدد المنتجات': c.productCount || productSKUs.length || 0,
+          'أكواد المنتجات': skusString,
+        };
+      });
+
+      // Create worksheet with headers
+      const ws = utils.json_to_sheet(exportData, { header: headers });
+      
+      // Set column widths for better readability
+      const colWidths = [
+        { wch: 50 }, // مسار الفئة (Category Path)
+        { wch: 25 }, // الاسم (Name)
+        { wch: 25 }, // الاسم (عربي) (NameAr)
+        { wch: 40 }, // الوصف (Description)
+        { wch: 40 }, // الوصف (عربي) (DescriptionAr)
+        { wch: 25 }, // الرابط (Slug)
+        { wch: 50 }, // الصورة (Image)
+        { wch: 20 }, // الأيقونة (Icon)
+        { wch: 10 }, // نشط (IsActive)
+        { wch: 12 }, // ترتيب العرض (SortOrder)
+        { wch: 15 }, // الحد الأدنى للكمية (MinQuantity)
+        { wch: 15 }, // الحد الأقصى للكمية (MaxQuantity)
+        { wch: 15 }, // تفعيل السلايدر (EnableSlider)
+        { wch: 30 }, // تطبيق السلايدر على جميع المنتجات (ApplySliderToAllProducts)
+        { wch: 12 }, // عدد المنتجات (ProductCount)
+        { wch: 100 }, // أكواد المنتجات (ProductSKUs)
+      ];
+      ws['!cols'] = colWidths;
+      
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Categories");
+      writeFile(wb, `categories_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast({
+        title: t('common.success'),
+        description: `${allCategories.length} categories exported successfully with product SKUs`,
+      });
+    } catch (error: any) {
+      console.error('Export error:', error);
+      toast({
+        variant: 'destructive',
+        title: t('common.error'),
+        description: error.message || 'Failed to export categories',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -375,13 +464,35 @@ export default function CategoriesManager() {
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = utils.sheet_to_json<{ 
-        Name: string; 
-        NameAr?: string;
-        Description?: string; 
-        DescriptionAr?: string;
-        Slug?: string;
-        Parent?: string;
-        Image?: string;
+        'مسار الفئة'?: string; // Category Path (Arabic header)
+        'Category Path'?: string; // Category Path (English header - fallback)
+        'الاسم'?: string; // Name (Arabic)
+        'Name'?: string; // Name (English fallback)
+        'الاسم (عربي)'?: string; // NameAr (Arabic)
+        'NameAr'?: string; // NameAr (English fallback)
+        'الوصف'?: string; // Description (Arabic)
+        'Description'?: string; // Description (English fallback)
+        'الوصف (عربي)'?: string; // DescriptionAr (Arabic)
+        'DescriptionAr'?: string; // DescriptionAr (English fallback)
+        'الرابط'?: string; // Slug (Arabic)
+        'Slug'?: string; // Slug (English fallback)
+        'Parent'?: string; // Legacy parent column
+        'الصورة'?: string; // Image (Arabic)
+        'Image'?: string; // Image (English fallback)
+        'الأيقونة'?: string; // Icon (Arabic)
+        'Icon'?: string; // Icon (English fallback)
+        'نشط'?: string; // IsActive (Arabic)
+        'IsActive'?: string; // IsActive (English fallback)
+        'ترتيب العرض'?: number; // SortOrder (Arabic)
+        'SortOrder'?: number; // SortOrder (English fallback)
+        'الحد الأدنى للكمية'?: number; // MinQuantity (Arabic)
+        'MinQuantity'?: number; // MinQuantity (English fallback)
+        'الحد الأقصى للكمية'?: number; // MaxQuantity (Arabic)
+        'MaxQuantity'?: number; // MaxQuantity (English fallback)
+        'تفعيل السلايدر'?: string; // EnableSlider (Arabic)
+        'EnableSlider'?: string; // EnableSlider (English fallback)
+        'تطبيق السلايدر على جميع المنتجات'?: string; // ApplySliderToAllProducts (Arabic)
+        'ApplySliderToAllProducts'?: string; // ApplySliderToAllProducts (English fallback)
       }>(worksheet, { defval: '' });
 
       const totalItems = jsonData.length;
@@ -412,10 +523,21 @@ export default function CategoriesManager() {
           .replace(/^-+|-+$/g, '');
       };
 
+      // Helper function to get field value (supports both Arabic and English headers)
+      const getField = (row: any, arabicKey: string, englishKey: string): string | undefined => {
+        return row[arabicKey] || row[englishKey];
+      };
+
+      // Map to track created categories during import (name -> id)
+      const createdCategoriesMap = new Map<string, string>();
+
       for (let i = 0; i < jsonData.length; i++) {
         const row = jsonData[i];
         const rowNum = i + 2; // Excel row number (1-indexed + header)
-        const itemName = row.Name?.trim() || `الصف ${rowNum}`;
+        
+        // Get name (supports both Arabic and English headers)
+        const name = getField(row, 'الاسم', 'Name')?.trim();
+        const itemName = name || `الصف ${rowNum}`;
         
         // Update progress
         setImportProgress({ 
@@ -425,10 +547,10 @@ export default function CategoriesManager() {
         });
 
         // Validate Name field
-        if (!row.Name || !row.Name.trim()) {
+        if (!name) {
           collectedErrors.push({
             row: rowNum,
-            column: 'Name',
+            column: 'الاسم / Name',
             itemName: itemName,
             error: 'اسم الفئة مطلوب'
           });
@@ -436,37 +558,152 @@ export default function CategoriesManager() {
         }
 
         try {
-          // Find parent category if specified
+          // Parse category path if provided
           let parentId: string | undefined;
-          if (row.Parent && row.Parent.trim()) {
-            const parent = categories.find(c => 
-              c.name?.toLowerCase() === row.Parent?.toLowerCase() ||
-              (c as any).nameAr?.toLowerCase() === row.Parent?.toLowerCase() ||
-              c.slug?.toLowerCase() === row.Parent?.toLowerCase()
-            );
-            parentId = parent?.id;
-            if (!parentId) {
-              collectedErrors.push({
-                row: rowNum,
-                column: 'Parent',
-                itemName: itemName,
-                error: `الفئة الأب "${row.Parent}" غير موجودة`
-              });
-              continue;
+          const categoryPath = getField(row, 'مسار الفئة', 'Category Path')?.trim();
+          
+          if (categoryPath) {
+            // Split path by ' > ' or '>' separator
+            const pathParts = categoryPath.split(/\s*>\s*/).map(p => p.trim()).filter(p => p);
+            
+            if (pathParts.length > 1) {
+              // The last part is the current category name, rest is the path
+              const currentCategoryName = pathParts[pathParts.length - 1];
+              
+              // Build the path from root to parent
+              let currentParentId: string | undefined = undefined;
+              
+              // Process each part of the path (except the last one which is the current category)
+              for (let j = 0; j < pathParts.length - 1; j++) {
+                const pathPart = pathParts[j];
+                
+                // First check in created categories map (from this import)
+                let foundCategoryId = createdCategoriesMap.get(pathPart);
+                
+                // If not found, check in existing categories
+                if (!foundCategoryId) {
+                  const foundCategory = categories.find(c => 
+                    c.name?.toLowerCase() === pathPart.toLowerCase() ||
+                    (c as any).nameAr?.toLowerCase() === pathPart.toLowerCase()
+                  );
+                  foundCategoryId = foundCategory?.id;
+                }
+                
+                // If still not found, create it
+                if (!foundCategoryId) {
+                  try {
+                    const slug = generateSlug(pathPart);
+                    const newCategory = await coreApi.createCategory({
+                      name: pathPart,
+                      slug,
+                      parentId: currentParentId || undefined,
+                      isActive: true,
+                    } as any);
+                    foundCategoryId = newCategory.category?.id;
+                    createdCategoriesMap.set(pathPart, foundCategoryId);
+                  } catch (error: any) {
+                    collectedErrors.push({
+                      row: rowNum,
+                      column: 'مسار الفئة / Category Path',
+                      itemName: itemName,
+                      error: `فشل إنشاء الفئة الأب "${pathPart}": ${error?.message || 'خطأ غير معروف'}`
+                    });
+                    break;
+                  }
+                }
+                
+                currentParentId = foundCategoryId;
+              }
+              
+              parentId = currentParentId;
+            }
+          } else {
+            // Fallback to Parent column if path not provided
+            const parentName = row.Parent?.trim();
+            if (parentName) {
+              // Check in created categories map first
+              let foundParentId = createdCategoriesMap.get(parentName);
+              
+              // If not found, check in existing categories
+              if (!foundParentId) {
+                const parent = categories.find(c => 
+                  c.name?.toLowerCase() === parentName.toLowerCase() ||
+                  (c as any).nameAr?.toLowerCase() === parentName.toLowerCase() ||
+                  c.slug?.toLowerCase() === parentName.toLowerCase()
+                );
+                foundParentId = parent?.id;
+              }
+              
+              parentId = foundParentId;
+              
+              if (!parentId) {
+                collectedErrors.push({
+                  row: rowNum,
+                  column: 'Parent',
+                  itemName: itemName,
+                  error: `الفئة الأب "${parentName}" غير موجودة. تأكد من إنشاء الفئات الأب أولاً أو استخدم اسم فئة موجودة.`
+                });
+                continue;
+              }
             }
           }
 
-          // Generate slug if not provided
-          const slug = row.Slug?.trim() || generateSlug(row.Name);
+          // Get all field values (supporting both Arabic and English headers)
+          const nameAr = getField(row, 'الاسم (عربي)', 'NameAr')?.trim();
+          const description = getField(row, 'الوصف', 'Description')?.trim() || '';
+          const descriptionAr = getField(row, 'الوصف (عربي)', 'DescriptionAr')?.trim();
+          const slug = getField(row, 'الرابط', 'Slug')?.trim() || generateSlug(name);
+          const image = getField(row, 'الصورة', 'Image')?.trim();
+          const icon = getField(row, 'الأيقونة', 'Icon')?.trim();
+          const isActiveStr = getField(row, 'نشط', 'IsActive');
+          const sortOrder = getField(row, 'ترتيب العرض', 'SortOrder') || row.SortOrder;
+          const minQuantity = getField(row, 'الحد الأدنى للكمية', 'MinQuantity') || row.MinQuantity;
+          const maxQuantity = getField(row, 'الحد الأقصى للكمية', 'MaxQuantity') || row.MaxQuantity;
+          const enableSliderStr = getField(row, 'تفعيل السلايدر', 'EnableSlider');
+          const applySliderToAllProductsStr = getField(row, 'تطبيق السلايدر على جميع المنتجات', 'ApplySliderToAllProducts');
 
-          await coreApi.createCategory({
-            name: row.Name.trim(),
-            nameAr: row.NameAr?.trim() || undefined,
-            description: row.Description?.trim() || '',
-            descriptionAr: row.DescriptionAr?.trim() || undefined,
+          // Parse boolean fields (supports Arabic 'نعم'/'لا' and English 'Yes'/'No')
+          const isActive = isActiveStr ? 
+            (isActiveStr.toString().toLowerCase() === 'yes' || 
+             isActiveStr.toString().toLowerCase() === 'true' || 
+             isActiveStr.toString() === '1' ||
+             isActiveStr.toString() === 'نعم') : 
+            true;
+          
+          const enableSlider = enableSliderStr ? 
+            (enableSliderStr.toString().toLowerCase() === 'yes' || 
+             enableSliderStr.toString().toLowerCase() === 'true' || 
+             enableSliderStr.toString() === '1' ||
+             enableSliderStr.toString() === 'نعم') : 
+            false;
+          
+          const applySliderToAllProducts = applySliderToAllProductsStr ? 
+            (applySliderToAllProductsStr.toString().toLowerCase() === 'yes' || 
+             applySliderToAllProductsStr.toString().toLowerCase() === 'true' || 
+             applySliderToAllProductsStr.toString() === '1' ||
+             applySliderToAllProductsStr.toString() === 'نعم') : 
+            false;
+
+          const newCategory = await coreApi.createCategory({
+            name: name.trim(),
+            nameAr: nameAr || undefined,
+            description,
+            descriptionAr: descriptionAr || undefined,
             slug,
             parentId: parentId || undefined,
+            image: image || undefined,
+            icon: icon || undefined,
+            isActive,
+            sortOrder: sortOrder ? Number(sortOrder) : undefined,
+            minQuantity: minQuantity ? Number(minQuantity) : undefined,
+            maxQuantity: maxQuantity ? Number(maxQuantity) : undefined,
+            enableSlider,
+            applySliderToAllProducts,
           } as any);
+          
+          // Track created category for path building
+          const createdCategoryId = newCategory.category?.id;
+          createdCategoriesMap.set(name, createdCategoryId);
           successCount++;
           
           // Small delay to avoid rate limiting
@@ -524,13 +761,13 @@ export default function CategoriesManager() {
         duration: 5000,
       });
       
-      loadCategories();
+      loadData();
       e.target.value = '';
     } catch (error: any) {
       setIsImporting(false);
       toast({ 
         title: t('common.error'), 
-        description: error?.message || t('categories.productCategories.importError'), 
+        description: error?.message || t('dashboard.categories.productCategories.importError'), 
         variant: 'destructive' 
       });
     } finally {
@@ -585,7 +822,7 @@ export default function CategoriesManager() {
 
   const handleSaveTier = () => {
     if (!tierFormData.name) {
-      toast({ title: t('common.error'), description: t('categories.customerTiers.tierNameRequired'), variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('dashboard.categories.customerTiers.tierNameRequired'), variant: 'destructive' });
       return;
     }
 
@@ -595,22 +832,22 @@ export default function CategoriesManager() {
           ? { ...t, ...tierFormData }
           : t
       ));
-      toast({ title: t('common.success'), description: t('categories.customerTiers.updateSuccess') });
+      toast({ title: t('common.success'), description: t('dashboard.categories.customerTiers.updateSuccess') });
     } else {
       const newTier: CustomerTier = {
         id: Date.now().toString(),
         ...tierFormData,
       };
       setCustomerTiers(prev => [...prev, newTier]);
-      toast({ title: t('common.success'), description: t('categories.customerTiers.addSuccess') });
+      toast({ title: t('common.success'), description: t('dashboard.categories.customerTiers.addSuccess') });
     }
     setTierDialogOpen(false);
   };
 
   const handleDeleteTier = (id: string) => {
-    if (!confirm(t('categories.customerTiers.deleteConfirm'))) return;
+    if (!confirm(t('dashboard.categories.customerTiers.deleteConfirm'))) return;
     setCustomerTiers(prev => prev.filter(t => t.id !== id));
-    toast({ title: t('common.success'), description: t('categories.customerTiers.deleteSuccess') });
+    toast({ title: t('common.success'), description: t('dashboard.categories.customerTiers.deleteSuccess') });
   };
 
   // ==================== Offer Functions ====================
@@ -645,7 +882,7 @@ export default function CategoriesManager() {
 
   const handleSaveOffer = () => {
     if (!offerFormData.name || !offerFormData.tierId) {
-      toast({ title: t('common.error'), description: t('categories.offers.nameAndTierRequired'), variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('dashboard.categories.offers.nameAndTierRequired'), variant: 'destructive' });
       return;
     }
 
@@ -657,7 +894,7 @@ export default function CategoriesManager() {
           ? { ...o, ...offerFormData, tierName: tier?.name || '' }
           : o
       ));
-      toast({ title: t('common.success'), description: t('categories.offers.updateSuccess') });
+      toast({ title: t('common.success'), description: t('dashboard.categories.offers.updateSuccess') });
     } else {
       const newOffer: CategoryOffer = {
         id: Date.now().toString(),
@@ -665,19 +902,70 @@ export default function CategoriesManager() {
         tierName: tier?.name || '',
       };
       setOffers(prev => [...prev, newOffer]);
-      toast({ title: t('common.success'), description: t('categories.offers.addSuccess') });
+      toast({ title: t('common.success'), description: t('dashboard.categories.offers.addSuccess') });
     }
     setOfferDialogOpen(false);
   };
 
   const handleDeleteOffer = (id: string) => {
-    if (!confirm(t('categories.offers.deleteConfirm'))) return;
+    if (!confirm(t('dashboard.categories.offers.deleteConfirm'))) return;
     setOffers(prev => prev.filter(o => o.id !== id));
-    toast({ title: t('common.success'), description: t('categories.offers.deleteSuccess') });
+    toast({ title: t('common.success'), description: t('dashboard.categories.offers.deleteSuccess') });
   };
 
   const calculateDiscount = (price: number, discountPercent: number) => {
     return (price * (1 - discountPercent / 100)).toFixed(2);
+  };
+
+  // ==================== Category Functions ====================
+
+  const handleOpenCategoryDialog = () => {
+    setCategoryDialogOpen(true);
+  };
+
+  const handleCategoryFormSave = async (formData: CategoryFormData) => {
+    try {
+      setSavingCategory(true);
+
+      // Generate slug if not provided
+      const slug = formData.slug.trim() || 
+        formData.name
+          .toLowerCase()
+          .trim()
+          .replace(/[^\w\s-]/g, '')
+          .replace(/[\s_-]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+      await coreApi.createCategory({
+        name: formData.name.trim(),
+        nameAr: formData.nameAr.trim() || undefined,
+        description: formData.description.trim() || undefined,
+        descriptionAr: formData.descriptionAr.trim() || undefined,
+        slug,
+        parentId: formData.parentId || undefined,
+        image: formData.image.trim() || undefined,
+        icon: formData.icon.trim() || undefined,
+        isActive: formData.isActive,
+      } as any);
+
+      toast({
+        title: t('common.success'),
+        description: 'تم إضافة الفئة بنجاح',
+      });
+
+      setCategoryDialogOpen(false);
+      loadData(); // Reload categories
+    } catch (error: any) {
+      console.error('Failed to create category:', error);
+      toast({
+        title: t('common.error'),
+        description: error?.message || 'فشل إضافة الفئة',
+        variant: 'destructive',
+      });
+      throw error;
+    } finally {
+      setSavingCategory(false);
+    }
   };
 
   return (
@@ -685,9 +973,9 @@ export default function CategoriesManager() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            {t('categories.title')}
+            {t('dashboard.categories.title')}
           </h1>
-          <p className="text-muted-foreground text-lg">{t('categories.subtitle')}</p>
+          <p className="text-muted-foreground text-lg">{t('dashboard.categories.subtitle')}</p>
         </div>
       </div>
 
@@ -695,43 +983,33 @@ export default function CategoriesManager() {
         <TabsList className="grid w-full grid-cols-3 mb-6">
           <TabsTrigger value="categories" className="gap-2">
             <FolderOpen className="h-4 w-4" />
-            {t('categories.tabs.productCategories')}
+            {t('dashboard.categories.tabs.productCategories')}
           </TabsTrigger>
           <TabsTrigger value="tiers" className="gap-2">
             <Users className="h-4 w-4" />
-            {t('categories.tabs.customerTiers')}
+            {t('dashboard.categories.tabs.customerTiers')}
           </TabsTrigger>
           <TabsTrigger value="offers" className="gap-2">
             <Gift className="h-4 w-4" />
-            {t('categories.tabs.offers')}
+            {t('dashboard.categories.tabs.offers')}
           </TabsTrigger>
         </TabsList>
 
         {/* Product Categories Tab */}
+        {/* Product Categories Tab */}
         <TabsContent value="categories">
           <div className="flex justify-between items-center gap-2 mb-4">
             <div className="flex items-center gap-4">
-              <h2 className="text-xl font-semibold">{t('categories.productCategories.allCategories')}</h2>
-              {selectedCategories.size > 0 && (
-                <Badge variant="secondary" className="gap-1">
-                  {selectedCategories.size} {t('common.selected')}
-                </Badge>
-              )}
+              <h2 className="text-xl font-semibold">{t('dashboard.categories.productCategories.allCategories')}</h2>
             </div>
             <div className="flex gap-2">
-              {selectedCategories.size > 0 && (
-                <Button 
-                  variant="destructive" 
-                  onClick={handleBulkDeleteCategories} 
-                  className="gap-2"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {t('categories.productCategories.deleteSelected')} ({selectedCategories.size})
-                </Button>
-              )}
+              <Button onClick={handleOpenCategoryDialog} className="gap-2">
+                <Plus className="h-4 w-4" />
+                إضافة فئة
+              </Button>
               <Button variant="outline" onClick={handleExport} className="gap-2">
                 <Download className="h-4 w-4" />
-                {t('categories.productCategories.export')}
+                {t('dashboard.categories.productCategories.export')}
               </Button>
               <div className="relative">
                 <Input
@@ -742,13 +1020,9 @@ export default function CategoriesManager() {
                 />
                 <Button variant="outline" className="gap-2">
                   <Upload className="h-4 w-4" />
-                  {t('categories.productCategories.import')}
+                  {t('dashboard.categories.productCategories.import')}
                 </Button>
               </div>
-              <Button onClick={() => setShowCategoryDialog(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                {t('categories.productCategories.addCategory')}
-              </Button>
             </div>
           </div>
 
@@ -756,103 +1030,72 @@ export default function CategoriesManager() {
             <div className="flex items-center justify-center py-16">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : categories.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-16">
-                <FolderOpen className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="text-xl font-semibold mb-2">{t('categories.productCategories.noCategories')}</h3>
-                <p className="text-muted-foreground mb-6">
-                  {t('categories.productCategories.noCategoriesDesc')}
-                </p>
-                <Button onClick={() => setShowCategoryDialog(true)}>
-                  <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-                  {t('categories.productCategories.addNewCategory')}
-                </Button>
-              </CardContent>
-            </Card>
           ) : (
             <Card>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b bg-muted/50">
-                      <tr>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground w-12">
-                          <input 
-                            type="checkbox" 
-                            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                            checked={selectedCategories.size === categories.length && categories.length > 0}
-                            onChange={toggleSelectAll}
-                          />
-                        </th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">{t('categories.productCategories.logo')}</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">{t('categories.productCategories.category')}</th>
-                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Slug</th>
-                        <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t('categories.productCategories.productCount')}</th>
-                        <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t('categories.productCategories.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {categories.map((category) => (
-                        <tr key={category.id} className={`border-b hover:bg-muted/30 transition-colors ${selectedCategories.has(category.id) ? 'bg-primary/5' : ''}`}>
-                          <td className="px-4 py-4">
-                            <input 
-                              type="checkbox" 
-                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                              checked={selectedCategories.has(category.id)}
-                              onChange={() => toggleCategorySelection(category.id)}
-                            />
-                          </td>
-                          <td className="px-4 py-4">
-                            {(category as any).image ? (
-                              <img 
-                                src={(category as any).image} 
-                                alt={category.name}
-                                className="w-10 h-10 rounded-lg object-cover"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                                <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                <div className="overflow-x-auto" dir={isRTL ? 'rtl' : 'ltr'}>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold text-right">الإجراءات</TableHead>
+                        <TableHead className="font-semibold text-center">عدد المنتجات</TableHead>
+                        <TableHead className="font-semibold text-right">الوصف</TableHead>
+                        <TableHead className="font-semibold text-right">الاسم (عربي)</TableHead>
+                        <TableHead className="font-semibold text-right">الاسم</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {categories.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                            <div className="flex flex-col items-center gap-2">
+                              <FolderOpen className="h-12 w-12 text-muted-foreground/50" />
+                              <p className="text-lg">لا توجد فئات</p>
+                              <p className="text-sm">ابدأ بإضافة فئة جديدة</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        categories.map((category) => (
+                          <TableRow key={category.id} className="hover:bg-muted/30 transition-colors">
+                            <TableCell className="py-4">
+                              <div className="flex items-center justify-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    window.location.href = '/dashboard/hierarchical';
+                                  }}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
                               </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-4">
-                            <div>
-                              <p className="font-medium">{(category as any).nameAr || category.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {category.description || t('categories.productCategories.noDescription')}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-muted-foreground font-mono text-sm">
-                            {category.slug || '-'}
-                          </td>
-                          <td className="px-4 py-4 text-center">
-                            <Badge variant="secondary">{category.productCount || 0}</Badge>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex items-center justify-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleOpenCategoryDialog(category)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteCategory(category.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            </TableCell>
+                            <TableCell className="py-4 text-center">
+                              <Badge variant="secondary" className="font-semibold">
+                                {category.productCount || 0}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-4 text-right max-w-md">
+                              <div className="truncate" title={category.description || undefined}>
+                                {category.description || '-'}
+                              </div>
+                            </TableCell>
+                            <TableCell className="py-4 text-right">
+                              <span className="text-muted-foreground">{category.nameAr || '-'}</span>
+                            </TableCell>
+                            <TableCell className="font-medium py-4 text-right">
+                              <div className="flex items-center gap-2 justify-end">
+                                <span>{category.name || '-'}</span>
+                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
@@ -864,7 +1107,7 @@ export default function CategoriesManager() {
           <div className="flex justify-end mb-4">
             <Button onClick={() => handleOpenTierDialog()} size="lg">
               <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-              {t('categories.customerTiers.addTier')}
+              {t('dashboard.categories.customerTiers.addTier')}
             </Button>
           </div>
 
@@ -896,7 +1139,7 @@ export default function CategoriesManager() {
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <Label className="text-sm text-muted-foreground">{t('categories.customerTiers.linkedCategories')}</Label>
+                      <Label className="text-sm text-muted-foreground">{t('dashboard.categories.customerTiers.linkedCategories')}</Label>
                       <div className="flex flex-wrap gap-1 mt-1">
                         {tier.productCategories.length > 0 ? (
                           tier.productCategories.map(catId => {
@@ -908,20 +1151,20 @@ export default function CategoriesManager() {
                             ) : null;
                           })
                         ) : (
-                          <span className="text-sm text-muted-foreground">{t('categories.customerTiers.allCategories')}</span>
+                          <span className="text-sm text-muted-foreground">{t('dashboard.categories.customerTiers.allCategories')}</span>
                         )}
                       </div>
                     </div>
                     {/* Assigned Customers Count */}
                     <div>
-                      <Label className="text-sm text-muted-foreground">{t('categories.customerTiers.assignedCustomers')}</Label>
+                      <Label className="text-sm text-muted-foreground">{t('dashboard.categories.customerTiers.assignedCustomers')}</Label>
                       <div className="mt-1">
                         {tier.assignedCustomers && tier.assignedCustomers.length > 0 ? (
                           <Badge variant="default" className="text-xs">
-                            {t('categories.customerTiers.customerCount', { count: tier.assignedCustomers.length })}
+                            {t('dashboard.categories.customerTiers.customerCount', { count: tier.assignedCustomers.length })}
                           </Badge>
                         ) : (
-                          <span className="text-sm text-muted-foreground">{t('categories.customerTiers.noCustomersAssigned')}</span>
+                          <span className="text-sm text-muted-foreground">{t('dashboard.categories.customerTiers.noCustomersAssigned')}</span>
                         )}
                       </div>
                     </div>
@@ -954,16 +1197,16 @@ export default function CategoriesManager() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Tag className="h-5 w-5" />
-                {t('categories.customerTiers.howItWorks')}
+                {t('dashboard.categories.customerTiers.howItWorks')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4 text-sm">
-                <p>{t('categories.customerTiers.howItWorksDesc1')}</p>
-                <p>{t('categories.customerTiers.howItWorksDesc2')}</p>
-                <p>{t('categories.customerTiers.howItWorksDesc3')}</p>
-                <p>{t('categories.customerTiers.howItWorksDesc4')}</p>
-                <p className="text-muted-foreground">{t('categories.customerTiers.howItWorksDesc5')}</p>
+                <p>{t('dashboard.categories.customerTiers.howItWorksDesc1')}</p>
+                <p>{t('dashboard.categories.customerTiers.howItWorksDesc2')}</p>
+                <p>{t('dashboard.categories.customerTiers.howItWorksDesc3')}</p>
+                <p>{t('dashboard.categories.customerTiers.howItWorksDesc4')}</p>
+                <p className="text-muted-foreground">{t('dashboard.categories.customerTiers.howItWorksDesc5')}</p>
               </div>
             </CardContent>
           </Card>
@@ -974,7 +1217,7 @@ export default function CategoriesManager() {
           <div className="flex justify-end mb-4">
             <Button onClick={() => handleOpenOfferDialog()} size="lg">
               <Plus className={`h-5 w-5 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-              {t('categories.offers.addOffer')}
+              {t('dashboard.categories.offers.addOffer')}
             </Button>
           </div>
 
@@ -982,13 +1225,13 @@ export default function CategoriesManager() {
             <Card>
               <CardContent className="text-center py-16">
                 <Gift className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="text-xl font-semibold mb-2">{t('categories.offers.noOffers')}</h3>
+                <h3 className="text-xl font-semibold mb-2">{t('dashboard.categories.offers.noOffers')}</h3>
                 <p className="text-muted-foreground mb-6">
-                  {t('categories.offers.noOffersDesc')}
+                  {t('dashboard.categories.offers.noOffersDesc')}
                 </p>
                 <Button onClick={() => handleOpenOfferDialog()}>
                   <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
-                  {t('categories.offers.addNewOffer')}
+                  {t('dashboard.categories.offers.addNewOffer')}
                 </Button>
               </CardContent>
             </Card>
@@ -1003,11 +1246,11 @@ export default function CategoriesManager() {
                           <Percent className="h-5 w-5 text-primary" />
                           {offer.name}
                         </CardTitle>
-                        <CardDescription>{t('categories.offers.forTier', { tierName: offer.tierName })}</CardDescription>
+                        <CardDescription>{t('dashboard.categories.offers.forTier', { tierName: offer.tierName })}</CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={offer.isActive ? 'default' : 'secondary'}>
-                          {offer.isActive ? t('categories.offers.active') : t('categories.offers.inactive')}
+                          {offer.isActive ? t('dashboard.categories.offers.active') : t('dashboard.categories.offers.inactive')}
                         </Badge>
                         <Badge variant="outline" className="text-lg font-bold text-green-600">
                           {offer.discountPercent}%
@@ -1018,7 +1261,7 @@ export default function CategoriesManager() {
                   <CardContent>
                     <div className="space-y-3">
                       <div>
-                        <Label className="text-sm text-muted-foreground">{t('categories.offers.includedCategories')}</Label>
+                        <Label className="text-sm text-muted-foreground">{t('dashboard.categories.offers.includedCategories')}</Label>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {offer.productCategoryIds.length > 0 ? (
                             offer.productCategoryIds.map(catId => {
@@ -1030,13 +1273,13 @@ export default function CategoriesManager() {
                               ) : null;
                             })
                           ) : (
-                            <span className="text-sm text-muted-foreground">{t('categories.offers.allCategories')}</span>
+                            <span className="text-sm text-muted-foreground">{t('dashboard.categories.offers.allCategories')}</span>
                           )}
                         </div>
                       </div>
                       <div className="bg-muted/50 p-3 rounded-lg">
                         <p className="text-sm">
-                          <strong>{t('categories.offers.example')}</strong> {t('categories.offers.exampleDesc', { price: calculateDiscount(100, offer.discountPercent) })}
+                          <strong>{t('dashboard.categories.offers.example')}</strong> {t('dashboard.categories.offers.exampleDesc', { price: calculateDiscount(100, offer.discountPercent) })}
                         </p>
                       </div>
                       <div className="flex gap-2 pt-2">
@@ -1074,32 +1317,32 @@ export default function CategoriesManager() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
-              {editingTier ? t('categories.customerTiers.editTier') : t('categories.customerTiers.addNewTier')}
+              {editingTier ? t('dashboard.categories.customerTiers.editTier') : t('dashboard.categories.customerTiers.addNewTier')}
             </DialogTitle>
             <DialogDescription>
-              {t('categories.customerTiers.tierDesc')}
+              {t('dashboard.categories.customerTiers.tierDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>{t('categories.customerTiers.tierName')} *</Label>
+              <Label>{t('dashboard.categories.customerTiers.tierName')} *</Label>
               <Input
                 value={tierFormData.name}
                 onChange={(e) => setTierFormData({ ...tierFormData, name: e.target.value })}
-                placeholder={t('categories.customerTiers.tierNamePlaceholder')}
+                placeholder={t('dashboard.categories.customerTiers.tierNamePlaceholder')}
               />
             </div>
             <div className="grid gap-2">
-              <Label>{t('categories.customerTiers.description')}</Label>
+              <Label>{t('dashboard.categories.customerTiers.description')}</Label>
               <Input
                 value={tierFormData.description}
                 onChange={(e) => setTierFormData({ ...tierFormData, description: e.target.value })}
-                placeholder={t('categories.customerTiers.descriptionPlaceholder')}
+                placeholder={t('dashboard.categories.customerTiers.descriptionPlaceholder')}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>{t('categories.customerTiers.color')}</Label>
+                <Label>{t('dashboard.categories.customerTiers.color')}</Label>
                 <Input
                   type="color"
                   value={tierFormData.color}
@@ -1108,7 +1351,7 @@ export default function CategoriesManager() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>{t('categories.customerTiers.discountPercent')}</Label>
+                <Label>{t('dashboard.categories.customerTiers.discountPercent')}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -1119,7 +1362,7 @@ export default function CategoriesManager() {
               </div>
             </div>
             <div className="grid gap-2">
-              <Label>{t('categories.customerTiers.linkedProductCategories')}</Label>
+              <Label>{t('dashboard.categories.customerTiers.linkedProductCategories')}</Label>
               <Select
                 value={tierFormData.productCategories[0] || ''}
                 onValueChange={(value) => {
@@ -1132,7 +1375,7 @@ export default function CategoriesManager() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={t('categories.customerTiers.selectProductCategory')} />
+                  <SelectValue placeholder={t('dashboard.categories.customerTiers.selectProductCategory')} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
@@ -1166,15 +1409,15 @@ export default function CategoriesManager() {
             <div className="grid gap-2">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                {t('categories.customerTiers.assignCustomers')}
+                {t('dashboard.categories.customerTiers.assignCustomers')}
               </Label>
               {customersLoading ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className={`text-sm text-muted-foreground ${isRTL ? 'mr-2' : 'ml-2'}`}>{t('categories.customerTiers.loadingCustomers')}</span>
+                  <span className={`text-sm text-muted-foreground ${isRTL ? 'mr-2' : 'ml-2'}`}>{t('dashboard.categories.customerTiers.loadingCustomers')}</span>
                 </div>
               ) : customers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t('categories.customerTiers.noCustomersAvailable')}</p>
+                <p className="text-sm text-muted-foreground">{t('dashboard.categories.customerTiers.noCustomersAvailable')}</p>
               ) : (
                 <>
                   <Select
@@ -1189,7 +1432,7 @@ export default function CategoriesManager() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t('categories.customerTiers.selectCustomer')} />
+                      <SelectValue placeholder={t('dashboard.categories.customerTiers.selectCustomer')} />
                     </SelectTrigger>
                     <SelectContent>
                       {customers
@@ -1197,7 +1440,7 @@ export default function CategoriesManager() {
                         .map((customer) => (
                           <SelectItem key={customer.id} value={customer.id}>
                             <div className="flex flex-col">
-                              <span>{customer.name || t('categories.customerTiers.customer')}</span>
+                              <span>{customer.name || t('dashboard.categories.customerTiers.customer')}</span>
                               <span className="text-xs text-muted-foreground">{customer.email}</span>
                             </div>
                           </SelectItem>
@@ -1224,7 +1467,7 @@ export default function CategoriesManager() {
                   </div>
                   {tierFormData.assignedCustomers.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      {t('categories.customerTiers.assignedCount', { count: tierFormData.assignedCustomers.length })}
+                      {t('dashboard.categories.customerTiers.assignedCount', { count: tierFormData.assignedCustomers.length })}
                     </p>
                   )}
                 </>
@@ -1236,7 +1479,7 @@ export default function CategoriesManager() {
               {t('common.cancel')}
             </Button>
             <Button onClick={handleSaveTier}>
-              {editingTier ? t('categories.productCategories.update') : t('categories.productCategories.add')}
+              {editingTier ? t('dashboard.categories.productCategories.update') : t('dashboard.categories.productCategories.add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1247,29 +1490,29 @@ export default function CategoriesManager() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>
-              {editingOffer ? t('categories.offers.editOffer') : t('categories.offers.addNewOffer')}
+              {editingOffer ? t('dashboard.categories.offers.editOffer') : t('dashboard.categories.offers.addNewOffer')}
             </DialogTitle>
             <DialogDescription>
-              {t('categories.offers.offerDesc')}
+              {t('dashboard.categories.offers.offerDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>{t('categories.offers.offerName')} *</Label>
+              <Label>{t('dashboard.categories.offers.offerName')} *</Label>
               <Input
                 value={offerFormData.name}
                 onChange={(e) => setOfferFormData({ ...offerFormData, name: e.target.value })}
-                placeholder={t('categories.offers.offerNamePlaceholder')}
+                placeholder={t('dashboard.categories.offers.offerNamePlaceholder')}
               />
             </div>
             <div className="grid gap-2">
-              <Label>{t('categories.offers.customerTier')} *</Label>
+              <Label>{t('dashboard.categories.offers.customerTier')} *</Label>
               <Select
                 value={offerFormData.tierId}
                 onValueChange={(value) => setOfferFormData({ ...offerFormData, tierId: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={t('categories.offers.selectCustomerTier')} />
+                  <SelectValue placeholder={t('dashboard.categories.offers.selectCustomerTier')} />
                 </SelectTrigger>
                 <SelectContent>
                   {customerTiers.map((tier) => (
@@ -1281,7 +1524,7 @@ export default function CategoriesManager() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>{t('categories.offers.discountPercent')}</Label>
+              <Label>{t('dashboard.categories.offers.discountPercent')}</Label>
               <Input
                 type="number"
                 min="0"
@@ -1291,7 +1534,7 @@ export default function CategoriesManager() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>{t('categories.offers.productCategories')}</Label>
+              <Label>{t('dashboard.categories.offers.productCategories')}</Label>
               <Select
                 value={offerFormData.productCategoryIds[0] || ''}
                 onValueChange={(value) => {
@@ -1304,7 +1547,7 @@ export default function CategoriesManager() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={t('categories.offers.selectProductCategories')} />
+                  <SelectValue placeholder={t('dashboard.categories.offers.selectProductCategories')} />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
@@ -1338,15 +1581,15 @@ export default function CategoriesManager() {
             <div className="grid gap-2">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                {t('categories.customerTiers.assignCustomers')}
+                {t('dashboard.categories.customerTiers.assignCustomers')}
               </Label>
               {customersLoading ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <span className={`text-sm text-muted-foreground ${isRTL ? 'mr-2' : 'ml-2'}`}>{t('categories.customerTiers.loadingCustomers')}</span>
+                  <span className={`text-sm text-muted-foreground ${isRTL ? 'mr-2' : 'ml-2'}`}>{t('dashboard.categories.customerTiers.loadingCustomers')}</span>
                 </div>
               ) : customers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t('categories.customerTiers.noCustomersAvailable')}</p>
+                <p className="text-sm text-muted-foreground">{t('dashboard.categories.customerTiers.noCustomersAvailable')}</p>
               ) : (
                 <>
                   <Select
@@ -1361,7 +1604,7 @@ export default function CategoriesManager() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={t('categories.customerTiers.selectCustomer')} />
+                      <SelectValue placeholder={t('dashboard.categories.customerTiers.selectCustomer')} />
                     </SelectTrigger>
                     <SelectContent>
                       {customers
@@ -1369,7 +1612,7 @@ export default function CategoriesManager() {
                         .map((customer) => (
                           <SelectItem key={customer.id} value={customer.id}>
                             <div className="flex flex-col">
-                              <span>{customer.name || t('categories.customerTiers.customer')}</span>
+                              <span>{customer.name || t('dashboard.categories.customerTiers.customer')}</span>
                               <span className="text-xs text-muted-foreground">{customer.email}</span>
                             </div>
                           </SelectItem>
@@ -1396,7 +1639,7 @@ export default function CategoriesManager() {
                   </div>
                   {offerFormData.assignedCustomers.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      {t('categories.customerTiers.assignedCount', { count: offerFormData.assignedCustomers.length })}
+                      {t('dashboard.categories.customerTiers.assignedCount', { count: offerFormData.assignedCustomers.length })}
                     </p>
                   )}
                 </>
@@ -1408,104 +1651,13 @@ export default function CategoriesManager() {
               {t('common.cancel')}
             </Button>
             <Button onClick={handleSaveOffer}>
-              {editingOffer ? t('categories.productCategories.update') : t('categories.productCategories.add')}
+              {editingOffer ? t('dashboard.categories.productCategories.update') : t('dashboard.categories.productCategories.add')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Category Create/Edit Dialog */}
-      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCategory 
-                ? t('categories.productCategories.editCategory')
-                : t('categories.productCategories.addNewCategory')}
-            </DialogTitle>
-            <DialogDescription>
-              {editingCategory 
-                ? t('categories.productCategories.editCategoryDesc')
-                : t('categories.productCategories.addCategoryDesc')}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="categoryName">{t('categories.productCategories.name')} (English) *</Label>
-                <Input
-                  id="categoryName"
-                  value={categoryFormData.name}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
-                  placeholder="Category Name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="categoryNameAr">{t('categories.productCategories.name')} (العربية)</Label>
-                <Input
-                  id="categoryNameAr"
-                  value={categoryFormData.nameAr}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, nameAr: e.target.value })}
-                  placeholder="اسم الفئة"
-                  dir="rtl"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="categorySlug">{t('categories.productCategories.slug')}</Label>
-              <Input
-                id="categorySlug"
-                value={categoryFormData.slug}
-                onChange={(e) => setCategoryFormData({ ...categoryFormData, slug: e.target.value })}
-                placeholder="category-slug"
-              />
-              <p className="text-xs text-muted-foreground">{t('categories.productCategories.slugHint')}</p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="categoryDescription">{t('categories.productCategories.description')}</Label>
-              <Input
-                id="categoryDescription"
-                value={categoryFormData.description}
-                onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-                placeholder={t('categories.productCategories.description')}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>{t('categories.productCategories.categoryLogo')}</Label>
-              <Input
-                type="url"
-                value={categoryFormData.image}
-                onChange={(e) => setCategoryFormData({ ...categoryFormData, image: e.target.value })}
-                placeholder="https://example.com/logo.png"
-              />
-              <p className="text-xs text-muted-foreground">{t('categories.productCategories.logoHint')}</p>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowCategoryDialog(false);
-                setEditingCategory(null);
-                setCategoryFormData({ name: '', nameAr: '', description: '', slug: '', image: '' });
-              }}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              onClick={handleSaveCategory}
-              disabled={!categoryFormData.name.trim()}
-            >
-              {editingCategory ? t('categories.productCategories.update') : t('categories.productCategories.add')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* Import Progress Dialog - New Reusable Component */}
       <ImportProgressDialog
@@ -1518,8 +1670,8 @@ export default function CategoriesManager() {
           setIsImporting(open);
         }}
         progress={importProgress}
-        title="جاري استيراد الفئات"
-        description="يرجى الانتظار أثناء استيراد الفئات من ملف Excel..."
+        title={t('dashboard.categories.productCategories.importingCategories')}
+        description={t('dashboard.categories.productCategories.importingCategoriesDesc')}
       />
 
 
@@ -1529,10 +1681,30 @@ export default function CategoriesManager() {
         open={showImportErrorDialog}
         onOpenChange={setShowImportErrorDialog}
         errors={importErrors}
-        title="تقرير أخطاء استيراد الفئات"
-        description="حدثت الأخطاء التالية أثناء استيراد الفئات. يرجى مراجعة الصفوف التي فشلت وتصحيح البيانات في ملف Excel."
-        itemLabel="اسم الفئة"
+        title={t('dashboard.categories.productCategories.importErrorTitle')}
+        description={t('dashboard.categories.productCategories.importErrorDesc')}
+        itemLabel={t('dashboard.categories.productCategories.categoryName')}
       />
+
+      {/* Add Category Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('dashboard.categories.productCategories.addNewCategory')}</DialogTitle>
+            <DialogDescription>
+              {t('dashboard.categories.productCategories.addCategoryDesc')}
+            </DialogDescription>
+          </DialogHeader>
+          <CategoryForm
+            categories={categories}
+            initialData={null}
+            parentId={undefined}
+            onSave={handleCategoryFormSave}
+            onCancel={() => setCategoryDialogOpen(false)}
+            saving={savingCategory}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -127,7 +127,7 @@ export const authService = {
 
   me: (): Promise<{ user: UserProfile }> =>
     apiClient.fetch(`${apiClient.authUrl}/me`, {
-      requireAuth: false,
+      requireAuth: true,
     }),
 
   googleLogin: () => {
@@ -211,6 +211,14 @@ export const authService = {
     apiClient.fetch(`${apiClient.authUrl}/reset-password`, {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  // Change password (for authenticated users, including first login)
+  changePassword: (currentPassword: string, newPassword: string): Promise<{ message: string }> =>
+    apiClient.fetch(`${apiClient.authUrl}/change-password`, {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+      requireAuth: true,
     }),
 
   // Generic methods for custom endpoints

@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, Activity, Users, CreditCard, Database, Lock, 
   Globe, Sun, Moon, X, Menu, Search, Bell, LogOut, 
   Layers, Zap, CheckCircle, RefreshCcw, Gift, Handshake, 
-  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight, Key, UserPlus
+  LayoutDashboard, Bot, Fingerprint, Eye, Ban, MapPin, Monitor, Trash2, FileText, ChevronLeft, ChevronRight, Key, UserPlus, Settings, Loader2, Cloud, MessageSquare
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { coreApi } from '@/lib/api';
@@ -22,6 +23,13 @@ import ApiKeyManager from './master-dashboard/ApiKeyManager';
 import PageContentManager from './master-dashboard/PageContentManager';
 
 import AiSettingsManager from './master-dashboard/AiSettingsManager';
+import PermissionsManager from './master-dashboard/PermissionsManager';
+import CloudinaryAccessManager from './master-dashboard/CloudinaryAccessManager';
+import ComplaintsManager from './master-dashboard/ComplaintsManager';
+import PlatformSettings from './master-dashboard/PlatformSettings';
+import TransactionManager from './master-dashboard/TransactionManager';
+
+
 import { APP_VERSION } from '../version';
 import { getAdminApiKeySync, initializeAdminApiKey, clearAdminApiKeyCache } from '@/lib/admin-config';
 
@@ -41,7 +49,13 @@ const translations = {
     partners: 'Partners',
     securityLogs: 'Security Logs',
     customers: 'Customers',
+    permissions: 'Permissions',
+    complaints: 'Complaints',
+    platformSettings: 'Platform Settings',
+    transactions: 'Transactions',
     logout: 'Logout',
+
+
     systemStatus: 'System Status',
     cpuUsage: 'CPU Usage',
     memory: 'Memory',
@@ -108,7 +122,13 @@ const translations = {
     partners: 'الشركاء',
     securityLogs: 'سجلات الأمان',
     customers: 'العملاء',
+    permissions: 'الصلاحيات',
+    complaints: 'الشكاوى',
+    platformSettings: 'إعدادات المنصة',
+    transactions: 'المعاملات',
     logout: 'تسجيل الخروج',
+
+
     systemStatus: 'حالة النظام',
     cpuUsage: 'استخدام المعالج',
     memory: 'الذاكرة',
@@ -260,14 +280,14 @@ export default function SystemAdminPanel() {
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
   const [userLogs, setUserLogs] = useState<AuditLog[]>([]);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'management' | 'overview' | 'tenants' | 'gateways' | 'partners' | 'plans' | 'features' | 'gifts' | 'database' | 'ai' | 'customers' | 'analytics' | 'users' | 'api-keys' | 'pages'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'management' | 'overview' | 'tenants' | 'gateways' | 'partners' | 'plans' | 'features' | 'gifts' | 'database' | 'ai' | 'customers' | 'analytics' | 'users' | 'api-keys' | 'pages' | 'limits' | 'permissions' | 'cloudinary'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
-  const [dbStats, setDbStats] = useState<any>(null);
-  const [rateLimitConfig, setRateLimitConfig] = useState<any>(null);
-  const [rateLimitStats, setRateLimitStats] = useState<any>(null);
+  const [dbStats, setDbStats] = useState<Record<string, unknown> | null>(null);
+  const [rateLimitConfig, setRateLimitConfig] = useState<Record<string, unknown> | null>(null);
+  const [rateLimitStats, setRateLimitStats] = useState<Record<string, unknown> | null>(null);
   const [loadingDbStats, setLoadingDbStats] = useState(false);
   const [clearing, setClearing] = useState<string | null>(null);
   const [updatingConfig, setUpdatingConfig] = useState(false);
@@ -279,8 +299,32 @@ export default function SystemAdminPanel() {
     passwordResetMaxAttempts: 5,
     passwordResetWindowMs: 60 * 60 * 1000,
   });
+  const [limitsConfig, setLimitsConfig] = useState({
+    signupEnabled: true,
+    signinEnabled: true,
+    signupMaxAttempts: 3,
+    signupWindowMs: 60 * 60 * 1000, // 1 hour
+    signinMaxAttempts: 5,
+    signinWindowMs: 15 * 60 * 1000, // 15 minutes
+    maxStoresPerUser: 2,
+  });
+  const [loadingLimits, setLoadingLimits] = useState(false);
+  const [savingLimits, setSavingLimits] = useState(false);
+  const { t: tI18n, i18n } = useTranslation();
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [language, setLanguage] = useState<'en' | 'ar'>('ar');
+  const [language, setLanguage] = useState<'en' | 'ar'>((i18n.language as 'en' | 'ar') || 'ar');
+
+  useEffect(() => {
+    if (i18n.language && (i18n.language === 'en' || i18n.language === 'ar')) {
+      setLanguage(i18n.language as 'en' | 'ar');
+    }
+  }, [i18n.language]);
+
+  const toggleLanguage = () => {
+    const newLang = language === 'en' ? 'ar' : 'en';
+    setLanguage(newLang);
+    i18n.changeLanguage(newLang);
+  };
   const [customerFingerprints, setCustomerFingerprints] = useState<CustomerFingerprint[]>([]);
   const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
@@ -387,7 +431,7 @@ export default function SystemAdminPanel() {
     } finally {
       setStatsLoading(false);
     }
-  }, []);
+  }, [ADMIN_PASSWORD]);
 
   const fetchSystemHealth = useCallback(async () => {
     try {
@@ -396,7 +440,7 @@ export default function SystemAdminPanel() {
     } catch (error) {
       // Error logged to backend
     }
-  }, []);
+  }, [ADMIN_PASSWORD]);
 
   const fetchSecurityEvents = useCallback(async () => {
     try {
@@ -426,7 +470,7 @@ export default function SystemAdminPanel() {
       // Error logged to backend
       setSecurityEvents([]);
     }
-  }, [logSubTab, toast]);
+  }, [logSubTab, normalizeLogs, ADMIN_PASSWORD]);
 
   const fetchErrorLogs = useCallback(async () => {
     try {
@@ -455,7 +499,7 @@ export default function SystemAdminPanel() {
     } catch (error) {
       setErrorLogs([]);
     }
-  }, [logSubTab, normalizeLogs]);
+  }, [logSubTab, normalizeLogs, ADMIN_PASSWORD]);
 
   const fetchAuditLogs = useCallback(async () => {
     try {
@@ -485,7 +529,7 @@ export default function SystemAdminPanel() {
       // Error logged to backend
       setAuditLogs([]);
     }
-  }, [logSubTab, toast]);
+  }, [logSubTab, normalizeLogs, ADMIN_PASSWORD]);
 
   const fetchLogs = useCallback(async () => {
     await Promise.all([fetchSecurityEvents(), fetchAuditLogs(), fetchErrorLogs()]);
@@ -530,6 +574,66 @@ export default function SystemAdminPanel() {
       fetchCustomerFingerprints();
     }
   }, [isAuthenticated, activeTab, fetchCustomerFingerprints]);
+
+  // Load limits configuration when authenticated and tab is limits
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'limits') {
+      fetchLimitsConfig();
+    }
+  }, [isAuthenticated, activeTab]);
+
+  const fetchLimitsConfig = async () => {
+    setLoadingLimits(true);
+    try {
+      const config = await coreApi.get('/admin/master/limits-config', { 
+        requireAuth: true, 
+        adminApiKey: ADMIN_PASSWORD 
+      });
+      if (config) {
+        setLimitsConfig({
+          signupEnabled: config.signupEnabled !== false,
+          signinEnabled: config.signinEnabled !== false,
+          signupMaxAttempts: config.signupMaxAttempts || 3,
+          signupWindowMs: config.signupWindowMs || 60 * 60 * 1000,
+          signinMaxAttempts: config.signinMaxAttempts || 5,
+          signinWindowMs: config.signinWindowMs || 15 * 60 * 1000,
+          maxStoresPerUser: config.maxStoresPerUser || 2,
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch limits config:', error);
+      // Use defaults if API fails
+    } finally {
+      setLoadingLimits(false);
+    }
+  };
+
+  const saveLimitsConfig = async () => {
+    setSavingLimits(true);
+    try {
+      await coreApi.post('/admin/master/limits-config', limitsConfig, { 
+        requireAuth: true, 
+        adminApiKey: ADMIN_PASSWORD 
+      });
+      toast({
+        title: language === 'ar' ? 'تم الحفظ' : 'Saved',
+        description: language === 'ar' 
+          ? 'تم حفظ إعدادات الحدود بنجاح'
+          : 'Limits configuration saved successfully',
+      });
+    } catch (error: any) {
+      console.error('Failed to save limits config:', error);
+      toast({
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: language === 'ar' 
+          ? 'فشل حفظ إعدادات الحدود'
+          : 'Failed to save limits configuration',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingLimits(false);
+    }
+  };
 
   // Update filtered logs when sub-tab changes
   useEffect(() => {
@@ -918,7 +1022,15 @@ export default function SystemAdminPanel() {
     { id: 'pages', label: language === 'ar' ? 'الصفحات' : 'Pages', icon: FileText },
     { id: 'database', label: t.database, icon: Database },
     { id: 'customers', label: t.customers, icon: Fingerprint },
+    { id: 'permissions', label: t.permissions, icon: Shield },
+    { id: 'complaints', label: t.complaints, icon: MessageSquare },
+    { id: 'platform-settings', label: t.platformSettings, icon: Settings },
+    { id: 'transactions', label: t.transactions, icon: CreditCard },
+    { id: 'cloudinary', label: language === 'ar' ? 'وصول Cloudinary' : 'Cloudinary Access', icon: Cloud },
+
+
     { id: 'analytics', label: language === 'ar' ? 'التحليلات' : 'Analytics', icon: Activity },
+    { id: 'limits', label: language === 'ar' ? 'الحدود' : 'Limits', icon: Settings },
     { id: 'logs', label: t.securityLogs, icon: Shield },
   ];
 
@@ -1176,7 +1288,7 @@ export default function SystemAdminPanel() {
             
             {/* Language Toggle */}
             <button 
-              onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+              onClick={toggleLanguage}
               className={`p-2 ${theme.cardHover} rounded-full ${theme.textMuted} flex items-center gap-1`}
             >
               <Globe className="w-5 h-5" />
@@ -1713,6 +1825,28 @@ export default function SystemAdminPanel() {
             {activeTab === 'pages' && (
               <PageContentManager adminApiKey={ADMIN_PASSWORD} />
             )}
+
+            {activeTab === 'permissions' && (
+              <PermissionsManager />
+            )}
+
+            {activeTab === 'cloudinary' && (
+              <CloudinaryAccessManager />
+            )}
+
+            {activeTab === 'complaints' && (
+              <ComplaintsManager />
+            )}
+
+            {activeTab === 'platform-settings' && (
+              <PlatformSettings />
+            )}
+
+            {activeTab === 'transactions' && (
+              <TransactionManager />
+            )}
+
+
 
             {activeTab === 'customers' && (
               <div className="space-y-6">
@@ -2296,6 +2430,232 @@ export default function SystemAdminPanel() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'limits' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className={`text-3xl font-bold ${theme.text}`}>
+                    {language === 'ar' ? 'إعدادات الحدود' : 'System Limits'}
+                  </h2>
+                  <button
+                    onClick={saveLimitsConfig}
+                    disabled={savingLimits}
+                    className={`px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors flex items-center gap-2 ${
+                      savingLimits ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {savingLimits ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        {language === 'ar' ? 'حفظ' : 'Save'}
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {loadingLimits ? (
+                  <div className={`${theme.card} ${theme.border} border rounded-xl p-12 text-center`}>
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-violet-500" />
+                    <p className={`mt-4 ${theme.textMuted}`}>
+                      {language === 'ar' ? 'جاري تحميل الإعدادات...' : 'Loading settings...'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Signup/Signin Toggle */}
+                    <div className={`${theme.card} ${theme.border} border rounded-xl p-6`}>
+                      <h3 className={`text-xl font-bold ${theme.text} mb-4`}>
+                        {language === 'ar' ? 'تفعيل/تعطيل التسجيل' : 'Enable/Disable Registration'}
+                      </h3>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`font-semibold ${theme.text}`}>
+                              {language === 'ar' ? 'تفعيل التسجيل' : 'Enable Signup'}
+                            </p>
+                            <p className={`text-sm ${theme.textMuted}`}>
+                              {language === 'ar' 
+                                ? 'السماح للمستخدمين الجدد بالتسجيل في النظام'
+                                : 'Allow new users to sign up'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setLimitsConfig(prev => ({ ...prev, signupEnabled: !prev.signupEnabled }))}
+                            className={`relative w-14 h-7 rounded-full transition-colors ${
+                              limitsConfig.signupEnabled ? 'bg-violet-600' : 'bg-gray-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                                limitsConfig.signupEnabled ? 'translate-x-7' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className={`font-semibold ${theme.text}`}>
+                              {language === 'ar' ? 'تفعيل تسجيل الدخول' : 'Enable Signin'}
+                            </p>
+                            <p className={`text-sm ${theme.textMuted}`}>
+                              {language === 'ar' 
+                                ? 'السماح للمستخدمين بتسجيل الدخول'
+                                : 'Allow users to sign in'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setLimitsConfig(prev => ({ ...prev, signinEnabled: !prev.signinEnabled }))}
+                            className={`relative w-14 h-7 rounded-full transition-colors ${
+                              limitsConfig.signinEnabled ? 'bg-violet-600' : 'bg-gray-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                                limitsConfig.signinEnabled ? 'translate-x-7' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Signup Rate Limits */}
+                    <div className={`${theme.card} ${theme.border} border rounded-xl p-6`}>
+                      <h3 className={`text-xl font-bold ${theme.text} mb-4`}>
+                        {language === 'ar' ? 'حدود معدل التسجيل' : 'Signup Rate Limits'}
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+                            {language === 'ar' ? 'الحد الأقصى لمحاولات التسجيل' : 'Max Signup Attempts'}
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={limitsConfig.signupMaxAttempts}
+                            onChange={(e) => setLimitsConfig(prev => ({ 
+                              ...prev, 
+                              signupMaxAttempts: parseInt(e.target.value) || 3 
+                            }))}
+                            className={`w-full px-4 py-2 ${theme.bgSecondary} ${theme.border} border rounded-lg ${theme.text} focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                          />
+                          <p className={`text-xs ${theme.textMuted} mt-1`}>
+                            {language === 'ar' 
+                              ? 'عدد محاولات التسجيل المسموحة في الفترة الزمنية المحددة'
+                              : 'Number of signup attempts allowed in the time window'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+                            {language === 'ar' ? 'نافذة الوقت (بالساعات)' : 'Time Window (hours)'}
+                          </label>
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={(limitsConfig.signupWindowMs / (60 * 60 * 1000)).toFixed(1)}
+                            onChange={(e) => setLimitsConfig(prev => ({ 
+                              ...prev, 
+                              signupWindowMs: parseFloat(e.target.value) * 60 * 60 * 1000 
+                            }))}
+                            className={`w-full px-4 py-2 ${theme.bgSecondary} ${theme.border} border rounded-lg ${theme.text} focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                          />
+                          <p className={`text-xs ${theme.textMuted} mt-1`}>
+                            {language === 'ar' 
+                              ? 'الفترة الزمنية بالساعات التي يتم فيها حساب المحاولات'
+                              : 'Time period in hours for counting attempts'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Signin Rate Limits */}
+                    <div className={`${theme.card} ${theme.border} border rounded-xl p-6`}>
+                      <h3 className={`text-xl font-bold ${theme.text} mb-4`}>
+                        {language === 'ar' ? 'حدود معدل تسجيل الدخول' : 'Signin Rate Limits'}
+                      </h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+                            {language === 'ar' ? 'الحد الأقصى لمحاولات تسجيل الدخول' : 'Max Signin Attempts'}
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={limitsConfig.signinMaxAttempts}
+                            onChange={(e) => setLimitsConfig(prev => ({ 
+                              ...prev, 
+                              signinMaxAttempts: parseInt(e.target.value) || 5 
+                            }))}
+                            className={`w-full px-4 py-2 ${theme.bgSecondary} ${theme.border} border rounded-lg ${theme.text} focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                          />
+                          <p className={`text-xs ${theme.textMuted} mt-1`}>
+                            {language === 'ar' 
+                              ? 'عدد محاولات تسجيل الدخول المسموحة في الفترة الزمنية المحددة'
+                              : 'Number of signin attempts allowed in the time window'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+                            {language === 'ar' ? 'نافذة الوقت (بالدقائق)' : 'Time Window (minutes)'}
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={(limitsConfig.signinWindowMs / (60 * 1000)).toFixed(0)}
+                            onChange={(e) => setLimitsConfig(prev => ({ 
+                              ...prev, 
+                              signinWindowMs: parseInt(e.target.value) * 60 * 1000 
+                            }))}
+                            className={`w-full px-4 py-2 ${theme.bgSecondary} ${theme.border} border rounded-lg ${theme.text} focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                          />
+                          <p className={`text-xs ${theme.textMuted} mt-1`}>
+                            {language === 'ar' 
+                              ? 'الفترة الزمنية بالدقائق التي يتم فيها حساب المحاولات'
+                              : 'Time period in minutes for counting attempts'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stores Per User Limit */}
+                    <div className={`${theme.card} ${theme.border} border rounded-xl p-6`}>
+                      <h3 className={`text-xl font-bold ${theme.text} mb-4`}>
+                        {language === 'ar' ? 'حدود المتاجر لكل مستخدم' : 'Stores Per User Limit'}
+                      </h3>
+                      <div>
+                        <label className={`block text-sm font-medium ${theme.text} mb-2`}>
+                          {language === 'ar' ? 'الحد الأقصى للمتاجر لكل مستخدم' : 'Max Stores Per User'}
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={limitsConfig.maxStoresPerUser}
+                          onChange={(e) => setLimitsConfig(prev => ({ 
+                            ...prev, 
+                            maxStoresPerUser: parseInt(e.target.value) || 2 
+                          }))}
+                          className={`w-full px-4 py-2 ${theme.bgSecondary} ${theme.border} border rounded-lg ${theme.text} focus:outline-none focus:ring-2 focus:ring-violet-500`}
+                        />
+                        <p className={`text-xs ${theme.textMuted} mt-1`}>
+                          {language === 'ar' 
+                            ? 'الحد الأقصى لعدد المتاجر التي يمكن للمستخدم الواحد إنشاؤها'
+                            : 'Maximum number of stores a single user can create'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { coreApi } from '@/lib/api';
-import { useAuth } from './AuthContext';
+import { AuthContext } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { isErrorObject, getErrorMessage } from '@/lib/error-utils';
 
@@ -13,13 +13,18 @@ interface CartContextType {
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
   refreshCart: () => Promise<void>;
+  clearCart: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   console.log('🛒 CartProvider: Component rendered');
-  const { user } = useAuth();
+  
+  // Safely get auth context - handle case where AuthProvider might not be available
+  // Use useContext directly instead of useAuth hook to avoid throwing error
+  const authContext = useContext(AuthContext);
+  const user = authContext?.user || null;
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(false);
   // Use refs to access current cart/loading without including them in dependency arrays
@@ -109,7 +114,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let data = response;
       if (response && typeof response === 'object' && 'data' in response && 'success' in response && response.success === true) {
         console.log('🛒 CartContext: Response is wrapped, unwrapping...');
-        data = (response as any).data;
+        data = (response as { data: Cart }).data;
       }
       
       console.log('🛒 CartContext: Final data after unwrapping:', data);
@@ -127,7 +132,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Validate cart structure
       if (data && typeof data === 'object' && !isErrorObject(data)) {
         // Ensure cartItems exists (backend returns cartItems, not items)
-        const cartData = data as any;
+        const cartData = data as Cart;
         
         // Normalize cartItems to items for frontend compatibility
         if (cartData.cartItems && !cartData.items) {
@@ -149,7 +154,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         // Validate each cart item has product data
-        const validatedItems = (cartData.cartItems || cartData.items || []).filter((item: any) => {
+        const validatedItems = (cartData.cartItems || cartData.items || []).filter((item: CartItem) => {
           if (!item || !item.product) {
             console.warn('🛒 CartContext: Filtering out invalid cart item:', item);
             return false;
@@ -163,7 +168,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const itemCount = validatedItems.length;
         console.log('🛒 CartContext: Setting cart with', itemCount, 'valid items');
         console.log('🛒 CartContext: Cart ID:', cartData.id);
-        console.log('🛒 CartContext: Cart items details:', validatedItems.map((item: any) => ({
+        console.log('🛒 CartContext: Cart items details:', validatedItems.map((item: CartItem) => ({
           cartItemId: item.id,
           productId: item.productId,
           productName: item.product?.name || item.product?.nameAr || 'Unknown',
@@ -176,15 +181,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Compare item IDs to detect actual changes, not just counts
         const currentCart = cartRef.current;
         const currentItemIds = new Set(
-          ((currentCart as any)?.cartItems || (currentCart as any)?.items || []).map((item: any) => item.id)
+          ((currentCart as Cart)?.cartItems || (currentCart as Cart)?.items || []).map((item: CartItem) => item.id)
         );
-        const newItemIds = new Set(validatedItems.map((item: any) => item.id));
+        const newItemIds = new Set(validatedItems.map((item: CartItem) => item.id));
         
         // Check if items actually changed (different IDs or different quantities)
         const itemsChanged = currentItemIds.size !== newItemIds.size ||
           Array.from(newItemIds).some(id => !currentItemIds.has(id)) ||
-          validatedItems.some((item: any) => {
-            const currentItem = ((currentCart as any)?.cartItems || (currentCart as any)?.items || []).find((i: any) => i.id === item.id);
+          validatedItems.some((item: CartItem) => {
+            const currentItem = ((currentCart as Cart)?.cartItems || (currentCart as Cart)?.items || []).find((i: CartItem) => i.id === item.id);
             return !currentItem || currentItem.quantity !== item.quantity;
           });
         
@@ -318,7 +323,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Get current cart state before adding
       const currentCart = cartRef.current;
-      const currentItemCount = (currentCart as any)?.cartItems?.length || (currentCart as any)?.items?.length || 0;
+      const currentItemCount = (currentCart as Cart)?.cartItems?.length || (currentCart as Cart)?.items?.length || 0;
       console.log('🛒 CartContext: Current cart has', currentItemCount, 'items before adding');
       
       const response = await coreApi.addToCart(payload, user ? undefined : sessionId);
@@ -327,7 +332,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Handle TransformInterceptor wrapped response
       let cartData = response;
       if (response && typeof response === 'object' && 'data' in response && 'success' in response) {
-        cartData = (response as any).data;
+        cartData = (response as { data: Cart }).data;
         console.log('CartContext: Unwrapped add to cart response:', cartData);
       }
       
@@ -347,7 +352,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         // Validate each cart item has product data
-        const validatedItems = (cartData.cartItems || cartData.items || []).filter((item: any) => {
+        const validatedItems = (cartData.cartItems || cartData.items || []).filter((item: CartItem) => {
           if (!item || !item.product) {
             console.warn('🛒 CartContext: Filtering out invalid cart item from add response:', item);
             return false;
@@ -359,7 +364,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cartData.items = validatedItems;
         
         console.log('🛒 CartContext: Setting cart from add response with', validatedItems.length, 'valid items');
-        console.log('🛒 CartContext: Cart items details:', validatedItems.map((item: any) => ({
+        console.log('🛒 CartContext: Cart items details:', validatedItems.map((item: CartItem) => ({
           cartItemId: item.id,
           productId: item.productId,
           productName: item.product?.name || item.product?.nameAr || 'Unknown',
@@ -384,8 +389,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn('🛒 CartContext: WARNING - Item count decreased! This might indicate items were lost.');
           console.warn('🛒 CartContext: Current items:', currentItemCount, 'New items:', validatedItems.length);
           console.warn('🛒 CartContext: Current product IDs:', 
-            ((currentCart as any)?.cartItems || (currentCart as any)?.items || []).map((item: any) => item.productId));
-          console.warn('🛒 CartContext: New product IDs:', validatedItems.map((item: any) => item.productId));
+            ((currentCart as Cart)?.cartItems || (currentCart as Cart)?.items || []).map((item: CartItem) => item.productId));
+          console.warn('🛒 CartContext: New product IDs:', validatedItems.map((item: CartItem) => item.productId));
           // Still update, but log a warning
         }
         
@@ -403,10 +408,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('🛒 CartContext: ========== CART STATE UPDATED ==========');
         console.log('🛒 CartContext: Cart ID:', newCart.id);
         console.log('🛒 CartContext: Total items in cart:', validatedItems.length);
-        console.log('🛒 CartContext: Product IDs:', validatedItems.map((item: any) => item.productId));
-        console.log('🛒 CartContext: Product Names:', validatedItems.map((item: any) => item.product?.name || item.product?.nameAr || 'Unknown'));
-        console.log('🛒 CartContext: Cart Item IDs:', validatedItems.map((item: any) => item.id));
-        console.log('🛒 CartContext: Quantities:', validatedItems.map((item: any) => item.quantity));
+        console.log('🛒 CartContext: Product IDs:', validatedItems.map((item: CartItem) => item.productId));
+        console.log('🛒 CartContext: Product Names:', validatedItems.map((item: CartItem) => item.product?.name || item.product?.nameAr || 'Unknown'));
+        console.log('🛒 CartContext: Cart Item IDs:', validatedItems.map((item: CartItem) => item.id));
+        console.log('🛒 CartContext: Quantities:', validatedItems.map((item: CartItem) => item.quantity));
         console.log('🛒 CartContext: =======================================');
         
         toast({
@@ -463,12 +468,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Handle response similar to addToCart
       let cartData = response;
       if (response && typeof response === 'object' && 'data' in response && 'success' in response) {
-        cartData = (response as any).data;
+        cartData = (response as { data: Cart }).data;
       }
       
       // Update cart state from response if valid
       if (cartData && typeof cartData === 'object' && !isErrorObject(cartData)) {
-        const cartDataTyped = cartData as any;
+        const cartDataTyped = cartData as Cart;
         
         // Normalize cartItems
         if (cartDataTyped.cartItems && !cartDataTyped.items) {
@@ -485,7 +490,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         // Validate items
-        const validatedItems = (cartDataTyped.cartItems || cartDataTyped.items || []).filter((item: any) => {
+        const validatedItems = (cartDataTyped.cartItems || cartDataTyped.items || []).filter((item: CartItem) => {
           return item && item.product;
         });
         
@@ -534,9 +539,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Get current cart to verify the itemId exists
       const currentCart = cartRef.current;
       if (currentCart) {
-        const cartItems = (currentCart as any)?.cartItems || (currentCart as any)?.items || [];
+        const cartItems = (currentCart as Cart)?.cartItems || (currentCart as Cart)?.items || [];
         console.log('🛒 CartContext: Current cart has', cartItems.length, 'items');
-        const itemIds = cartItems.map((item: any) => item.id);
+        const itemIds = cartItems.map((item: CartItem) => item.id);
         console.log('🛒 CartContext: Current cart item IDs:', itemIds);
         
         // Try to find the item by exact match or partial match
@@ -545,7 +550,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (!itemExists && itemIds.length > 0) {
           // Try to find a matching item by partial ID
-          const matchingItem = cartItems.find((item: any) => 
+          const matchingItem = cartItems.find((item: CartItem) => 
             item.id.includes(cleanItemId.substring(0, 20)) || 
             cleanItemId.includes(item.id.substring(0, 20))
           );
@@ -574,7 +579,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Check if it's a 404 error (item not found) - this is okay, item might already be removed
       const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404') || 
-                        (error && typeof error === 'object' && 'status' in error && (error as any).status === 404);
+                        (error && typeof error === 'object' && 'status' in error && (error as { status?: number }).status === 404);
       
       // Always refresh cart to sync state (item might have been removed by another request)
       try {
@@ -602,8 +607,24 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const clearCart = async () => {
+    try {
+      setLoading(true);
+      await coreApi.clearCart(user ? undefined : sessionId);
+      setCart(null);
+      cartRef.current = null;
+    } catch (error) {
+      console.error('🛒 CartContext: Failed to clear cart:', error);
+      // Even if backend fails, clear local state
+      setCart(null);
+      cartRef.current = null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <CartContext.Provider value={{ cart, loading, addToCart, updateQuantity, removeItem, refreshCart }}>
+    <CartContext.Provider value={{ cart, loading, addToCart, updateQuantity, removeItem, refreshCart, clearCart }}>
       {children}
     </CartContext.Provider>
   );

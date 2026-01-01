@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -48,6 +49,11 @@ import {
   TrendingUp,
   TrendingDown,
   History,
+  Eye,
+  Image as ImageIcon,
+  User,
+  Calendar,
+  FileText,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -122,6 +128,11 @@ export default function WalletPage() {
   const [showAddBankDialog, setShowAddBankDialog] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<TopUpRequest | null>(null);
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
   
   // Bank form state
   const [bankForm, setBankForm] = useState<CreateBankDto>({
@@ -282,6 +293,83 @@ export default function WalletPage() {
     setShowAddBankDialog(true);
   };
 
+  // Handle view request details
+  const handleViewRequest = (request: TopUpRequest) => {
+    setSelectedRequest(request);
+    setShowRequestDialog(true);
+  };
+
+  // Handle approve top-up request
+  const handleApproveRequest = async () => {
+    if (!selectedRequest) return;
+
+    if (!confirm(isRTL 
+      ? `هل أنت متأكد من الموافقة على طلب الشحن بقيمة ${selectedRequest.amount} ${selectedRequest.currency}؟`
+      : `Are you sure you want to approve this top-up request of ${selectedRequest.amount} ${selectedRequest.currency}?`
+    )) {
+      return;
+    }
+
+    try {
+      setProcessingRequest(true);
+      await walletService.approveTopUp(selectedRequest.id);
+      toast.success(isRTL ? 'تمت الموافقة على طلب الشحن بنجاح' : 'Top-up request approved successfully');
+      
+      // Refresh data
+      const [walletRes, transactionsRes, topUpRes] = await Promise.all([
+        walletService.getBalance().catch(() => ({ id: '', balance: 0, currency: 'SAR', updatedAt: new Date().toISOString() } as Partial<WalletType> & { balance: number; currency: string; updatedAt: string })),
+        walletService.getTransactions(1, 50).catch(() => ({ data: [], total: 0, page: 1, limit: 50, totalPages: 0 })),
+        walletService.getTopUpRequests().catch(() => []),
+      ]);
+      setWallet({
+        id: walletRes.id || '',
+        balance: typeof walletRes.balance === 'string' ? parseFloat(walletRes.balance) : walletRes.balance || 0,
+        currency: walletRes.currency || 'SAR',
+        lastUpdated: walletRes.updatedAt || new Date().toISOString(),
+      });
+      setTransactions(transactionsRes.data || []);
+      setTopUpRequests(Array.isArray(topUpRes) ? topUpRes : []);
+      
+      setShowRequestDialog(false);
+      setSelectedRequest(null);
+    } catch (error: unknown) {
+      console.error('Error approving request:', error);
+      const errorMessage = error instanceof Error ? error.message : (isRTL ? 'فشل الموافقة على طلب الشحن' : 'Failed to approve top-up request');
+      toast.error(errorMessage);
+    } finally {
+      setProcessingRequest(false);
+    }
+  };
+
+  // Handle reject top-up request
+  const handleRejectRequest = async () => {
+    if (!selectedRequest || !rejectReason.trim()) {
+      toast.error(isRTL ? 'يرجى إدخال سبب الرفض' : 'Please enter a rejection reason');
+      return;
+    }
+
+    try {
+      setProcessingRequest(true);
+      await walletService.rejectTopUp(selectedRequest.id, rejectReason);
+      toast.success(isRTL ? 'تم رفض طلب الشحن بنجاح' : 'Top-up request rejected successfully');
+      
+      // Refresh data
+      const topUpRes = await walletService.getTopUpRequests().catch(() => []);
+      setTopUpRequests(Array.isArray(topUpRes) ? topUpRes : []);
+      
+      setShowRequestDialog(false);
+      setShowRejectDialog(false);
+      setSelectedRequest(null);
+      setRejectReason('');
+    } catch (error: unknown) {
+      console.error('Error rejecting request:', error);
+      const errorMessage = error instanceof Error ? error.message : (isRTL ? 'فشل رفض طلب الشحن' : 'Failed to reject top-up request');
+      toast.error(errorMessage);
+    } finally {
+      setProcessingRequest(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -437,6 +525,7 @@ export default function WalletPage() {
                       <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'طريقة الدفع' : 'Method'}</TableHead>
                       <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'الحالة' : 'Status'}</TableHead>
                       <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'التاريخ' : 'Date'}</TableHead>
+                      <TableHead className={isRTL ? 'text-right' : ''}>{isRTL ? 'الإجراءات' : 'Actions'}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -445,7 +534,11 @@ export default function WalletPage() {
                       const StatusIcon = status.icon;
                       
                       return (
-                        <TableRow key={req.id}>
+                        <TableRow 
+                          key={req.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleViewRequest(req)}
+                        >
                           <TableCell className="font-semibold">
                             {typeof req.amount === 'string' ? parseFloat(req.amount).toFixed(2) : req.amount.toFixed(2)} {req.currency}
                           </TableCell>
@@ -457,6 +550,20 @@ export default function WalletPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-muted-foreground">{formatDate(req.createdAt)}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewRequest(req);
+                              }}
+                              className="gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                              {isRTL ? 'عرض التفاصيل' : 'View Details'}
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -826,6 +933,267 @@ export default function WalletPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Request Detail Dialog */}
+      <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {isRTL ? 'تفاصيل طلب الشحن' : 'Top-up Request Details'}
+            </DialogTitle>
+            <DialogDescription>
+              {isRTL 
+                ? 'عرض تفاصيل طلب الشحن والموافقة أو الرفض'
+                : 'View top-up request details and approve or reject'
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRequest && (
+            <div className="space-y-6">
+              {/* Request Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">{isRTL ? 'المبلغ' : 'Amount'}</span>
+                        <span className="text-lg font-bold text-green-600">
+                          {typeof selectedRequest.amount === 'string' ? parseFloat(selectedRequest.amount).toFixed(2) : selectedRequest.amount.toFixed(2)} {selectedRequest.currency}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">{isRTL ? 'طريقة الدفع' : 'Payment Method'}</span>
+                        <Badge variant="outline">{selectedRequest.paymentMethod}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">{isRTL ? 'الحالة' : 'Status'}</span>
+                        <Badge variant={selectedRequest.status === 'PENDING' ? 'secondary' : selectedRequest.status === 'APPROVED' ? 'default' : 'destructive'}>
+                          {selectedRequest.status === 'PENDING' ? (isRTL ? 'معلق' : 'Pending') :
+                           selectedRequest.status === 'APPROVED' ? (isRTL ? 'موافق عليه' : 'Approved') :
+                           selectedRequest.status === 'REJECTED' ? (isRTL ? 'مرفوض' : 'Rejected') :
+                           selectedRequest.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {isRTL ? 'تاريخ الإنشاء' : 'Created At'}
+                        </span>
+                        <span className="text-sm">{formatDate(selectedRequest.createdAt)}</span>
+                      </div>
+                      {selectedRequest.processedAt && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">{isRTL ? 'تاريخ المعالجة' : 'Processed At'}</span>
+                          <span className="text-sm">{formatDate(selectedRequest.processedAt)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Bank & Sender Info */}
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="space-y-3">
+                      {selectedRequest.bank && (
+                        <>
+                          <h4 className="font-semibold mb-2 flex items-center gap-2">
+                            <Building2 className="h-4 w-4" />
+                            {isRTL ? 'معلومات البنك' : 'Bank Information'}
+                          </h4>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">{isRTL ? 'اسم البنك: ' : 'Bank Name: '}</span>
+                              <span className="font-medium">{isRTL ? selectedRequest.bank.nameAr || selectedRequest.bank.name : selectedRequest.bank.name}</span>
+                            </div>
+                            {selectedRequest.bank.accountName && (
+                              <div>
+                                <span className="text-muted-foreground">{isRTL ? 'اسم الحساب: ' : 'Account Name: '}</span>
+                                <span className="font-medium">{selectedRequest.bank.accountName}</span>
+                              </div>
+                            )}
+                            {selectedRequest.bank.accountNumber && (
+                              <div>
+                                <span className="text-muted-foreground">{isRTL ? 'رقم الحساب: ' : 'Account Number: '}</span>
+                                <span className="font-mono font-medium">{selectedRequest.bank.accountNumber}</span>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      {selectedRequest.senderName && (
+                        <div className="mt-4">
+                          <h4 className="font-semibold mb-2 flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            {isRTL ? 'معلومات المرسل' : 'Sender Information'}
+                          </h4>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">{isRTL ? 'اسم المرسل: ' : 'Sender Name: '}</span>
+                              <span className="font-medium">{selectedRequest.senderName}</span>
+                            </div>
+                            {selectedRequest.transferReference && (
+                              <div>
+                                <span className="text-muted-foreground">{isRTL ? 'رقم المرجع: ' : 'Reference Number: '}</span>
+                                <span className="font-mono font-medium">{selectedRequest.transferReference}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Notes */}
+              {selectedRequest.notes && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      {isRTL ? 'ملاحظات' : 'Notes'}
+                    </h4>
+                    <p className="text-sm text-muted-foreground">{selectedRequest.notes}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Receipt Image */}
+              {selectedRequest.receiptImage && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      {isRTL ? 'صورة الإيصال' : 'Receipt Image'}
+                    </h4>
+                    <div className="relative border rounded-lg overflow-hidden bg-muted">
+                      <img 
+                        src={selectedRequest.receiptImage} 
+                        alt={isRTL ? 'صورة الإيصال' : 'Receipt'} 
+                        className="w-full h-auto max-h-[500px] object-contain cursor-pointer"
+                        onClick={() => window.open(selectedRequest.receiptImage!, '_blank')}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => window.open(selectedRequest.receiptImage!, '_blank')}
+                    >
+                      {isRTL ? 'فتح في نافذة جديدة' : 'Open in New Window'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Rejection Reason */}
+              {selectedRequest.status === 'REJECTED' && selectedRequest.rejectionReason && (
+                <Card>
+                  <CardContent className="pt-6">
+                    <h4 className="font-semibold mb-2 text-destructive flex items-center gap-2">
+                      <XCircle className="h-4 w-4" />
+                      {isRTL ? 'سبب الرفض' : 'Rejection Reason'}
+                    </h4>
+                    <p className="text-sm text-muted-foreground">{selectedRequest.rejectionReason}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Action Buttons */}
+              {selectedRequest.status === 'PENDING' && (
+                <div className="flex gap-4 justify-end pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowRejectDialog(true);
+                    }}
+                    disabled={processingRequest}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    {isRTL ? 'رفض' : 'Reject'}
+                  </Button>
+                  <Button
+                    onClick={handleApproveRequest}
+                    disabled={processingRequest}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {processingRequest ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        {isRTL ? 'جاري المعالجة...' : 'Processing...'}
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        {isRTL ? 'موافقة' : 'Approve'}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{isRTL ? 'رفض طلب الشحن' : 'Reject Top-up Request'}</DialogTitle>
+            <DialogDescription>
+              {isRTL 
+                ? 'يرجى إدخال سبب رفض طلب الشحن'
+                : 'Please enter a reason for rejecting this top-up request'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rejectReason">{isRTL ? 'سبب الرفض' : 'Rejection Reason'}</Label>
+              <Textarea
+                id="rejectReason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder={isRTL ? 'أدخل سبب الرفض...' : 'Enter rejection reason...'}
+                rows={4}
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectDialog(false);
+                setRejectReason('');
+              }}
+            >
+              {isRTL ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectRequest}
+              disabled={!rejectReason.trim() || processingRequest}
+            >
+              {processingRequest ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isRTL ? 'جاري المعالجة...' : 'Processing...'}
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  {isRTL ? 'رفض' : 'Reject'}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

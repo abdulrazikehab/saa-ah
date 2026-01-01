@@ -95,4 +95,9 @@ export const transactionService = {
     apiClient.post(`/transactions/${transactionId}/reprint?tenantId=${tenantId}`, {}, {
       requireAuth: true,
     }),
+
+  refundTransaction: (tenantId: string, transactionId: string): Promise<{ success: boolean; message: string }> =>
+    apiClient.post(`/transactions/${transactionId}/refund?tenantId=${tenantId}`, {}, {
+      requireAuth: true,
+    }),
 };

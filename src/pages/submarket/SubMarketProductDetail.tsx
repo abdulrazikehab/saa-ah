@@ -17,8 +17,12 @@ import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import { Product, ProductVariant, ProductImage } from '@/services/types';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
 
 export default function SubMarketProductDetail() {
+  const { t } = useTranslation();
+  const { settings } = useStoreSettings();
   const { id } = useParams();
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -155,6 +159,28 @@ export default function SubMarketProductDetail() {
     'Full Support',
   ];
 
+  const handleShare = async () => {
+    const shareData = {
+      title: product.name,
+      text: product.description,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast({
+          title: 'Link Copied',
+          description: 'Product link copied to clipboard',
+        });
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background py-8">
       <div className="container mx-auto px-4">
@@ -165,7 +191,7 @@ export default function SubMarketProductDetail() {
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Products
+            {t('common.back', 'Back')}
           </Link>
         </div>
 
@@ -253,11 +279,11 @@ export default function SubMarketProductDetail() {
               
               <div className="flex items-baseline gap-4 mb-4">
                 <span className="text-4xl font-bold text-primary">
-                  ${currentPrice.toFixed(2)}
+                  {currentPrice.toFixed(2)} {settings?.currency || 'SAR'}
                 </span>
-                {comparePrice && Number(comparePrice) > Number(currentPrice) && (
+                {comparePrice > 0 && Number(comparePrice) > Number(currentPrice) && (
                   <span className="text-2xl text-muted-foreground line-through">
-                    ${comparePrice.toFixed(2)}
+                    {comparePrice.toFixed(2)} {settings?.currency || 'SAR'}
                   </span>
                 )}
               </div>
@@ -277,7 +303,7 @@ export default function SubMarketProductDetail() {
                   ))}
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {rating} ({reviewCount} reviews)
+                  {rating} ({reviewCount} {t('common.reviews', 'reviews')})
                 </span>
               </div>
 
@@ -286,10 +312,10 @@ export default function SubMarketProductDetail() {
                 {product.isAvailable ? (
                   <>
                     <Check className="h-5 w-5 text-green-600" />
-                    <span className="text-green-600 font-medium">In Stock</span>
+                    <span className="text-green-600 font-medium">{t('common.status.inStock', 'In Stock')}</span>
                   </>
                 ) : (
-                  <Badge variant="destructive">Out of Stock</Badge>
+                  <Badge variant="destructive">{t('common.status.outOfStock', 'Out of Stock')}</Badge>
                 )}
               </div>
             </div>
@@ -300,7 +326,7 @@ export default function SubMarketProductDetail() {
             <div>
               <Badge variant="secondary" className="mb-2">
                 <Package className="h-3 w-3 mr-1" />
-                Digital Product
+                {t('common.digitalProduct', 'Digital Product')}
               </Badge>
             </div>
 
@@ -374,7 +400,7 @@ export default function SubMarketProductDetail() {
                 <Heart className={`h-5 w-5 mr-2 ${isWishlisted ? 'fill-current' : ''}`} />
                 {isWishlisted ? 'Saved' : 'Save'}
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={handleShare}>
                 <Share2 className="h-5 w-5 mr-2" />
                 Share
               </Button>

@@ -25,7 +25,7 @@ import {
   Package
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { coreApi } from '@/lib/api';
+import { coreApi, walletService } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -80,8 +80,10 @@ export default function CardsStore() {
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [checkingBalance, setCheckingBalance] = useState(false);
   
-  // Fetch brands and categories
+  // Fetch brands and categories and wallet balance
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -99,7 +101,18 @@ export default function CardsStore() {
         setLoading(false);
       }
     };
+    
+    const fetchWalletBalance = async () => {
+      try {
+        const wallet = await walletService.getBalance();
+        setWalletBalance(Number(wallet.balance) || 0);
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error);
+      }
+    };
+    
     fetchData();
+    fetchWalletBalance();
   }, [t]);
 
   // Fetch products when brand is selected
@@ -183,6 +196,41 @@ export default function CardsStore() {
     }
   };
 
+  // Helper function to download files
+  const downloadFiles = (excelBase64: string, textBase64: string, fileName: string) => {
+    try {
+      // Download Excel file
+      const excelBinary = atob(excelBase64);
+      const excelBytes = new Uint8Array(excelBinary.length);
+      for (let i = 0; i < excelBinary.length; i++) {
+        excelBytes[i] = excelBinary.charCodeAt(i);
+      }
+      const excelBlob = new Blob([excelBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const excelUrl = window.URL.createObjectURL(excelBlob);
+      const excelLink = document.createElement('a');
+      excelLink.href = excelUrl;
+      excelLink.download = `${fileName}.xlsx`;
+      document.body.appendChild(excelLink);
+      excelLink.click();
+      document.body.removeChild(excelLink);
+      window.URL.revokeObjectURL(excelUrl);
+
+      // Download Text file
+      const textContent = atob(textBase64);
+      const textBlob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+      const textUrl = window.URL.createObjectURL(textBlob);
+      const textLink = document.createElement('a');
+      textLink.href = textUrl;
+      textLink.download = `${fileName}.txt`;
+      document.body.appendChild(textLink);
+      textLink.click();
+      document.body.removeChild(textLink);
+      window.URL.revokeObjectURL(textUrl);
+    } catch (error) {
+      console.error('Error downloading files:', error);
+    }
+  };
+
   // Checkout
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -190,19 +238,75 @@ export default function CardsStore() {
       return;
     }
 
+    setCheckingBalance(true);
     try {
+      // Calculate total (approximate - backend will calculate exact with tax)
+      const totalAmount = cart.reduce((sum, item) => {
+        return sum + (item.product.wholesalePrice * item.quantity);
+      }, 0);
+
+      // Check wallet balance first
+      if (walletBalance < totalAmount) {
+        toast.error(
+          isRTL 
+            ? `رصيدك الحالي (${walletBalance.toFixed(2)} ريال) غير كافٍ لإتمام هذا الطلب. يرجى شحن رصيدك أولاً.`
+            : `Your current balance (${walletBalance.toFixed(2)} SAR) is insufficient for this order. Please recharge your balance first.`
+        );
+        setCheckingBalance(false);
+        // Optionally navigate to wallet recharge page
+        setTimeout(() => {
+          navigate('/dashboard/wallet');
+        }, 2000);
+        return;
+      }
+
       const items = cart.map(item => ({
         productId: item.product.id,
         quantity: item.quantity,
       }));
 
-      await coreApi.post('/card-orders', { items }, { requireAuth: true });
+      // Create order
+      const orderResponse = await coreApi.post('/card-orders', { items }, { requireAuth: true });
+      
+      // Get order ID from response
+      const orderId = orderResponse?.id || orderResponse?.data?.id;
+      
+      if (orderId) {
+        try {
+          // Download files
+          const filesResponse = await coreApi.get(`/card-orders/${orderId}/download-files`, { requireAuth: true });
+          if (filesResponse?.excel && filesResponse?.text) {
+            downloadFiles(filesResponse.excel, filesResponse.text, filesResponse.fileName || `Order_${orderResponse.orderNumber || orderId}`);
+            toast.success(isRTL ? 'تم تحميل ملفات البطاقات بنجاح' : 'Card files downloaded successfully');
+          }
+        } catch (fileError) {
+          console.error('Error downloading files:', fileError);
+          // Don't fail the order if file download fails
+        }
+      }
+      
       setCart([]);
       toast.success(isRTL ? 'تم إتمام الطلب بنجاح' : 'Order completed successfully');
       navigate('/dashboard/cards/orders');
     } catch (error: any) {
       console.error('Error completing card store order:', error?.response?.data || error);
-      toast.error(isRTL ? 'فشل في إتمام الطلب' : 'Failed to complete order');
+      const errorMessage = error?.response?.data?.message || error?.message;
+      
+      // Check if error is about insufficient balance
+      if (errorMessage && (errorMessage.includes('رصيد') || errorMessage.includes('balance') || errorMessage.includes('غير كافٍ'))) {
+        toast.error(
+          isRTL 
+            ? 'رصيد المحفظة غير كافٍ. يرجى شحن رصيدك أولاً.'
+            : 'Insufficient wallet balance. Please recharge your balance first.'
+        );
+        setTimeout(() => {
+          navigate('/dashboard/wallet');
+        }, 2000);
+      } else {
+        toast.error(isRTL ? 'فشل في إتمام الطلب' : 'Failed to complete order');
+      }
+    } finally {
+      setCheckingBalance(false);
     }
   };
 
@@ -486,8 +590,20 @@ export default function CardsStore() {
                   $ {cartTotal.toFixed(2)} {isRTL ? 'دولار' : 'USD'}
                 </span>
               </div>
-              <Button className="w-full" size="lg" onClick={handleCheckout}>
-                {isRTL ? 'إتمام الطلب' : 'Complete Order'}
+              <Button 
+                className="w-full" 
+                size="lg" 
+                onClick={handleCheckout}
+                disabled={checkingBalance || cart.length === 0}
+              >
+                {checkingBalance ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                    {isRTL ? 'جاري المعالجة...' : 'Processing...'}
+                  </>
+                ) : (
+                  isRTL ? 'إتمام الطلب' : 'Complete Order'
+                )}
               </Button>
             </div>
           </>

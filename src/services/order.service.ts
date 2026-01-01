@@ -36,8 +36,29 @@ export const orderService = {
 
   updateOrderStatus: (id: string, status: string): Promise<Order> =>
     apiClient.fetch(`${apiClient.coreUrl}/orders/${id}/status`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify({ status }),
+      requireAuth: true,
+    }),
+
+  getCardOrder: (id: string): Promise<Order & { items: unknown[] }> =>
+    apiClient.fetch(`${apiClient.coreUrl}/card-orders/${id}`, {
+      requireAuth: true,
+    }),
+
+  getMyCardOrders: (params?: { page?: number; limit?: number; status?: string }): Promise<{ data: unknown[]; meta: unknown }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.set('page', params.page.toString());
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+    if (params?.status) queryParams.set('status', params.status);
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return apiClient.fetch(`${apiClient.coreUrl}/card-orders/my-orders${queryString}`, {
+      requireAuth: true,
+    });
+  },
+
+  downloadCardOrderFiles: (id: string): Promise<{ excel: string; text: string; fileName: string }> =>
+    apiClient.fetch(`${apiClient.coreUrl}/card-orders/${id}/download-files`, {
       requireAuth: true,
     }),
 };

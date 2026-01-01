@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { themeService } from '@/services/theme.service';
 import { coreApi } from '@/lib/api';
 import { Theme } from '@/services/types';
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Check, Palette, Loader2, Eye, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -14,11 +15,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function ThemesStore() {
+  const { t } = useTranslation();
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
   const [domain, setDomain] = useState('');
@@ -27,12 +28,7 @@ export default function ThemesStore() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
 
-  useEffect(() => {
-    loadThemes();
-    loadDomain();
-  }, []);
-
-  const loadDomain = async () => {
+  const loadDomain = useCallback(async () => {
     try {
       const domainData = await coreApi.getDomain();
       if (domainData) {
@@ -44,9 +40,9 @@ export default function ThemesStore() {
     } catch (error) {
       console.error('Failed to fetch domain:', error);
     }
-  };
+  }, []);
 
-  const loadThemes = async () => {
+  const loadThemes = useCallback(async () => {
     try {
       console.log('Loading themes...');
       const data = await themeService.getThemes();
@@ -56,19 +52,27 @@ export default function ThemesStore() {
       console.error('Failed to load themes:', error);
       setThemes([]);
       toast({
-        title: 'Error',
-        description: 'Failed to load themes. Please check console for details.',
+        title: t('dashboard.design.error'),
+        description: t('dashboard.design.loadError'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, t]);
+
+  useEffect(() => {
+    loadThemes();
+    loadDomain();
+  }, [loadThemes, loadDomain]);
 
   const handleActivate = async (id: string) => {
     try {
       await themeService.activateTheme(id);
-      toast({ title: 'Theme Activated', description: 'The theme has been applied to your store.' });
+      toast({ 
+        title: t('dashboard.design.activateSuccess'), 
+        description: t('dashboard.design.activateSuccessDesc') 
+      });
       
       // Optimistic update
       setThemes(themes.map(t => ({
@@ -78,26 +82,34 @@ export default function ThemesStore() {
       
       loadThemes();
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to activate theme', variant: 'destructive' });
+      toast({ 
+        title: t('dashboard.design.error'), 
+        description: t('dashboard.design.activateError'), 
+        variant: 'destructive' 
+      });
     }
   };
 
   const handleGenerateAITheme = async () => {
     if (!aiPrompt.trim()) {
-      toast({ title: 'Error', description: 'Please enter a theme description', variant: 'destructive' });
+      toast({ 
+        title: t('dashboard.design.error'), 
+        description: t('dashboard.design.enterPrompt'), 
+        variant: 'destructive' 
+      });
       return;
     }
 
     setAiGenerating(true);
     try {
-      const response = await coreApi.post('/themes/ai/generate', {
+      await coreApi.post('/themes/ai/generate', {
         prompt: aiPrompt,
         style: 'professional and modern'
       }, { requireAuth: true });
 
       toast({ 
-        title: 'Theme Generated!', 
-        description: 'AI has created a custom theme for your store.' 
+        title: t('dashboard.design.themeGenerated'), 
+        description: t('dashboard.design.themeGeneratedDesc') 
       });
       
       setShowAIDialog(false);
@@ -106,8 +118,8 @@ export default function ThemesStore() {
     } catch (error) {
       console.error('Failed to generate AI theme:', error);
       toast({ 
-        title: 'Error', 
-        description: 'Failed to generate theme. Please try again.', 
+        title: t('dashboard.design.error'), 
+        description: t('dashboard.design.generateError'), 
         variant: 'destructive' 
       });
     } finally {
@@ -121,21 +133,21 @@ export default function ThemesStore() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Themes Store</h1>
-          <p className="text-gray-500">Choose a theme for your store</p>
+          <h1 className="text-3xl font-bold">{t('dashboard.design.title')}</h1>
+          <p className="text-gray-500">{t('dashboard.design.subtitle')}</p>
         </div>
         <Button onClick={() => setShowAIDialog(true)} className="gap-2">
           <Sparkles className="w-4 h-4" />
-          Generate AI Theme
+          {t('dashboard.design.generateAI')}
         </Button>
       </div>
 
       {themes.length === 0 && !loading ? (
         <div className="text-center py-12">
           <Palette className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No Themes Found</h3>
+          <h3 className="text-xl font-semibold mb-2">{t('dashboard.design.noThemes')}</h3>
           <p className="text-gray-500 mb-4">
-            Run the seed script to add default themes:
+            {t('dashboard.design.seedHint')}
           </p>
           <code className="bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded">
             node prisma/seed-theme.js
@@ -148,7 +160,7 @@ export default function ThemesStore() {
             <CardHeader>
               <CardTitle className="flex justify-between items-center">
                 {theme.name}
-                {theme.isActive && <Badge className="bg-green-500">Active</Badge>}
+                {theme.isActive && <Badge className="bg-green-500">{t('dashboard.design.active')}</Badge>}
               </CardTitle>
               <CardDescription>{theme.description}</CardDescription>
             </CardHeader>
@@ -160,11 +172,11 @@ export default function ThemesStore() {
             <CardFooter className="flex flex-col gap-2">
               {theme.isActive ? (
                 <Button disabled className="w-full variant-secondary">
-                  <Check className="mr-2 h-4 w-4" /> Active
+                  <Check className="mr-2 h-4 w-4" /> {t('dashboard.design.active')}
                 </Button>
               ) : (
                 <Button onClick={() => handleActivate(theme.id)} className="w-full">
-                  Activate
+                  {t('dashboard.design.activate')}
                 </Button>
               )}
               <Button 
@@ -186,7 +198,7 @@ export default function ThemesStore() {
                   window.open(previewUrl, '_blank');
                 }}
               >
-                <Eye className="mr-2 h-4 w-4" /> Preview
+                <Eye className="mr-2 h-4 w-4" /> {t('dashboard.design.preview')}
               </Button>
             </CardFooter>
           </Card>
@@ -200,18 +212,18 @@ export default function ThemesStore() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5" />
-              Generate AI Theme
+              {t('dashboard.design.aiDialogTitle')}
             </DialogTitle>
             <DialogDescription>
-              Describe your ideal theme and AI will create a custom design for your store.
+              {t('dashboard.design.aiDialogDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
-              <Label htmlFor="ai-prompt">Theme Description</Label>
+              <Label htmlFor="ai-prompt">{t('dashboard.design.themeDesc')}</Label>
               <Textarea
                 id="ai-prompt"
-                placeholder="Example: Modern e-commerce theme with dark mode, vibrant purple and blue gradients, clean typography, and smooth animations..."
+                placeholder={t('dashboard.design.themeDescPlaceholder')}
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
                 rows={6}
@@ -220,18 +232,18 @@ export default function ThemesStore() {
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowAIDialog(false)} disabled={aiGenerating}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleGenerateAITheme} disabled={aiGenerating} className="gap-2">
                 {aiGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating...
+                    {t('dashboard.design.generating')}
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    Generate Theme
+                    {t('dashboard.design.generateTheme')}
                   </>
                 )}
               </Button>

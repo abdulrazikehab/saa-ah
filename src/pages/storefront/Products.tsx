@@ -29,6 +29,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Product, Category } from '@/services/types';
 import { cn } from '@/lib/utils';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
+import { StorefrontLoading } from '@/components/storefront/StorefrontLoading';
 
 export default function Products() {
   const { t } = useTranslation();
@@ -41,24 +43,82 @@ export default function Products() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
 
   useEffect(() => {
     loadProducts();
     loadCategories();
+    
+    // Listen for product updates
+    const handleProductsUpdate = () => {
+      loadProducts();
+      loadCategories();
+    };
+    
+    window.addEventListener('productsUpdated', handleProductsUpdate);
+    
+    return () => {
+      window.removeEventListener('productsUpdated', handleProductsUpdate);
+    };
   }, []);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, priceRange, selectedCategories]);
 
   const loadProducts = async () => {
     try {
-      const data = await coreApi.getProducts({ limit: 50 });
-      const rawProducts = Array.isArray(data) ? data : ((data as any).products || []);
-      const validProducts = rawProducts.map((p: any) => ({
-        ...p,
-        price: Number(p.price) || 0,
-        compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined
-      }));
+      console.log('🔍 [Storefront Products] Loading all products');
+      const data = await coreApi.getProducts({ limit: 1000 });
+      
+      console.log('🔍 [Storefront Products] Products response:', data);
+      
+      const rawProducts = Array.isArray(data) 
+        ? data 
+        : ((data as any)?.data || (data as any)?.products || []);
+      
+      console.log('🔍 [Storefront Products] Raw products:', rawProducts.length, 'products');
+      
+      // Process products: normalize categories and filter only available and published
+      const validProducts = rawProducts
+        .map((p: any) => {
+          // Normalize categories
+          let normalizedCategories: any[] = [];
+          if (p.categories && Array.isArray(p.categories)) {
+            normalizedCategories = p.categories.map((cat: any) => {
+              if (typeof cat === 'string') {
+                return { categoryId: cat };
+              }
+              return {
+                categoryId: cat.categoryId || cat.id || cat.category?.id,
+                category: cat.category,
+                id: cat.id,
+              };
+            });
+          }
+          
+          return {
+            ...p,
+            categories: normalizedCategories,
+            price: Number(p.price) || 0,
+            compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined,
+            isAvailable: (p.isAvailable !== false && p.isAvailable !== undefined) ? true : false,
+            isPublished: (p.isPublished !== false && p.isPublished !== undefined) ? true : false,
+          };
+        })
+        .filter((p: any) => {
+          // Only show available and published products
+          return p.isAvailable && p.isPublished;
+        });
+      
+      console.log('🔍 [Storefront Products] Valid products (available & published):', validProducts.length, 'products');
       setProducts(validProducts);
     } catch (error) {
-      console.error('Failed to load products:', error);
+      console.error('❌ [Storefront Products] Failed to load products:', error);
       setProducts([]);
     } finally {
       setLoading(false);
@@ -67,19 +127,47 @@ export default function Products() {
 
   const loadCategories = async () => {
     try {
+      console.log('🔍 [Storefront Products] Loading categories');
       const data = await coreApi.getCategories();
-      setCategories(data);
+      
+      console.log('🔍 [Storefront Products] Categories response:', data);
+      
+      // Handle different response formats
+      let categoriesList: Category[] = [];
+      if (Array.isArray(data)) {
+        categoriesList = data;
+      } else if (data && typeof data === 'object' && 'categories' in data) {
+        categoriesList = Array.isArray((data as any).categories) ? (data as any).categories : [];
+      }
+      
+      console.log('🔍 [Storefront Products] Categories list:', categoriesList.length, 'categories');
+      setCategories(categoriesList);
     } catch (error) {
-      console.error('Failed to load categories:', error);
+      console.error('❌ [Storefront Products] Failed to load categories:', error);
+      setCategories([]); // Set empty array on error
     }
   };
 
+  if (loading) {
+    return <StorefrontLoading />;
+  }
+
   let filteredProducts = products.filter((product: Product) => {
-    const matchesSearch = product.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = !searchQuery || product.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
-    const matchesCategory = selectedCategories.length === 0 || 
-      ((product as any).categories && (product as any).categories.some((cat: any) => selectedCategories.includes(cat.id || cat.category?.id))) ||
-      (product.categoryId && selectedCategories.includes(product.categoryId));
+    
+    // Category matching - check both normalized categories array and legacy categoryId
+    let matchesCategory = true;
+    if (selectedCategories.length > 0) {
+      const productCategories = (product as any).categories || [];
+      const hasMatchingCategory = productCategories.some((cat: any) => {
+        const catId = cat.categoryId || cat.id || cat.category?.id;
+        return selectedCategories.includes(catId);
+      }) || (product.categoryId && selectedCategories.includes(product.categoryId));
+      
+      matchesCategory = hasMatchingCategory;
+    }
+    
     return matchesSearch && matchesPrice && matchesCategory;
   });
 
@@ -98,6 +186,14 @@ export default function Products() {
     }
   });
 
+  // Calculate pagination
+  const totalItems = filteredProducts.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const FilterSidebar = () => (
     <div className="space-y-8">
       {/* Categories */}
@@ -109,7 +205,7 @@ export default function Products() {
           <span className="gradient-text">{t('storefront.products.categories')}</span>
         </h3>
         <div className="space-y-3">
-          {categories.map((category, index) => (
+          {Array.isArray(categories) && categories.length > 0 ? categories.map((category, index) => (
             <div 
               key={category.id} 
               className="flex items-center justify-between group animate-slide-up"
@@ -141,7 +237,11 @@ export default function Products() {
                 </Badge>
               )}
             </div>
-          ))}
+          )) : (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              {t('storefront.products.noCategories', 'لا توجد تصنيفات')}
+            </p>
+          )}
         </div>
       </div>
 
@@ -327,22 +427,14 @@ export default function Products() {
 
           {/* Products Grid */}
           <div className="flex-1">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-32 animate-fade-in">
-                <div className="relative">
-                  <div className="absolute inset-0 rounded-full gradient-primary blur-2xl opacity-30 animate-pulse" />
-                  <Loader2 className="relative h-16 w-16 animate-spin text-primary mb-6" />
-                </div>
-                <p className="text-muted-foreground text-lg font-medium">{t('storefront.products.loading')}</p>
-              </div>
-            ) : filteredProducts.length > 0 ? (
+            {filteredProducts.length > 0 ? (
               <>
                 {/* Results Header */}
                 <div className="mb-6 flex items-center justify-between p-5 glass-card rounded-2xl animate-slide-up">
                   <p className="text-muted-foreground text-lg flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-primary" />
                     <span className="font-bold text-2xl gradient-text">
-                      {filteredProducts.length}
+                      {totalItems}
                     </span>
                     {t('storefront.products.availableProducts')}
                   </p>
@@ -376,7 +468,7 @@ export default function Products() {
                     ? 'grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6'
                     : 'space-y-6'
                 }>
-                  {filteredProducts.map((product: Product, index: number) => (
+                  {paginatedProducts.map((product: Product, index: number) => (
                     <ProductCard 
                       key={product.id} 
                       product={product} 
@@ -384,6 +476,19 @@ export default function Products() {
                       index={index}
                     />
                   ))}
+                </div>
+
+                {/* Pagination */}
+                <div className="mt-8">
+                  <DataTablePagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={setItemsPerPage}
+                    itemsPerPageOptions={[12, 24, 48, 96]}
+                  />
                 </div>
               </>
             ) : (

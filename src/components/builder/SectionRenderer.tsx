@@ -3,7 +3,8 @@ import { Section } from './PageBuilder';
 import { Button } from '@/components/ui/button';
 import { coreApi } from '@/lib/api';
 import { Loader2, Moon, Sun, Globe, Menu, X, Wallet, ShoppingCart, DollarSign, Heart, Users, FileText, Search, Package, Store, Plus, Minus, Upload, Calendar, TrendingUp, BarChart3, User, CreditCard, MessageSquare, ArrowRight, RefreshCw, ChevronDown, FolderOpen, Phone, Settings } from 'lucide-react';
-import { SupportTicketsSection, FavoritesPageSection, BalanceOperationsSection, EmployeesPageSection, ChargeWalletSection, ReportsPageSection, ProfilePageSection } from './MerchantSections';
+import { SupportTicketsSection, FavoritesPageSection, BalanceOperationsSection, EmployeesPageSection, ChargeWalletSection, ReportsPageSection, ProfilePageSection, BankAccountsSection } from './MerchantSections';
+import PermissionsPage from '@/components/storefront/PermissionsPage';
 import { staffService, StaffUser } from '@/services/staff.service';
 import { ImageSlider } from '@/components/ui/ImageSlider';
 import { ContentSlider } from '@/components/ui/ContentSlider';
@@ -15,6 +16,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/services/core/api-client';
 import { isErrorObject } from '@/lib/error-utils';
+import { cn } from '@/lib/utils';
+import { OptimizedImage } from '@/components/ui/OptimizedImage';
+import { GamingProductCard } from '@/components/storefront/GamingProductCard';
 
 // Safe cart hook that doesn't throw if context is unavailable
 const useSafeCart = () => {
@@ -523,188 +527,74 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
 
       case 'products':
         return (
-          <div className="py-16 px-8 bg-gray-50 dark:bg-gray-900">
-            {props.title && <h2 className="text-3xl font-bold text-center mb-12 dark:text-white">{props.title}</h2>}
-            {loading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-              </div>
-            ) : products.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                <p>No products found.</p>
-              </div>
-            ) : (
-              <div className={`max-w-7xl mx-auto ${
-                props.layout === 'carousel' ? 'relative' : ''
-              }`}>
-                <div className={`${
-                  props.layout === 'list' ? 'grid grid-cols-1 gap-6' : 
-                  props.layout === 'carousel' ? 'flex overflow-x-auto gap-6 pb-4 snap-x snap-mandatory scroll-smooth scrollbar-hide' : 
-                  `grid grid-cols-1 md:grid-cols-${props.columns || 4} gap-6`
-                }`}
-                style={props.layout === 'carousel' ? {
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none',
-                  WebkitOverflowScrolling: 'touch'
-                } : {}}
-                >
-                  {products.map((product, index) => {
-                    // Ensure all product properties are safe to render
-                    const productName = String(product?.name || '');
-                    const productDescription = String(product?.description || '');
-                    const firstImage = product?.images?.[0];
-                    const imageUrl = (typeof firstImage === 'object' && firstImage?.url) || 
-                                    (typeof firstImage === 'string' ? firstImage : '') ||
-                                    product?.image || '';
-                    const description = typeof productDescription === 'string' ? productDescription : '';
-                    const truncatedDesc = description.length > 100 ? description.substring(0, 100) + '...' : description;
-                    const productPrice = Number(product?.price || 0);
-                    const comparePrice = product?.compareAtPrice ? Number(product.compareAtPrice) : null;
-                    const hasDiscount = comparePrice && comparePrice > productPrice;
-                    const productRating = Number(product?.rating || 0);
-                    const inventoryQuantity = Number(product?.inventoryQuantity || 0);
-                    
-                    return (
-                      <div 
-                        key={product?.id || index} 
-                        className={`bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 group cursor-pointer transform hover:-translate-y-2 ${
-                          props.layout === 'carousel' ? 'min-w-[280px] max-w-[280px] snap-center flex-shrink-0' : ''
-                        } ${props.layout === 'list' ? 'flex items-center gap-4' : 'flex flex-col'}`}
-                        style={props.layout === 'carousel' ? {
-                          animationDelay: `${index * 100}ms`
-                        } : {}}
-                        onClick={() => {
-                          // Navigate to product details
-                          if (product?.id) {
-                            window.location.href = `/products/${product.id}`;
-                          }
-                        }}
-                      >
-                        {(props.showImage !== false) && (
-                          <div className={`${props.layout === 'list' ? 'w-32 h-32' : 'h-56'} bg-gray-200 dark:bg-gray-700 relative shrink-0 overflow-hidden`}>
-                            {imageUrl ? (
-                              <img 
-                                src={String(imageUrl)} 
-                                alt={productName} 
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
-                            )}
-                            
-                            {/* Discount Badge */}
-                            {hasDiscount && comparePrice && (
-                              <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg animate-pulse">
-                                {Math.round((1 - productPrice / comparePrice) * 100)}% OFF
-                              </div>
-                            )}
-                            
-                            {/* Stock Badge */}
-                            {(props.showStock) && product.inventoryQuantity !== undefined && (
-                              <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-semibold shadow-lg ${
-                                inventoryQuantity > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                              }`}>
-                                {inventoryQuantity > 0 ? 'In Stock' : 'Out of Stock'}
-                              </div>
-                            )}
-                            
-                            {/* Gradient Overlay on Hover */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                          </div>
-                        )}
-                        
-                        <div className="p-5 flex-1 flex flex-col">
-                          {(props.showName !== false) && (
-                            <h3 className="font-bold text-lg mb-2 truncate dark:text-white group-hover:text-primary transition-colors">
-                              {productName}
-                            </h3>
-                          )}
-                          
-                          {(props.showDescription) && description && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2 flex-grow">
-                              {truncatedDesc}
-                            </p>
-                          )}
-                          
-                          {(props.showRating) && (
-                            <div className="flex items-center gap-1 mb-3">
-                              {[...Array(5)].map((_, i) => (
-                                <span key={i} className={`text-lg ${i < productRating ? 'text-yellow-400' : 'text-gray-300'}`}>
-                                  ★
-                                </span>
-                              ))}
-                              <span className="text-xs text-gray-500 ml-2">({productRating})</span>
-                            </div>
-                          )}
-                          
-                          {(props.showPrice !== false) && (
-                            <div className="mb-4">
-                              <div className="flex items-baseline gap-2">
-                                <p className="text-2xl font-bold text-primary dark:text-primary-400">
-                                  ${productPrice.toFixed(2)}
-                                </p>
-                                {hasDiscount && (
-                                  <p className="text-sm text-gray-500 line-through">
-                                    ${comparePrice.toFixed(2)}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {(props.showAddToCart !== false) && (
-                            <Button 
-                              className="w-full mt-auto bg-primary hover:bg-primary/90 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105" 
-                              size="sm"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  if (addToCart) {
-                                    // Real cart functionality (on storefront)
-                                    await addToCart(product.id, 1);
-                                  } else {
-                                    // Preview mode (in dashboard page builder)
-                                    toast({
-                                      title: 'Preview Mode',
-                                      description: 'Cart functionality will work on your live storefront',
-                                    });
-                                  }
-                                  // Show success feedback
-                                  const button = e.currentTarget;
-                                  const originalText = button.textContent;
-                                  button.textContent = '✓ Added!';
-                                  button.classList.add('bg-green-500');
-                                  setTimeout(() => {
-                                    button.textContent = originalText;
-                                    button.classList.remove('bg-green-500');
-                                  }, 2000);
-                                } catch (error) {
-                                  console.error('Failed to add to cart:', error);
-                                }
-                              }}
-                            >
-                              Add to Cart
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+          <div className="py-20 px-8 bg-[#0a0a0f] relative overflow-hidden">
+            {/* Background Decorations */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+              <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] animate-pulse-slow" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/5 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '2s' }} />
+            </div>
+
+            <div className="max-w-7xl mx-auto relative z-10">
+              {props.title && (
+                <div className="flex flex-col items-center mb-16">
+                  <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight text-center">
+                    {props.title}
+                  </h2>
+                  <div className="h-1.5 w-24 bg-gradient-to-r from-primary to-purple-600 rounded-full shadow-[0_0_15px_rgba(var(--primary),0.5)]" />
                 </div>
-                
-                {/* Scroll Indicators for Carousel */}
-                {props.layout === 'carousel' && products.length > 3 && (
-                  <div className="flex justify-center gap-2 mt-6">
-                    {Array.from({ length: Math.ceil(products.length / 3) }).map((_, i) => (
-                      <div 
-                        key={i} 
-                        className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 hover:bg-primary transition-colors cursor-pointer"
+              )}
+
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-4">
+                  <div className="relative">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
+                    <div className="absolute inset-0 blur-lg bg-primary/20 animate-pulse" />
+                  </div>
+                  <p className="text-white/40 font-medium tracking-widest uppercase text-xs">جاري تحميل المنتجات...</p>
+                </div>
+              ) : products.length === 0 ? (
+                <div className="text-center py-24 bg-white/5 rounded-3xl border border-white/10 backdrop-blur-sm">
+                  <Package className="w-16 h-16 mx-auto mb-4 text-white/20" />
+                  <p className="text-white/60 text-lg font-medium">لا توجد منتجات متاحة حالياً</p>
+                </div>
+              ) : (
+                <div className={`${
+                  props.layout === 'carousel' ? 'relative' : ''
+                }`}>
+                  <div className={`${
+                    props.layout === 'list' ? 'grid grid-cols-1 gap-8' : 
+                    props.layout === 'carousel' ? 'flex overflow-x-auto gap-8 pb-8 snap-x snap-mandatory scroll-smooth scrollbar-hide' : 
+                    `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${props.columns || 4} gap-8`
+                  }`}
+                  style={props.layout === 'carousel' ? {
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    WebkitOverflowScrolling: 'touch'
+                  } : {}}
+                  >
+                    {products.map((product, index) => (
+                      <GamingProductCard 
+                        key={product.id || index} 
+                        product={product} 
+                        index={index}
                       />
                     ))}
                   </div>
-                )}
-              </div>
-            )}
+                  
+                  {/* Scroll Indicators for Carousel */}
+                  {props.layout === 'carousel' && products.length > (props.columns || 4) && (
+                    <div className="flex justify-center gap-3 mt-10">
+                      {Array.from({ length: Math.ceil(products.length / (props.columns || 4)) }).map((_, i) => (
+                        <div 
+                          key={i} 
+                          className="w-10 h-1.5 rounded-full bg-white/10 hover:bg-primary/50 transition-all cursor-pointer"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             
             <style>{`
               .scrollbar-hide::-webkit-scrollbar {
@@ -713,12 +603,6 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
               .scrollbar-hide {
                 -ms-overflow-style: none;
                 scrollbar-width: none;
-              }
-              .line-clamp-2 {
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
               }
             `}</style>
           </div>
@@ -984,6 +868,12 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
       case 'profile-page':
         return <ProfilePageSection props={props} />;
 
+      case 'bank-accounts':
+        return <BankAccountsSection props={props} />;
+
+      case 'permissions-page':
+        return <PermissionsPage />;
+
       case 'store-managers':
       case 'custom':
         // Handle custom component StoreManagersList
@@ -1044,7 +934,7 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
                 <div className="aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden">
                   <video
                     src={String(props.videoUrl)}
-                    controls={props.controls === true}
+                    controls={props.controls !== false}
                     autoPlay={props.autoPlay === true}
                     loop={props.loop === true}
                     poster={props.thumbnail ? String(props.thumbnail) : undefined}
@@ -1341,11 +1231,11 @@ function MerchantDashboardSection({ props }: { props: MerchantDashboardProps }) 
   const ordersCount = dashboardData?.todayOrdersCount || dashboardData?.ordersCount || 0;
 
   const quickActions = [
-    { icon: Plus, label: 'إضافة منتج', link: '/dashboard/products', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-    { icon: Package, label: 'إدارة المنتجات', link: '/dashboard/products', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    { icon: ShoppingCart, label: 'إدارة الطلبات', link: '/dashboard/orders', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
-    { icon: Settings, label: 'إعدادات المتجر', link: '/dashboard/settings', color: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400' },
-    { icon: BarChart3, label: 'التقارير', link: '/dashboard/reports', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
+    { icon: Wallet, label: 'شحن الرصيد', link: '/charge-wallet', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+    { icon: ShoppingCart, label: 'إنشاء طلب', link: '/store', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+    { icon: Heart, label: 'المفضلة', link: '/favorites', color: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
+    { icon: Users, label: 'إضافة موظف', link: '/employees', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+    { icon: FileText, label: 'إضافة تذكرة', link: '/support', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' }
   ];
 
   return (

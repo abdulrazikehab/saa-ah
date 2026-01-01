@@ -154,28 +154,27 @@ export default function Landing() {
     <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Navigation */}
       <nav className="border-b bg-background/90 backdrop-blur-xl sticky top-0 z-50 shadow-sm">
-        <div className="container flex h-20 items-center justify-between">
+        <div className="container flex h-24 items-center justify-between">
           <Link to="/" className="flex items-center gap-4 group">
             <div className="relative">
-              <div className="absolute -inset-2 bg-gradient-to-r from-primary via-accent to-secondary rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
-              <div className="relative w-20 h-20 rounded-2xl overflow-hidden bg-background shadow-lg border border-border/50">
+              <div className="relative w-28 h-28 flex items-center justify-center">
                 <img 
                   src={logoUrl} 
                   alt={`${BRAND_NAME_EN} - ${BRAND_NAME_AR}`} 
-                  className="w-full h-full object-contain p-2" 
+                  className="w-full h-full object-contain" 
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     const parent = e.currentTarget.parentElement;
                     if (parent) {
-                      parent.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary to-accent"><svg class="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg></div>';
+                      parent.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary to-accent rounded-xl"><svg class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg></div>';
                     }
                   }} 
                 />
               </div>
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</span>
-              <span className="text-xs text-muted-foreground font-medium">{BRAND_NAME_EN}</span>
+              <span className="text-3xl font-heading font-bold gradient-text">{BRAND_NAME_AR}</span>
+              <span className="text-sm text-muted-foreground font-medium">{BRAND_NAME_EN}</span>
             </div>
           </Link>
           <div className="flex items-center gap-2 md:gap-3">

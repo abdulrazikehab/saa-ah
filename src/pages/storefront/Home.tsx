@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { 
   ArrowRight, Loader2, FileText, Calendar, Eye,
   Sparkles, ShoppingBag, Package, FolderOpen, Tag, 
-  ChevronRight, Star, TrendingUp, Zap
+  ChevronRight, Star, TrendingUp, Zap, Wallet
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,13 @@ import { coreApi } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
 import { SectionRenderer } from '@/components/builder/SectionRenderer';
 import { Section } from '@/components/builder/PageBuilder';
-import { Page, Product, Category } from '@/services/types';
+import { Page, Product, Category, UserProfile } from '@/services/types';
 import { getLogoUrl, BRAND_NAME_AR } from '@/config/logo.config';
 import { cn } from '@/lib/utils';
+import { StorefrontLoading } from '@/components/storefront/StorefrontLoading';
+import { walletService } from '@/services/wallet.service';
+import { OptimizedImage } from '@/components/ui/OptimizedImage';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
 
 interface Brand {
   id: string;
@@ -25,18 +29,49 @@ interface Brand {
 }
 
 export default function Home() {
-  console.log('Rendering Storefront Home Page');
   const { t } = useTranslation();
+  const { settings } = useStoreSettings();
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [homePage, setHomePage] = useState<Page | null>(null);
   const [loading, setLoading] = useState(true);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [customerData, setCustomerData] = useState<UserProfile | null>(null);
+  const [siteConfig, setSiteConfig] = useState<any>(null);
 
   useEffect(() => {
     loadData();
+    
+    // Check for logged in user
+    const token = localStorage.getItem('customerToken');
+    const data = localStorage.getItem('customerData');
+    if (token && data) {
+      setCustomerData(JSON.parse(data));
+      loadWalletBalance();
+    }
+
+    // Listen for product updates
+    const handleProductsUpdate = () => {
+      loadData();
+    };
+    
+    window.addEventListener('productsUpdated', handleProductsUpdate);
+    
+    return () => {
+      window.removeEventListener('productsUpdated', handleProductsUpdate);
+    };
   }, []);
+
+  const loadWalletBalance = async () => {
+    try {
+      const wallet = await walletService.getBalance();
+      setWalletBalance(Number(wallet.balance) || 0);
+    } catch (error) {
+      console.error('Failed to load wallet balance:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -51,35 +86,91 @@ export default function Home() {
         }
       }
 
-      const [productsData, pagesData, categoriesData, brandsData] = await Promise.all([
-        coreApi.getProducts({ limit: 8 }),
+      const [productsData, pagesData, categoriesData, brandsData, siteConfigData] = await Promise.all([
+        coreApi.getProducts({ limit: 1000 }),
         coreApi.getPages(),
         coreApi.getCategories().catch(() => []),
-        coreApi.getBrands().catch(() => [])
+        coreApi.getBrands().catch(() => []),
+        coreApi.get('/site-config').catch(() => null)
       ]);
+      
+      if (siteConfigData) {
+        setSiteConfig(siteConfigData);
+      }
       
       const publishedPages = Array.isArray(pagesData) 
         ? (pagesData as Page[]).filter((p) => p && typeof p === 'object' && !('error' in p) && p.isPublished)
         : [];
       
+      console.log('🔍 Home.tsx - productsData:', productsData);
+      
       let rawProducts: Product[] = [];
       if (productsData && typeof productsData === 'object' && !('error' in productsData) && !('statusCode' in productsData)) {
         if (Array.isArray(productsData)) {
+          console.log('🔍 Home.tsx - productsData is Array');
           rawProducts = productsData.filter((p: any) => 
             p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
           );
-        } else if (productsData.products && Array.isArray(productsData.products)) {
-          rawProducts = productsData.products.filter((p: any) => 
+        } else if ((productsData as any).data && Array.isArray((productsData as any).data)) {
+          console.log('🔍 Home.tsx - productsData has .data Array');
+          rawProducts = (productsData as any).data.filter((p: any) => 
+            p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
+          );
+        } else if ((productsData as any).products && Array.isArray((productsData as any).products)) {
+          console.log('🔍 Home.tsx - productsData has .products Array');
+          rawProducts = (productsData as any).products.filter((p: any) => 
             p && typeof p === 'object' && p.id && !('error' in p) && !('statusCode' in p)
           );
         }
       }
+      console.log('🔍 Home.tsx - rawProducts:', rawProducts);
       
-      const validProducts = rawProducts.map((p) => ({
-        ...p,
-        price: Number(p.price) || 0,
-        compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined
-      }));
+      // Process products: normalize categories and filter only available and published
+      const validProducts = rawProducts
+        .map((p: any) => {
+          // Normalize categories
+          let normalizedCategories: any[] = [];
+          if (p.categories && Array.isArray(p.categories)) {
+            normalizedCategories = p.categories.map((cat: any) => {
+              if (typeof cat === 'string') {
+                return { categoryId: cat };
+              }
+              return {
+                categoryId: cat.categoryId || cat.id || cat.category?.id,
+                category: cat.category,
+                id: cat.id,
+              };
+            });
+          }
+
+          // Normalize images
+          let normalizedImages: any[] = [];
+          if (p.images && Array.isArray(p.images)) {
+            normalizedImages = p.images.map((img: any) => {
+              if (typeof img === 'string') {
+                return { url: img, id: img };
+              }
+              return img;
+            });
+          }
+
+          return {
+            ...p,
+            name: p.name || p.title || p.productName || '',
+            nameAr: p.nameAr || p.titleAr || p.productNameAr || '',
+            categories: normalizedCategories,
+            images: normalizedImages,
+            price: Number(p.price) || Number(p.cost) || 0,
+            compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined,
+            isAvailable: (p.isAvailable !== false && p.isAvailable !== undefined) ? true : false,
+            isPublished: (p.isPublished !== false && p.isPublished !== undefined) ? true : false,
+          };
+        })
+        .filter((p: any) => {
+          // Only show available and published products
+          return p.isAvailable && p.isPublished;
+        })
+        .slice(0, 8); // Limit to 8 for featured products
       
       let rawCategories: Category[] = [];
       if (categoriesData && typeof categoriesData === 'object' && !('error' in categoriesData) && !('statusCode' in categoriesData)) {
@@ -122,33 +213,23 @@ export default function Home() {
   const logoUrl = getLogoUrl();
 
   if (loading) {
+    return <StorefrontLoading />;
+  }
+
+  // Check maintenance mode
+  if (settings?.maintenanceMode) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-8 animate-fade-in">
-          {/* Animated Loading Logo */}
-          <div className="relative">
-            <div className="absolute inset-0 rounded-full gradient-primary blur-3xl opacity-30 animate-pulse" />
-            <div className="relative w-24 h-24 mx-auto rounded-2xl overflow-hidden bg-card border border-border shadow-2xl animate-float">
-              <img src={logoUrl} alt={BRAND_NAME_AR} className="w-full h-full object-contain p-3" />
-            </div>
-          </div>
-          
-          {/* Loading Spinner */}
-          <div className="flex items-center justify-center gap-3">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-muted-foreground font-medium">جاري التحميل...</span>
-          </div>
-          
-          {/* Animated Dots */}
-          <div className="flex justify-center gap-2">
-            {[0, 1, 2].map((i) => (
-              <div 
-                key={i} 
-                className="w-2 h-2 rounded-full bg-primary animate-bounce"
-                style={{ animationDelay: `${i * 150}ms` }}
-              />
-            ))}
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center p-8">
+          <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-white">
+            {settings.storeName || 'المتجر'} في صيانة
+          </h1>
+          <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
+            نعمل على تحسين تجربتك. سنعود قريباً!
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-500">
+            {settings.storeDescription || 'نعتذر عن الإزعاج. نحن نعمل على تحسين المتجر وسنعود قريباً.'}
+          </p>
         </div>
       </div>
     );
@@ -204,6 +285,23 @@ export default function Home() {
                   <Sparkles className="w-4 h-4 text-warning" />
                   <span className="text-white/90 text-sm font-medium">أفضل المنتجات بأفضل الأسعار</span>
                 </div>
+
+                {/* Wallet Balance Display - Only for digital card stores */}
+                {customerData && siteConfig?.settings?.storeType === 'DIGITAL_CARDS' && (
+                  <div className="mb-6 animate-slide-down animation-delay-100">
+                    <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
+                      <div className="p-2 rounded-xl bg-primary/20 text-white">
+                        <Wallet className="w-5 h-5" />
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-white/70 font-medium">رصيدك الحالي</p>
+                        <p className="text-xl font-bold text-white tracking-tight">
+                          {walletBalance.toFixed(2)} <span className="text-sm font-normal opacity-80">ريال</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Title */}
                 <h1 className="text-5xl md:text-6xl lg:text-7xl font-heading font-bold tracking-tight mb-6 text-white leading-tight animate-slide-up">
@@ -237,7 +335,7 @@ export default function Home() {
                       <Button 
                         size="lg" 
                         variant="outline" 
-                        className="border-2 border-white/50 text-white hover:bg-white/10 h-14 px-8 text-lg font-semibold rounded-xl backdrop-blur-sm"
+                        className="border-2 border-white/50 bg-transparent text-white hover:bg-white/10 h-14 px-8 text-lg font-semibold rounded-xl backdrop-blur-sm"
                       >
                         <FileText className="ml-2 h-5 w-5" />
                         اكتشف المزيد
@@ -373,7 +471,7 @@ export default function Home() {
                         <div className="absolute inset-0 gradient-secondary opacity-0 group-hover:opacity-20 transition-opacity duration-500" />
                         
                         {category.image ? (
-                          <img 
+                          <OptimizedImage 
                             src={category.image} 
                             alt={category.name} 
                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 

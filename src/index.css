@@ -26,6 +26,63 @@ body.ltr {
   direction: ltr !important;
 }
 
+/* RTL Table Support */
+html[dir="rtl"] table,
+html.rtl table,
+[dir="rtl"] table,
+.rtl table {
+  direction: rtl !important;
+}
+
+/* Ensure proper text alignment in RTL */
+html[dir="rtl"] th,
+html.rtl th,
+[dir="rtl"] th,
+.rtl th,
+html[dir="rtl"] td,
+html.rtl td,
+[dir="rtl"] td,
+.rtl td {
+  text-align: right !important;
+}
+
+/* Ensure proper text alignment in LTR */
+html[dir="ltr"] th,
+html.ltr th,
+[dir="ltr"] th,
+html[dir="ltr"] td,
+html.ltr td,
+[dir="ltr"] td {
+  text-align: left !important;
+}
+
+/* Override for center-aligned cells in both directions */
+th.text-center,
+td.text-center {
+  text-align: center !important;
+}
+
+/* RTL checkbox padding in tables */
+html[dir="rtl"] th:has([role="checkbox"]),
+html.rtl th:has([role="checkbox"]),
+[dir="rtl"] th:has([role="checkbox"]),
+html[dir="rtl"] td:has([role="checkbox"]),
+html.rtl td:has([role="checkbox"]),
+[dir="rtl"] td:has([role="checkbox"]) {
+  padding-right: 1rem !important;
+  padding-left: 0.5rem !important;
+}
+
+html[dir="ltr"] th:has([role="checkbox"]),
+html.ltr th:has([role="checkbox"]),
+[dir="ltr"] th:has([role="checkbox"]),
+html[dir="ltr"] td:has([role="checkbox"]),
+html.ltr td:has([role="checkbox"]),
+[dir="ltr"] td:has([role="checkbox"]) {
+  padding-left: 1rem !important;
+  padding-right: 0.5rem !important;
+}
+
 /* Remove white background from PNG logos */
 img[src$=".png"],
 img[src*="logo"],
@@ -210,6 +267,13 @@ img[src*="Logo"],
     --shadow-glow-secondary: 0 0 25px hsl(14 81% 50% / 0.4), 0 0 50px hsl(14 81% 50% / 0.25);
     --shadow-glow-accent: 0 0 25px hsl(47 100% 50% / 0.4), 0 0 50px hsl(47 100% 50% / 0.25);
     
+    /* Gaming Specific Colors */
+    --gaming-primary: 280 100% 50%;
+    --gaming-secondary: 39 100% 50%;
+    --gaming-accent: 180 100% 50%;
+    --gaming-card-bg: 260 40% 12%;
+    --gaming-border: 260 40% 20%;
+
     --sidebar-background: 210 53% 8%;
     --sidebar-foreground: 240 15% 95%;
     --sidebar-primary: 29 100% 50%;
@@ -259,6 +323,51 @@ img[src*="Logo"],
 }
 
 @layer components {
+  /* Gaming Card Styles */
+  .gaming-card {
+    @apply relative overflow-hidden rounded-2xl border transition-all duration-500;
+    background: linear-gradient(135deg, hsl(var(--gaming-card-bg)) 0%, hsl(var(--background)) 100%);
+    border-color: hsl(var(--gaming-border));
+  }
+
+  .gaming-card:hover {
+    @apply -translate-y-2;
+    border-color: hsl(var(--gaming-primary) / 0.5);
+    box-shadow: 0 0 30px hsl(var(--gaming-primary) / 0.2);
+  }
+
+  .gaming-card::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-500 pointer-events-none;
+    background: radial-gradient(circle at center, hsl(var(--gaming-primary) / 0.15) 0%, transparent 70%);
+  }
+
+  .gaming-card:hover::before {
+    @apply opacity-100;
+  }
+
+  /* Neon Borders */
+  .neon-border {
+    @apply border-2 transition-all duration-300;
+    border-color: hsl(var(--gaming-primary));
+    box-shadow: 0 0 10px hsl(var(--gaming-primary) / 0.3), inset 0 0 5px hsl(var(--gaming-primary) / 0.2);
+  }
+
+  .neon-border-orange {
+    @apply border-2 transition-all duration-300;
+    border-color: hsl(var(--gaming-secondary));
+    box-shadow: 0 0 10px hsl(var(--gaming-secondary) / 0.3), inset 0 0 5px hsl(var(--gaming-secondary) / 0.2);
+  }
+
+  /* Text Glow */
+  .text-glow {
+    text-shadow: 0 0 10px hsl(var(--gaming-primary) / 0.5), 0 0 20px hsl(var(--gaming-primary) / 0.3);
+  }
+
+  .text-glow-orange {
+    text-shadow: 0 0 10px hsl(var(--gaming-secondary) / 0.5), 0 0 20px hsl(var(--gaming-secondary) / 0.3);
+  }
+
   /* Premium Button Styles */
   .btn-premium {
     @apply relative overflow-hidden font-semibold transition-all duration-300;
@@ -324,6 +433,14 @@ img[src*="Logo"],
 
 @layer utilities {
   /* Gradient Utilities */
+  .gradient-gaming {
+    background: linear-gradient(135deg, hsl(var(--gaming-primary)) 0%, hsl(210 100% 50%) 100%);
+  }
+
+  .gradient-gaming-orange {
+    background: linear-gradient(135deg, hsl(var(--gaming-secondary)) 0%, hsl(15 100% 50%) 100%);
+  }
+
   .gradient-primary {
     background: var(--gradient-primary);
   }
@@ -872,3 +989,31 @@ html.dark {
   z-index: 9998 !important;
 }
 
+/* Tour Guide Highlight Effect */
+.tour-highlight-active {
+  position: relative;
+  z-index: 9999 !important;
+  background-color: hsl(var(--card)) !important;
+}
+
+.tour-focus-pulse {
+  position: relative;
+  z-index: 9999 !important;
+  animation: tour-pulse 2s infinite;
+  box-shadow: 0 0 0 4px rgba(0, 169, 157, 0.6), 0 0 20px rgba(0, 169, 157, 0.4) !important;
+  border-radius: var(--radius);
+  outline: 3px solid rgba(0, 169, 157, 0.8) !important;
+  outline-offset: 2px;
+}
+
+@keyframes tour-pulse {
+  0% {
+    box-shadow: 0 0 0 4px rgba(0, 169, 157, 0.8), 0 0 20px rgba(0, 169, 157, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 169, 157, 0.4), 0 0 30px rgba(0, 169, 157, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgba(0, 169, 157, 0.8), 0 0 20px rgba(0, 169, 157, 0.6);
+  }
+}

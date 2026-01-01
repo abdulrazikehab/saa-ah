@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, ZoomIn, Heart, Share2, ShoppingCart, Star, Zap, Shield, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { toast } from '@/hooks/use-toast';
 
 interface Product {
   id: string;
@@ -268,7 +269,30 @@ export function ProductQuickView({
                     <Heart className={`mr-2 h-5 w-5 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
                     {language === 'ar' ? 'المفضلة' : 'Wishlist'}
                   </Button>
-                  <Button variant="outline" className="border-gray-700 hover:bg-gray-800">
+                  <Button
+                    variant="outline"
+                    className="border-gray-700 hover:bg-gray-800"
+                    onClick={async () => {
+                      const shareData = {
+                        title: language === 'ar' ? product.nameAr : product.name,
+                        text: language === 'ar' ? product.descriptionAr : product.description,
+                        url: window.location.href,
+                      };
+                      try {
+                        if (navigator.share) {
+                          await navigator.share(shareData);
+                        } else {
+                          await navigator.clipboard.writeText(window.location.href);
+                          toast({
+                            title: language === 'ar' ? 'تم نسخ الرابط' : 'Link copied',
+                            description: language === 'ar' ? 'تم نسخ رابط المنتج إلى الحافظة' : 'Product link copied to clipboard',
+                          });
+                        }
+                      } catch (error) {
+                        console.error('Error sharing:', error);
+                      }
+                    }}
+                  >
                     <Share2 className="mr-2 h-5 w-5" />
                     {language === 'ar' ? 'مشاركة' : 'Share'}
                   </Button>

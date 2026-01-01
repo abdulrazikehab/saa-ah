@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const location = useLocation();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     // Show loading state while checking authentication
@@ -24,6 +24,13 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     // On subdomains, we use the unified auth page
     const loginPath = '/auth/login';
     return <Navigate to={loginPath} state={{ from: location }} replace />;
+  }
+
+  // Check if user must change password on first login
+  // Skip check if already on change password page
+  const mustChangePassword = (user as any)?.mustChangePassword || false;
+  if (mustChangePassword && location.pathname !== '/auth/change-password') {
+    return <Navigate to="/auth/change-password" replace />;
   }
 
   return <>{children}</>;

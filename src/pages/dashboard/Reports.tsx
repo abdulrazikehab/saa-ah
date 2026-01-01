@@ -46,7 +46,7 @@ interface Brand {
 }
 
 export default function Reports() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'orderDetails'>('products');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -216,42 +216,154 @@ export default function Reports() {
   const orderDetailsTotalPages = Math.ceil(orders.length / orderDetailsPerPage);
 
   // Export to Excel
-  const handleExportExcel = () => {
-    const wb = utils.book_new();
-    
-    if (activeTab === 'products') {
-      const productsData = productReport.map(product => ({
-        [t('dashboard.reports.productName')]: product.name,
-        [t('dashboard.reports.sku')]: product.sku || '',
-        [t('dashboard.reports.stock')]: product.stock,
-        [t('dashboard.reports.salesCount')]: product.salesCount,
-        [t('dashboard.reports.revenue')]: product.revenue,
-      }));
-      const ws = utils.json_to_sheet(productsData);
-      utils.book_append_sheet(wb, ws, t('dashboard.reports.productReport'));
-    } else if (activeTab === 'orders' || activeTab === 'orderDetails') {
-      const ordersData = orders.map(order => ({
-        [t('dashboard.reports.orderNo')]: order.orderNumber,
-        [t('dashboard.orders.customer')]: order.customerName || order.customerEmail,
-        [t('dashboard.reports.email')]: order.customerEmail,
-        [t('dashboard.reports.subtotal')]: order.subtotal || 0,
-        [t('dashboard.reports.tax')]: order.taxAmount || 0,
-        [t('dashboard.reports.total')]: order.totalAmount,
-        [t('dashboard.orders.status')]: order.status,
-        [t('dashboard.orders.paymentStatus')]: order.paymentStatus,
-        [t('dashboard.reports.orderDate')]: new Date(order.createdAt).toLocaleDateString(),
-      }));
-      const ws = utils.json_to_sheet(ordersData);
-      utils.book_append_sheet(wb, ws, t('dashboard.reports.orderReport'));
+  const handleExportExcel = async () => {
+    try {
+      const wb = utils.book_new();
+      
+      if (activeTab === 'products') {
+        // Fetch all products for export
+        const response = await reportService.getProductReport({
+          page: 1,
+          limit: 10000, // Fetch large number for export
+          search: productsSearch || undefined,
+        });
+        
+        let allProducts: ProductReportItem[] = [];
+        if (response && 'data' in response) {
+          allProducts = response.data;
+        } else if (Array.isArray(response)) {
+          allProducts = response;
+        }
+
+        const productsData = allProducts.map(product => ({
+          [t('dashboard.reports.productName')]: product.name,
+          [t('dashboard.reports.sku')]: product.sku || '',
+          [t('dashboard.reports.stock')]: product.stock,
+          [t('dashboard.reports.salesCount')]: product.salesCount,
+          [t('dashboard.reports.revenue')]: product.revenue,
+        }));
+        const ws = utils.json_to_sheet(productsData);
+        utils.book_append_sheet(wb, ws, t('dashboard.reports.productReport'));
+      } else if (activeTab === 'orders' || activeTab === 'orderDetails') {
+        const ordersData = orders.map(order => ({
+          [t('dashboard.reports.orderNo')]: order.orderNumber,
+          [t('dashboard.orders.customer')]: order.customerName || order.customerEmail,
+          [t('dashboard.reports.email')]: order.customerEmail,
+          [t('dashboard.reports.subtotal')]: order.subtotal || 0,
+          [t('dashboard.reports.tax')]: order.taxAmount || 0,
+          [t('dashboard.reports.total')]: order.totalAmount,
+          [t('dashboard.orders.status')]: order.status,
+          [t('dashboard.orders.paymentStatus')]: order.paymentStatus,
+          [t('dashboard.reports.orderDate')]: new Date(order.createdAt).toLocaleDateString(),
+        }));
+        const ws = utils.json_to_sheet(ordersData);
+        utils.book_append_sheet(wb, ws, t('dashboard.reports.orderReport'));
+      }
+      
+      const filename = `reports_${activeTab}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      writeFile(wb, filename);
+    } catch (error) {
+      console.error('Export failed:', error);
     }
-    
-    const filename = `reports_${activeTab}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    writeFile(wb, filename);
   };
 
-  // Export to PDF (simplified version - opens print dialog)
-  const handleExportPDF = () => {
-    window.print();
+  // Export to PDF (opens print dialog with clean table)
+  const handleExportPDF = async () => {
+    try {
+      let title = '';
+      let headers: string[] = [];
+      let rows: (string | number)[][] = [];
+
+      if (activeTab === 'products') {
+        title = t('dashboard.reports.productReport');
+        headers = [
+          t('dashboard.reports.productName'),
+          t('dashboard.reports.sku'),
+          t('dashboard.reports.stock'),
+          t('dashboard.reports.salesCount'),
+          t('dashboard.reports.revenue')
+        ];
+
+        // Fetch all products for export
+        const response = await reportService.getProductReport({
+          page: 1,
+          limit: 1000, // Limit to 1000 for print performance
+          search: productsSearch || undefined,
+        });
+        
+        let allProducts: ProductReportItem[] = [];
+        if (response && 'data' in response) {
+          allProducts = response.data;
+        } else if (Array.isArray(response)) {
+          allProducts = response;
+        }
+
+        rows = allProducts.map(product => [
+          product.name,
+          product.sku || '',
+          product.stock,
+          product.salesCount,
+          formatCurrency(product.revenue, 'SAR')
+        ]);
+      } else {
+        title = t('dashboard.reports.orderReport');
+        headers = [
+          t('dashboard.reports.orderNo'),
+          t('dashboard.orders.customer'),
+          t('dashboard.reports.total'),
+          t('dashboard.orders.status'),
+          t('dashboard.reports.orderDate')
+        ];
+
+        rows = orders.map(order => [
+          order.orderNumber,
+          order.customerName || order.customerEmail,
+          formatCurrency(order.totalAmount, 'SAR'),
+          order.status,
+          new Date(order.createdAt).toLocaleDateString()
+        ]);
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>${title}</title>
+              <style>
+                body { font-family: Arial, sans-serif; direction: ${i18n.language === 'ar' ? 'rtl' : 'ltr'}; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: ${i18n.language === 'ar' ? 'right' : 'left'}; }
+                th { background-color: #f2f2f2; }
+                h1 { text-align: center; }
+                .footer { margin-top: 20px; text-align: center; font-size: 12px; color: #666; }
+              </style>
+            </head>
+            <body>
+              <h1>${title}</h1>
+              <p>${t('dashboard.reports.generatedOn')}: ${new Date().toLocaleDateString()}</p>
+              <table>
+                <thead>
+                  <tr>
+                    ${headers.map(h => `<th>${h}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+                </tbody>
+              </table>
+              <div class="footer">
+                BlackBox E-Commerce Platform
+              </div>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    } catch (error) {
+      console.error('PDF export failed:', error);
+    }
   };
 
   if (loading) {

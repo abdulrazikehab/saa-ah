@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from '@/hooks/use-toast';
 import { coreApi } from '@/lib/api';
+import { validateImageSignature } from '@/lib/utils';
 
 interface MarketCategory {
   id: string;
@@ -160,6 +161,18 @@ export default function PartnerWithUs() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Security Check
+    const { isValid, reason } = await validateImageSignature(file);
+    if (!isValid) {
+      toast({
+        title: 'ملف غير آمن',
+        description: reason || 'تم رفض الملف لأسباب أمنية',
+        variant: 'destructive',
+      });
+      e.target.value = ''; // Reset input
+      return;
+    }
 
     setFormData({ 
       ...formData, 

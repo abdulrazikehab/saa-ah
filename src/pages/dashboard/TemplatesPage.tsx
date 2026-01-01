@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Search, Plus, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 
 const categoryColors: Record<string, string> = {
   fashion: 'bg-gradient-to-br from-pink-500 to-rose-500',
@@ -27,6 +28,7 @@ const categoryIcons: Record<string, string> = {
 };
 
 export default function TemplatesPage() {
+  const { t, i18n } = useTranslation();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,27 +48,27 @@ export default function TemplatesPage() {
     } catch (error) {
       console.error('Failed to load templates:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to load templates',
+        title: t('common.error'),
+        description: t('dashboard.templates.loadError'),
         variant: 'destructive',
       });
       setTemplates([]);
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory, searchQuery, toast]);
+  }, [selectedCategory, searchQuery, toast, t]);
 
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
 
   const categories = [
-    { value: 'fashion', label: 'Fashion', icon: '👗' },
-    { value: 'electronics', label: 'Electronics', icon: '💻' },
-    { value: 'food', label: 'Food & Beverage', icon: '🍽️' },
-    { value: 'beauty', label: 'Beauty', icon: '💄' },
-    { value: 'home', label: 'Home & Furniture', icon: '🏠' },
-    { value: 'digital', label: 'Digital Products', icon: '🎮' },
+    { value: 'fashion', label: t('dashboard.templates.categories.fashion'), icon: '👗' },
+    { value: 'electronics', label: t('dashboard.templates.categories.electronics'), icon: '💻' },
+    { value: 'food', label: t('dashboard.templates.categories.food'), icon: '🍽️' },
+    { value: 'beauty', label: t('dashboard.templates.categories.beauty'), icon: '💄' },
+    { value: 'home', label: t('dashboard.templates.categories.home'), icon: '🏠' },
+    { value: 'digital', label: t('dashboard.templates.categories.digital'), icon: '🎮' },
   ];
 
   const handleUseTemplate = (template: Template) => {
@@ -83,10 +85,10 @@ export default function TemplatesPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-                Website Templates
+                {t('dashboard.templates.title')}
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Choose from our professionally designed templates to get started quickly
+                {t('dashboard.templates.subtitle')}
               </p>
             </div>
             <Button
@@ -95,7 +97,7 @@ export default function TemplatesPage() {
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all"
             >
               <Plus className="w-5 h-5 mr-2" />
-              Create New Page
+              {t('dashboard.templates.createNew')}
             </Button>
           </div>
 
@@ -104,7 +106,7 @@ export default function TemplatesPage() {
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <Input
               type="text"
-              placeholder="Search templates..."
+              placeholder={t('dashboard.templates.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-12 h-12 text-lg border-2 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700"
@@ -119,7 +121,7 @@ export default function TemplatesPage() {
               onClick={() => setSelectedCategory(null)}
               className={selectedCategory === null ? 'bg-gradient-to-r from-blue-600 to-purple-600' : ''}
             >
-              All Templates
+              {t('dashboard.templates.allTemplates')}
             </Button>
             {categories.map((cat) => (
               <Button
@@ -141,22 +143,22 @@ export default function TemplatesPage() {
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600 dark:text-gray-400">Loading templates...</p>
+              <p className="text-gray-600 dark:text-gray-400">{t('dashboard.templates.loading')}</p>
             </div>
           </div>
         ) : templates.length === 0 ? (
           <Card className="text-center py-16">
             <CardContent>
               <div className="text-6xl mb-4">📦</div>
-              <h3 className="text-2xl font-semibold mb-2">No templates found</h3>
+              <h3 className="text-2xl font-semibold mb-2">{t('dashboard.templates.noTemplates')}</h3>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
                 {searchQuery || selectedCategory
-                  ? 'Try adjusting your search or filters'
-                  : 'No templates available yet'}
+                  ? t('dashboard.templates.adjustSearch')
+                  : t('dashboard.templates.noTemplatesAvailable')}
               </p>
               <Button onClick={() => navigate('/builder/new')}>
                 <Plus className="w-4 h-4 mr-2" />
-                Create Custom Page
+                {t('dashboard.templates.createCustom')}
               </Button>
             </CardContent>
           </Card>
@@ -192,14 +194,14 @@ export default function TemplatesPage() {
                       className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white text-gray-900 hover:bg-gray-100"
                     >
                       <Sparkles className="w-5 h-5 mr-2" />
-                      Use This Template
+                      {t('dashboard.templates.useTemplate')}
                     </Button>
                   </div>
 
                   {/* Official Badge */}
                   {template.isDefault && (
-                    <Badge className="absolute top-3 right-3 bg-white text-gray-900 shadow-lg">
-                      Official
+                    <Badge variant="default" className="absolute top-3 right-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg z-10">
+                      {t('dashboard.templates.official')}
                     </Badge>
                   )}
                 </div>
@@ -212,7 +214,7 @@ export default function TemplatesPage() {
                         {template.name}
                       </CardTitle>
                       <CardDescription className="mt-2 line-clamp-2">
-                        {template.description || 'Professional template ready to use'}
+                        {template.description || t('dashboard.templates.professionalDesc')}
                       </CardDescription>
                     </div>
                   </div>
@@ -221,10 +223,10 @@ export default function TemplatesPage() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="capitalize">
-                      {categoryIcons[template.category]} {template.category}
+                      {categoryIcons[template.category]} {t(`dashboard.templates.categories.${template.category}`)}
                     </Badge>
                     <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(template.createdAt).toLocaleDateString()}
+                      {new Date(template.createdAt).toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US')}
                     </span>
                   </div>
                 </CardContent>

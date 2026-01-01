@@ -23,6 +23,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import MarketSetupPrompt from '@/components/dashboard/MarketSetupPrompt';
 import { CloudinaryImagePicker } from '@/components/dashboard/CloudinaryImagePicker';
 import { DataTablePagination } from '@/components/common/DataTablePagination';
+import { ProductFormWizard, ProductFormData } from '@/components/dashboard/products/ProductFormWizard';
+import { ProductImportWizard } from '@/components/dashboard/products/ProductImportWizard';
 
 interface Category {
   id: string;
@@ -63,7 +65,7 @@ interface ProductApiResponse {
   unit?: { id: string };
   productId?: string;
   odooProductId?: string;
-  brand?: { id: string };
+  slug?: string;
   suppliers?: Array<{ supplierId?: string; supplier?: { id: string } }>;
 }
 
@@ -90,6 +92,7 @@ interface Product {
   metaDescription?: string;
   weight?: string;
   dimensions?: string;
+  path?: string;
   // Export fields
   productId?: string;
   coinsNumber?: number;
@@ -160,40 +163,9 @@ export default function ProductsManager() {
   const [totalPages, setTotalPages] = useState(1);
 
   // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    nameAr: '',
-    description: '',
-    descriptionAr: '',
-    price: '',
-    compareAtPrice: '',
-    cost: '',
-    sku: '',
-    barcode: '',
-    stock: '',
-    lowStockThreshold: '10',
-    categoryId: '',
-    status: 'ACTIVE' as 'ACTIVE' | 'DRAFT' | 'ARCHIVED',
-    featured: false,
-    tags: '',
-    metaTitle: '',
-    metaDescription: '',
-    weight: '',
-    dimensions: '',
-    unitId: '',
-    productId: '',
-    productCode: '',
-    odooProductId: '',
-    brandId: '',
-    categoryIds: [] as string[],
-    supplierIds: [] as string[],
-    minQuantity: '',
-    maxQuantity: '',
-    enableSlider: false,
-  });
-  const [productImages, setProductImages] = useState<string[]>([]);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [showCloudinaryPicker, setShowCloudinaryPicker] = useState(false);
+  const [wizardInitialData, setWizardInitialData] = useState<Partial<ProductFormData>>({});
+  const [wizardInitialImages, setWizardInitialImages] = useState<string[]>([]);
+  const [isImportWizardOpen, setIsImportWizardOpen] = useState(false);
 
 
   const [activeTab, setActiveTab] = useState('all');
@@ -234,7 +206,7 @@ export default function ProductsManager() {
       // Pre-fill form data for new product
       const categoryIds = categoryIdsParam ? categoryIdsParam.split(',') : [];
       
-      setFormData(prev => ({
+      setWizardInitialData(prev => ({
         ...prev,
         brandId: brandId || '',
         categoryIds: categoryIds,
@@ -243,7 +215,7 @@ export default function ProductsManager() {
       
       // Reset editing state and open dialog
       setEditingProduct(null);
-      setProductImages([]);
+      setWizardInitialImages([]);
       setIsAddDialogOpen(true);
       
       // Clear URL params after processing
@@ -300,7 +272,7 @@ export default function ProductsManager() {
       }
       
       if (filterStatus !== 'all') {
-        queryParams.isActive = filterStatus === 'active';
+        queryParams.isActive = filterStatus === 'active' ? 'true' : 'false';
       }
       
       const [productsResponse, categoriesData, unitsData, brandsData, suppliersData] = await Promise.all([
@@ -323,7 +295,7 @@ export default function ProductsManager() {
         setCurrentPage(paginatedResponse.meta.page);
       } else {
         // Non-paginated response (backward compatibility)
-        productsData = Array.isArray(productsResponse) ? (productsResponse as ProductApiResponse[]) : [];
+        productsData = Array.isArray(productsResponse) ? (productsResponse as unknown as ProductApiResponse[]) : [];
         setTotalItems(productsData.length);
         setTotalPages(1);
       }
@@ -398,34 +370,98 @@ export default function ProductsManager() {
           priceType: typeof rawProducts[0].price,
           images: rawProducts[0].images,
           variants: rawProducts[0].variants,
-          categories: rawProducts[0].categories
+          categories: rawProducts[0].categories,
+          categoryId: (rawProducts[0] as unknown as Record<string, unknown>).categoryId,
+          isAvailable: (rawProducts[0] as unknown as Record<string, unknown>).isAvailable,
+          isPublished: (rawProducts[0] as unknown as Record<string, unknown>).isPublished
+        });
+        
+        // Check categories structure for all products
+        rawProducts.forEach((p, idx) => {
+          if (p.categories && Array.isArray(p.categories) && p.categories.length > 0) {
+            console.log(`📦 Product ${idx + 1} (${p.name}) has ${p.categories.length} categories:`, p.categories);
+          } else {
+            console.log(`⚠️ Product ${idx + 1} (${p.name}) has NO categories`);
+          }
         });
       }
 
-      const mappedProducts: Product[] = rawProducts.map((p: ProductApiResponse): Product => ({
-        id: p.id,
-        name: p.name,
-        nameAr: p.nameAr || '',
-        description: p.description || '',
-        descriptionAr: p.descriptionAr || '',
-        price: typeof p.price === 'string' ? parseFloat(p.price) : (p.price || 0),
-        compareAtPrice: p.compareAtPrice,
-        cost: p.costPerItem,
-        sku: p.sku || '',
-        barcode: p.barcode,
-        stock: p.variants?.[0]?.inventoryQuantity || 0,
-        lowStockThreshold: p.lowStockThreshold || 10,
-        images: p.images?.map((img) => typeof img === 'string' ? img : img.url) || [],
-        category: (p.categories?.[0] as { category?: Category })?.category || p.categories?.[0] as Category,
-        status: p.isAvailable ? 'ACTIVE' : 'DRAFT',
-        featured: p.featured || false,
-        createdAt: p.createdAt || new Date().toISOString(),
-        // Extra fields for form
-        metaTitle: p.seoTitle || '',
-        metaDescription: p.seoDescription || '',
-        weight: p.weight || '',
-        dimensions: p.dimensions || ''
-      }));
+      const mappedProducts: Product[] = rawProducts.map((p: ProductApiResponse): Product => {
+        // Extract category - handle multiple formats
+        let productCategory: Category | undefined = undefined;
+        
+        if (p.categories && Array.isArray(p.categories) && p.categories.length > 0) {
+          const firstCategory = p.categories[0];
+          
+          // Format 1: { category: { id, name, nameAr } }
+          if (firstCategory && typeof firstCategory === 'object' && 'category' in firstCategory) {
+            productCategory = (firstCategory as { category?: Category }).category;
+          }
+          // Format 2: { id, name, nameAr } (direct category object)
+          else if (firstCategory && typeof firstCategory === 'object' && 'id' in firstCategory && 'name' in firstCategory) {
+            productCategory = firstCategory as Category;
+          }
+          // Format 3: categoryId only - try to find in loaded categories
+          else if (firstCategory && typeof firstCategory === 'object' && 'categoryId' in firstCategory) {
+            const categoryId = (firstCategory as { categoryId?: string }).categoryId;
+            if (categoryId) {
+              // Find category from loaded categories list
+              const foundCategory = mappedCategories.find(c => c.id === categoryId);
+              if (foundCategory) {
+                productCategory = foundCategory;
+              } else {
+                console.log('Product has categoryId but category not found in list:', categoryId);
+              }
+            }
+          }
+        }
+        
+        // Also check for direct categoryId on product
+        if (!productCategory && 'categoryId' in p) {
+          const directCategoryId = (p as { categoryId?: string }).categoryId;
+          if (directCategoryId) {
+            const foundCategory = mappedCategories.find(c => c.id === directCategoryId);
+            if (foundCategory) {
+              productCategory = foundCategory;
+            } else {
+              console.log('Product has direct categoryId but category not found:', directCategoryId);
+            }
+          }
+        }
+        
+        // Log for debugging if still no category
+        if (!productCategory && p.categories && p.categories.length > 0) {
+          console.log('⚠️ Could not extract category from product:', p.id, p.name, 'categories structure:', JSON.stringify(p.categories));
+        } else if (productCategory) {
+          console.log('✅ Product category found:', p.id, '->', productCategory.nameAr || productCategory.name);
+        }
+        
+        return {
+          id: p.id,
+          name: p.name,
+          nameAr: p.nameAr || '',
+          description: p.description || '',
+          descriptionAr: p.descriptionAr || '',
+          price: typeof p.price === 'string' ? parseFloat(p.price) : (p.price || 0),
+          compareAtPrice: p.compareAtPrice,
+          cost: p.costPerItem,
+          sku: p.sku || '',
+          barcode: p.barcode,
+          stock: p.variants?.[0]?.inventoryQuantity || 0,
+          lowStockThreshold: p.lowStockThreshold || 10,
+          images: p.images?.map((img) => typeof img === 'string' ? img : img.url) || [],
+          category: productCategory,
+          status: p.isAvailable ? 'ACTIVE' : 'DRAFT',
+          featured: p.featured || false,
+          createdAt: p.createdAt || new Date().toISOString(),
+          // Extra fields for form
+          metaTitle: p.seoTitle || '',
+          metaDescription: p.seoDescription || '',
+          weight: p.weight || '',
+          dimensions: p.dimensions || '',
+          path: p.slug || ''
+        };
+      });
       
       console.log('📦 Mapped products count:', mappedProducts.length);
       if (mappedProducts.length > 0) {
@@ -446,8 +482,8 @@ export default function ProductsManager() {
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
-        title: 'تعذر تحميل البيانات',
-        description: 'حدث خطأ أثناء تحميل المنتجات. يرجى تحديث الصفحة.',
+        title: t('dashboard.products.loadDataError'),
+        description: t('dashboard.products.loadDataErrorDesc'),
         variant: 'destructive',
       });
     } finally {
@@ -455,58 +491,7 @@ export default function ProductsManager() {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
 
-    setUploadingImage(true);
-    try {
-      const uploadFormData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        uploadFormData.append('images', files[i]);
-      }
-
-      interface ImageUploadResponse {
-        images?: Array<{ secureUrl?: string; url?: string }>;
-      }
-      const res = await coreApi.post('/upload/product-images', uploadFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        requireAuth: true
-      }) as ImageUploadResponse;
-
-      if (res.images && res.images.length > 0) {
-        const newImageUrls = res.images.map((img) => img.secureUrl || img.url || '');
-        setProductImages(prev => [...prev, ...newImageUrls]);
-        toast({ title: 'تم الرفع بنجاح', description: 'تم رفع الصور بنجاح' });
-      }
-    } catch (error) {
-      console.error('Failed to upload images:', error);
-      toast({
-        title: 'تعذر رفع الصور',
-        description: 'حدث خطأ أثناء رفع الصور. يرجى المحاولة مرة أخرى.',
-        variant: 'destructive',
-      });
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const removeImage = (index: number) => {
-    setProductImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleCloudinarySelect = (images: string[]) => {
-    console.log('📸 Setting images from Cloudinary:', images);
-    // Support multiple images if the picker returns them
-    if (images.length > 0) {
-      setProductImages(prev => [...prev, ...images]);
-      console.log('📸 New productImages state:', [...productImages, ...images]);
-      toast({
-        title: 'تم الاختيار بنجاح',
-        description: `تم إضافة ${images.length} صور من Cloudinary`,
-      });
-    }
-  };
 
   // Function to extract quantity from product name (e.g., "100 coin card" -> 100)
   const extractQuantityFromName = (name: string, unitCode: string, unitName: string, unitNameAr?: string): number | null => {
@@ -537,46 +522,46 @@ export default function ProductsManager() {
     return null;
   };
 
-  const handleSaveProduct = async () => {
+  const handleSaveProduct = async (data: ProductFormData, images: string[]) => {
     try {
       // Validate required fields
-      if (!formData.name || formData.name.trim() === '') {
+      if (!data.name || data.name.trim() === '') {
         toast({
-          title: 'حقل مطلوب',
-          description: 'اسم المنتج مطلوب',
+          title: t('dashboard.products.messages.requiredField'),
+          description: t('dashboard.products.messages.nameRequired'),
           variant: 'destructive',
         });
         return;
       }
 
-      if (!formData.price || formData.price.trim() === '') {
+      if (!data.price || data.price.trim() === '') {
         toast({
-          title: 'حقل مطلوب',
-          description: 'سعر المنتج مطلوب',
+          title: t('dashboard.products.messages.requiredField'),
+          description: t('dashboard.products.messages.priceRequired'),
           variant: 'destructive',
         });
         return;
       }
 
-      const productPrice = parseFloat(formData.price);
+      const productPrice = parseFloat(data.price);
       if (isNaN(productPrice) || productPrice < 0) {
         toast({
-          title: 'خطأ في السعر',
-          description: 'السعر يجب أن يكون رقماً صحيحاً أكبر من أو يساوي صفر',
+          title: t('dashboard.products.messages.priceError'),
+          description: t('dashboard.products.messages.priceInvalid'),
           variant: 'destructive',
         });
         return;
       }
 
       // Validate price against unit cost if unit is selected
-      if (formData.unitId && formData.price) {
-        const selectedUnit = units.find(u => u.id === formData.unitId);
+      if (data.unitId && data.price) {
+        const selectedUnit = units.find(u => u.id === data.unitId);
         if (selectedUnit) {
           const unitCost = Number(selectedUnit.cost) || 0;
           
           // Try to extract quantity from product name
           const quantity = extractQuantityFromName(
-            formData.name || formData.nameAr || '',
+            data.name || data.nameAr || '',
             selectedUnit.code,
             selectedUnit.name,
             selectedUnit.nameAr
@@ -587,8 +572,13 @@ export default function ProductsManager() {
             
             if (productPrice < expectedMinPrice) {
               toast({
-                title: 'خطأ في السعر',
-                description: `السعر يجب أن يكون ${expectedMinPrice.toFixed(2)} ر.س على الأقل (${quantity} ${selectedUnit.code} × ${unitCost.toFixed(2)} ر.س)`,
+                title: t('dashboard.products.messages.priceError'),
+                description: t('dashboard.products.messages.priceTooLow', { 
+                  minPrice: expectedMinPrice.toFixed(2), 
+                  quantity, 
+                  unit: selectedUnit.code, 
+                  cost: unitCost.toFixed(2) 
+                }),
                 variant: 'destructive',
               });
               return; // Stop saving
@@ -598,65 +588,116 @@ export default function ProductsManager() {
       }
 
       // Transform frontend form data to match backend DTO
+      const categoryIds = data.categoryIds.length > 0 ? data.categoryIds : (data.categoryId ? [data.categoryId] : []);
+      console.log('💾 Saving product with categoryIds:', categoryIds);
+      console.log('💾 Form data categoryIds:', data.categoryIds);
+      console.log('💾 Form data categoryId:', data.categoryId);
+      
       const productData = {
-        name: formData.name,
-        nameAr: formData.nameAr,
-        description: formData.description,
-        descriptionAr: formData.descriptionAr,
-        sku: formData.sku || undefined,
-        barcode: formData.barcode || undefined,
-        price: parseFloat(formData.price),
-        compareAtPrice: formData.compareAtPrice ? parseFloat(formData.compareAtPrice) : undefined,
-        costPerItem: formData.cost ? parseFloat(formData.cost) : undefined,
-        isAvailable: formData.status === 'ACTIVE',
-        isPublished: formData.status === 'ACTIVE',
-        seoTitle: formData.metaTitle || undefined,
-        seoDescription: formData.metaDescription || undefined,
-        categoryIds: formData.categoryIds.length > 0 ? formData.categoryIds : (formData.categoryId ? [formData.categoryId] : []),
-        images: productImages.map((url, index) => ({
+        name: data.name,
+        nameAr: data.nameAr || undefined,
+        description: data.description || undefined,
+        descriptionAr: data.descriptionAr || undefined,
+        sku: data.sku || undefined,
+        barcode: data.barcode || undefined,
+        price: parseFloat(data.price),
+        compareAtPrice: data.compareAtPrice ? parseFloat(data.compareAtPrice) : undefined,
+        costPerItem: data.cost ? parseFloat(data.cost) : undefined,
+        stockCount: data.stock ? parseInt(data.stock) : undefined,
+        isAvailable: data.status === 'ACTIVE',
+        isPublished: data.status === 'ACTIVE',
+        seoTitle: data.metaTitle || undefined,
+        seoDescription: data.metaDescription || undefined,
+        categoryIds: categoryIds,
+        images: images.map((url, index) => ({
           url,
-          altText: formData.name, // Use English name
+          altText: data.name,
           sortOrder: index
         })),
-        featured: formData.featured,
-        weight: formData.weight ? parseFloat(formData.weight) : undefined,
-        dimensions: formData.dimensions || undefined,
-        unitId: formData.unitId || undefined,
-        productId: formData.productId || undefined,
-        productCode: formData.productCode || undefined,
-        odooProductId: formData.odooProductId || undefined,
-        brandId: formData.brandId || undefined,
-        supplierIds: formData.supplierIds.length > 0 ? formData.supplierIds : undefined,
-        tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
-        min: formData.minQuantity ? parseInt(formData.minQuantity) : undefined,
-        max: formData.maxQuantity ? parseInt(formData.maxQuantity) : undefined,
-        enableSlider: formData.enableSlider || false,
+        featured: !!data.featured,
+        weight: data.weight ? parseFloat(data.weight) : undefined,
+        dimensions: data.dimensions || undefined,
+        unitId: data.unitId || undefined,
+        brandId: data.brandId || undefined,
+        productCode: data.productCode || undefined,
+        odooProductId: data.odooProductId || undefined,
+        min: data.minQuantity ? parseInt(data.minQuantity) : undefined,
+        max: data.maxQuantity ? parseInt(data.maxQuantity) : undefined,
+        enableSlider: !!data.enableSlider,
+        tags: data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         variants: [{
           name: 'Default',
-          sku: formData.sku || undefined,
-          price: parseFloat(formData.price),
-          compareAtPrice: formData.compareAtPrice ? parseFloat(formData.compareAtPrice) : undefined,
-          inventoryQuantity: Math.max(parseInt(formData.stock) || 0, 0),
+          sku: data.sku || undefined,
+          price: parseFloat(data.price),
+          compareAtPrice: data.compareAtPrice ? parseFloat(data.compareAtPrice) : undefined,
+          inventoryQuantity: Math.max(parseInt(data.stock) || 0, 0),
         }]
       };
 
+      console.log('💾 Sending productData to API:', JSON.stringify(productData, null, 2));
+      
+      let savedProduct;
       if (editingProduct) {
-        await coreApi.updateProduct(editingProduct.id, productData);
+        savedProduct = await coreApi.updateProduct(editingProduct.id, productData);
+        console.log('✅ Product updated:', savedProduct);
+        console.log('✅ Updated product categories:', savedProduct.categories);
         toast({ title: t('common.success'), description: t('dashboard.products.editProduct') + ' ' + t('common.success') });
       } else {
-        await coreApi.createProduct(productData);
+        savedProduct = await coreApi.createProduct(productData);
+        console.log('✅ Product created:', savedProduct);
+        console.log('✅ Created product categories:', savedProduct.categories);
         toast({ title: t('common.success'), description: t('dashboard.products.addProduct') + ' ' + t('common.success') });
+      }
+      
+      // Verify categories were saved
+      if (savedProduct) {
+        console.log('🔍 Verifying saved product:', {
+          productId: savedProduct.id,
+          productName: savedProduct.name,
+          expectedCategoryIds: categoryIds,
+          savedCategories: savedProduct.categories,
+          categoriesCount: savedProduct.categories?.length || 0,
+          isAvailable: savedProduct.isAvailable,
+          isPublished: savedProduct.isPublished
+        });
+        
+        if (categoryIds.length > 0) {
+          if (!savedProduct.categories || savedProduct.categories.length === 0) {
+            console.error('❌ ERROR: Product was saved but categories are missing!', {
+              productId: savedProduct.id,
+              expectedCategoryIds: categoryIds,
+              savedCategories: savedProduct.categories
+            });
+            toast({
+              title: t('dashboard.products.messages.categoriesWarning'),
+              description: t('dashboard.products.messages.categoriesWarningDesc'),
+              variant: 'destructive',
+            });
+          } else {
+            console.log('✅ Categories verified:', savedProduct.categories.length, 'categories attached');
+          }
+        }
       }
 
       setIsAddDialogOpen(false);
       setEditingProduct(null);
       resetForm();
-      loadData();
+      
+      // Reload data to show updated products
+      await loadData();
+      
+      // Notify other components that products have been updated
+      window.dispatchEvent(new CustomEvent('productsUpdated'));
+      
+      // Also trigger a custom event with product details for immediate update
+      window.dispatchEvent(new CustomEvent('productSaved', { 
+        detail: { product: savedProduct, categoryIds } 
+      }));
     } catch (error) {
       console.error('Failed to save product:', error);
       toast({
-        title: 'تعذر حفظ المنتج',
-        description: 'حدث خطأ أثناء حفظ المنتج. يرجى المحاولة مرة أخرى.',
+        title: t('dashboard.products.messages.saveError'),
+        description: t('dashboard.products.messages.saveErrorDesc'),
         variant: 'destructive',
       });
     }
@@ -672,19 +713,19 @@ export default function ProductsManager() {
       setSelectedProducts(new Set());
     } catch (error: unknown) {
       console.error('Failed to delete product:', error);
-      const errorMessage = (error as { message?: string })?.message || 'حدث خطأ أثناء حذف المنتج';
+      const errorMessage = (error as { message?: string })?.message || t('dashboard.products.messages.deleteErrorDesc');
       const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
       
       if (isNotFound) {
         toast({
-          title: 'تم الحذف',
-          description: 'المنتج غير موجود (ربما تم حذفه مسبقاً)',
+          title: t('dashboard.products.messages.deleted'),
+          description: t('dashboard.products.messages.notFound'),
         });
         loadData();
       } else {
         toast({
-          title: 'تعذر حذف المنتج',
-          description: errorMessage || 'حدث خطأ أثناء حذف المنتج. يرجى المحاولة مرة أخرى.',
+          title: t('dashboard.products.messages.deleteError'),
+          description: errorMessage,
           variant: 'destructive',
         });
       }
@@ -694,15 +735,15 @@ export default function ProductsManager() {
   const handleBulkDelete = async () => {
     if (selectedProducts.size === 0) {
       toast({
-        title: 'لا يوجد منتجات محددة',
-        description: 'يرجى تحديد المنتجات المراد حذفها',
+        title: t('dashboard.products.messages.noSelection'),
+        description: t('dashboard.products.messages.noSelectionDesc'),
         variant: 'destructive',
       });
       return;
     }
 
     const count = selectedProducts.size;
-    if (!confirm(`هل أنت متأكد من حذف ${count} منتج${count > 1 ? 'ات' : ''}؟`)) return;
+    if (!confirm(t('dashboard.products.messages.confirmDelete', { count }))) return;
 
     try {
       setIsDeleting(true);
@@ -728,14 +769,14 @@ export default function ProductsManager() {
       // Handle partial failures gracefully
       if (failedCount > 0) {
         toast({
-          title: 'تنبيه',
-          description: `تم حذف ${deletedCount} من أصل ${count} منتج. عدد المحاولات الفاشلة: ${failedCount}`,
+          title: t('dashboard.products.messages.categoriesWarning'),
+          description: t('dashboard.products.messages.deletePartial', { deleted: deletedCount, total: count, failed: failedCount }),
           variant: 'destructive',
         });
       } else {
         toast({
-          title: 'نجح',
-          description: `تم حذف ${count} منتج${count > 1 ? 'ات' : ''} بنجاح`,
+          title: t('common.success'),
+          description: t('dashboard.products.messages.deleteSuccess', { count }),
         });
       }
       
@@ -743,9 +784,9 @@ export default function ProductsManager() {
       loadData();
     } catch (error: unknown) {
       console.error('Failed to delete products:', error);
-      const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'فشل حذف المنتجات';
+      const errorMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || t('dashboard.products.messages.deleteErrorDesc');
       toast({
-        title: 'خطأ',
+        title: t('common.error'),
         description: errorMessage,
         variant: 'destructive',
       });
@@ -765,38 +806,8 @@ export default function ProductsManager() {
   };
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      nameAr: '',
-      description: '',
-      descriptionAr: '',
-      price: '',
-      compareAtPrice: '',
-      cost: '',
-      sku: '',
-      barcode: '',
-      stock: '',
-      lowStockThreshold: '10',
-      categoryId: '',
-      status: 'ACTIVE',
-      featured: false,
-      tags: '',
-      metaTitle: '',
-      metaDescription: '',
-      weight: '',
-      dimensions: '',
-      unitId: '',
-      productId: '',
-      productCode: '',
-      odooProductId: '',
-      brandId: '',
-      categoryIds: [],
-      supplierIds: [],
-      minQuantity: '',
-      maxQuantity: '',
-      enableSlider: false,
-    });
-    setProductImages([]);
+    setWizardInitialData({});
+    setWizardInitialImages([]);
   };
 
   const openEditDialog = (product: Product) => {
@@ -809,17 +820,32 @@ export default function ProductsManager() {
       productCode?: string;
       odooProductId?: string;
       brand?: { id: string };
-      suppliers?: Array<{ supplierId?: string; supplier?: { id: string } }>;
+      suppliers?: Array<{ 
+        supplierId?: string; 
+        supplier?: { id: string; name?: string; nameAr?: string; discountRate?: number };
+        lastPrice?: number | string;
+        discountRate?: number;
+        isPrimary?: boolean;
+      }>;
     }
     const extProduct = product as ExtendedProduct;
-    setFormData({
+    
+    // Map suppliers with prices
+    const suppliersData = extProduct.suppliers?.map((s) => ({
+      supplierId: s.supplierId || s.supplier?.id || '',
+      price: s.lastPrice ? (typeof s.lastPrice === 'string' ? s.lastPrice : s.lastPrice.toString()) : '',
+      discountRate: s.discountRate || s.supplier?.discountRate || 0,
+      isPrimary: s.isPrimary || false,
+    })).filter(s => s.supplierId) || [];
+    
+    setWizardInitialData({
       name: product.name,
       nameAr: product.nameAr,
       description: product.description,
       descriptionAr: product.descriptionAr,
       price: (product.price || 0).toString(),
       compareAtPrice: product.compareAtPrice?.toString() || '',
-      cost: product.cost?.toString() || '',
+      cost: product.cost?.toString() || product.costPerItem?.toString() || '',
       sku: product.sku,
       barcode: product.barcode || '',
       stock: (product.stock || 0).toString(),
@@ -834,26 +860,27 @@ export default function ProductsManager() {
       weight: product.weight || '',
       dimensions: product.dimensions || '',
       unitId: extProduct.unit?.id || '',
-      productId: extProduct.productId || '',
+      brandId: extProduct.brand?.id || (product as { brandId?: string }).brandId || '',
       productCode: extProduct.productCode || '',
       odooProductId: extProduct.odooProductId || '',
-      brandId: extProduct.brand?.id || '',
-      supplierIds: extProduct.suppliers?.map((s) => s.supplierId || s.supplier?.id || '').filter(Boolean) || [],
+      path: ('slug' in extProduct ? (extProduct as { slug?: string }).slug : undefined) || product.path || '',
+      supplierIds: suppliersData.length > 0 ? suppliersData.map(s => s.supplierId) : [],
+      suppliers: suppliersData,
       minQuantity: product.min?.toString() || '',
       maxQuantity: product.max?.toString() || '',
       enableSlider: ('enableSlider' in product && typeof (product as { enableSlider?: boolean }).enableSlider === 'boolean') 
         ? (product as { enableSlider: boolean }).enableSlider 
         : false,
     });
-    setProductImages(product.images || []);
+    setWizardInitialImages(product.images || []);
     setIsAddDialogOpen(true);
   };
 
   const getStatusBadge = (status: string) => {
     const config = {
-      ACTIVE: { label: 'نشط', className: 'bg-green-500/10 text-green-700 border-green-500/20' },
-      DRAFT: { label: 'مسودة', className: 'bg-gray-500/10 text-gray-700 border-gray-500/20' },
-      ARCHIVED: { label: 'مؤرشف', className: 'bg-red-500/10 text-red-700 border-red-500/20' },
+      ACTIVE: { label: t('dashboard.products.statusBadges.active'), className: 'bg-green-500/10 text-green-700 border-green-500/20' },
+      DRAFT: { label: t('dashboard.products.statusBadges.draft'), className: 'bg-gray-500/10 text-gray-700 border-gray-500/20' },
+      ARCHIVED: { label: t('dashboard.products.statusBadges.archived'), className: 'bg-red-500/10 text-red-700 border-red-500/20' },
     };
     const { label, className } = config[status as keyof typeof config] || config.DRAFT;
     return <Badge variant="outline" className={className}>{label}</Badge>;
@@ -864,9 +891,9 @@ export default function ProductsManager() {
       return <Badge variant="outline" className="bg-red-500/10 text-red-700 border-red-500/20">{t('dashboard.products.depleted')}</Badge>;
     }
     if (stock <= threshold) {
-      return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">منخفض</Badge>;
+      return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 border-yellow-500/20">{t('dashboard.products.statusBadges.low')}</Badge>;
     }
-    return <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">متوفر</Badge>;
+    return <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-500/20">{t('dashboard.products.statusBadges.available')}</Badge>;
   };
 
   // Client-side filtering (search, status, category) - applied after backend pagination
@@ -908,18 +935,18 @@ export default function ProductsManager() {
       const allProductsResponse = await coreApi.getProducts({ limit: 10000 });
       const allProducts = Array.isArray(allProductsResponse) 
         ? allProductsResponse 
-        : (allProductsResponse as { data: Product[] })?.data || [];
-      const allProductIds = allProducts.map((p) => p.id);
+        : (allProductsResponse as unknown as { data: Array<{ id: string }> })?.data || [];
+      const allProductIds = allProducts.map((p: { id: string }) => p.id);
       setSelectedProducts(new Set(allProductIds));
       toast({
-        title: 'تم التحديد',
-        description: `تم تحديد ${allProductIds.length} منتج`,
+        title: t('dashboard.products.messages.selectAllSuccess', { count: allProductIds.length }),
+        description: t('dashboard.products.messages.selectAllSuccess', { count: allProductIds.length }),
       });
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'فشل في تحديد جميع المنتجات';
+      const errorMessage = error instanceof Error ? error.message : t('dashboard.products.messages.selectAllError');
       console.error('Failed to select all products:', error);
       toast({
-        title: 'خطأ',
+        title: t('common.error'),
         description: errorMessage,
         variant: 'destructive',
       });
@@ -1020,14 +1047,14 @@ export default function ProductsManager() {
       writeFile(wb, "products_export.xlsx");
       
       toast({
-        title: 'نجح',
+        title: t('common.success'),
         description: t('dashboard.products.exportSuccess'),
       });
     } catch (error) {
       console.error('Failed to export products:', error);
       toast({
-        title: 'خطأ',
-        description: 'فشل تصدير المنتجات. يرجى المحاولة مرة أخرى.',
+        title: t('common.error'),
+        description: t('dashboard.products.messages.exportErrorDesc'),
         variant: 'destructive',
       });
     }
@@ -1041,8 +1068,8 @@ export default function ProductsManager() {
     // Check if user has a valid tenant/market
     if (!user?.tenantId || user.tenantId === 'default' || user.tenantId === 'system') {
       toast({
-        title: 'خطأ في الإعدادات',
-        description: 'يجب إعداد متجر أولاً قبل استيراد المنتجات. يرجى الانتقال إلى إعدادات المتجر.',
+        title: t('dashboard.products.messages.settingsError'),
+        description: t('dashboard.products.messages.settingsErrorDesc'),
         variant: 'destructive',
       });
       return;
@@ -1055,17 +1082,17 @@ export default function ProductsManager() {
       setImportErrors([]);
       setShowImportErrorDialog(false);
       // Set initial progress to show loading animation
-      setImportProgress({ current: 0, total: 100, currentItem: 'جاري قراءة ملف Excel...' });
+      setImportProgress({ current: 0, total: 100, currentItem: t('dashboard.products.messages.readingFile') });
       
       // Force a re-render to ensure dialog is visible
       await new Promise(resolve => setTimeout(resolve, 200));
       
       const data = await file.arrayBuffer();
-      setImportProgress({ current: 10, total: 100, currentItem: 'جاري تحليل البيانات...' });
+      setImportProgress({ current: 10, total: 100, currentItem: t('dashboard.products.messages.analyzingData') });
       
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      setImportProgress({ current: 20, total: 100, currentItem: 'جاري معالجة البيانات...' });
+      setImportProgress({ current: 20, total: 100, currentItem: t('dashboard.products.messages.processingData') });
       
       // Read ALL rows from Excel - ensure no limit is applied
       const jsonData = utils.sheet_to_json<{
@@ -1136,8 +1163,8 @@ export default function ProductsManager() {
       if (totalItems === 0) {
         setIsImporting(false);
         toast({
-          title: 'خطأ',
-          description: 'لم يتم العثور على أي بيانات في ملف Excel. يرجى التحقق من الملف.',
+          title: t('common.error'),
+          description: t('dashboard.products.messages.noDataError'),
           variant: 'destructive',
         });
         e.target.value = '';
@@ -1148,7 +1175,7 @@ export default function ProductsManager() {
       // PHASE 1: SCAN AND VALIDATE ALL ROWS FIRST
       // ============================================
       console.log('📋 PHASE 1: Scanning and validating all rows...');
-      setImportProgress({ current: 0, total: totalItems, currentItem: `جاري فحص ومراجعة ${totalItems} صف...` });
+      setImportProgress({ current: 0, total: totalItems, currentItem: t('dashboard.products.messages.validatingRows', { count: totalItems }) });
       
       const validationErrors: Array<{ row: number; column: string; productName: string; error: string }> = [];
       interface ExcelRow {
@@ -1225,14 +1252,14 @@ export default function ProductsManager() {
         setImportProgress({ 
           current: i + 1, 
           total: totalItems, 
-          currentItem: `جاري فحص الصف ${rowNum}/${totalItems}...` 
+          currentItem: t('dashboard.products.messages.validatingRow', { current: i + 1, total: totalItems })
         });
         
         // Validate row
         const productId = (row.product_id || '').toString().trim();
         const sku = (row.sku || row.SKU || '').toString().trim();
         const name = (row.Name || '').toString().trim();
-        const productName = name || productId || sku || `الصف ${rowNum}`;
+        const productName = name || productId || sku || `${t('dashboard.products.messages.row')} ${rowNum}`;
         const priceStr = row.price || row.Price;
         
         let hasError = false;
@@ -1243,18 +1270,18 @@ export default function ProductsManager() {
         if (!name && !productId && !sku) {
           hasError = true;
           errorColumn = 'General';
-          errorMessage = 'Name, product_id, or sku is required';
+          errorMessage = t('dashboard.products.messages.nameRequiredImport');
         } else if (!priceStr || (typeof priceStr === 'string' && !priceStr.toString().trim())) {
           hasError = true;
           errorColumn = 'Price';
-          errorMessage = 'Price is required';
+          errorMessage = t('dashboard.products.messages.priceRequiredImport');
         } else {
           // Validate price format
           const price = typeof priceStr === 'string' ? parseFloat(priceStr.toString().replace(/[^\d.-]/g, '')) : priceStr;
           if (isNaN(price) || price < 0) {
             hasError = true;
             errorColumn = 'Price';
-            errorMessage = 'Invalid price format';
+            errorMessage = t('dashboard.products.messages.priceInvalidImport');
           }
         }
         
@@ -1267,7 +1294,7 @@ export default function ProductsManager() {
           if (!category && row.Category.trim()) {
             hasError = true;
             errorColumn = 'Category';
-            errorMessage = `Category "${row.Category}" not found`;
+            errorMessage = t('dashboard.products.messages.categoryNotFound', { category: row.Category });
           }
         }
 
@@ -1281,7 +1308,7 @@ export default function ProductsManager() {
           if (!brand && (row.Brand?.trim() || row.BrandCode?.trim())) {
             hasError = true;
             errorColumn = row.Brand ? 'Brand' : 'BrandCode';
-            errorMessage = `Brand "${row.Brand || row.BrandCode}" not found`;
+            errorMessage = t('dashboard.products.messages.brandNotFound', { brand: row.Brand || row.BrandCode });
           }
         }
         
@@ -1306,7 +1333,7 @@ export default function ProductsManager() {
       
       if (validRows.length > 0) {
         console.log(`🔄 PHASE 2: Uploading ${validRows.length} valid rows...`);
-        setImportProgress({ current: 0, total: validRows.length, currentItem: `جاري رفع ${validRows.length} منتج صالح...` });
+        setImportProgress({ current: 0, total: validRows.length, currentItem: t('dashboard.products.messages.uploadingValid', { count: validRows.length }) });
         
         await new Promise(resolve => setTimeout(resolve, 300));
         
@@ -1477,7 +1504,7 @@ export default function ProductsManager() {
                 variants: Array<{ name: string; price: number; inventoryQuantity: number; sku?: string; compareAtPrice?: number }>;
               }
               const productData: ProductData = {
-                name: name || productId || sku || 'Product',
+                name: name || productId || sku || t('dashboard.products.messages.defaultProductName'),
                 nameAr: cleanString(row.NameAr),
                 description: cleanString(row.Description),
                 descriptionAr: cleanString(row.DescriptionAr),
@@ -1546,7 +1573,7 @@ export default function ProductsManager() {
             } catch (error: unknown) {
               console.error(`❌ Error uploading product at row ${rowNum}:`, error);
               
-              let userFriendlyError = 'حدث خطأ غير معروف';
+              let userFriendlyError = t('dashboard.products.messages.unknownError');
               let errorColumn = 'General';
               
               const errorObj = error as { message?: string; data?: { message?: string | string[] }; response?: { data?: { message?: string | string[]; error?: string } }; status?: number };
@@ -1565,14 +1592,14 @@ export default function ProductsManager() {
               // Handle specific status codes if no specific message was found or to override
               if (errorObj?.status === 403) {
                 importAbortRef.current = true;
-                userFriendlyError = 'يجب إعداد متجر أولاً.';
+                userFriendlyError = t('dashboard.products.messages.storeSetupRequired');
               } else if (errorObj?.status === 404) {
                 if (!responseData?.message) {
-                   userFriendlyError = 'الفئة أو العلامة التجارية غير موجودة.';
+                   userFriendlyError = t('dashboard.products.messages.categoryOrBrandNotFound');
                    errorColumn = 'Category';
                 }
               } else if (errorObj?.status === 409) {
-                 userFriendlyError = 'المنتج موجود بالفعل (تكرار SKU أو الاسم)';
+                 userFriendlyError = t('dashboard.products.messages.productExists');
                  errorColumn = 'SKU';
               }
                 
@@ -1584,7 +1611,7 @@ export default function ProductsManager() {
           setImportProgress({ 
             current: Math.min(i + BATCH_SIZE, validRows.length), 
             total: validRows.length, 
-            currentItem: `تم رفع ${Math.min(i + BATCH_SIZE, validRows.length)} من ${validRows.length} منتج...` 
+            currentItem: t('dashboard.products.messages.uploadingValid', { count: Math.min(i + BATCH_SIZE, validRows.length) })
           });
         }
       }
@@ -1598,8 +1625,8 @@ export default function ProductsManager() {
       if (!importAbortRef.current) {
         const finalTotal = totalItems;
         const completionMessage = allErrors.length > 0 
-          ? `اكتمل الاستيراد! تم استيراد ${successCount} منتج بنجاح، ورفض ${allErrors.length} منتج من إجمالي ${finalTotal}`
-          : `اكتمل الاستيراد! تم استيراد ${successCount} منتج بنجاح من إجمالي ${finalTotal}`;
+          ? t('dashboard.products.messages.importCompleteWithErrors', { success: successCount, errors: allErrors.length, total: finalTotal })
+          : t('dashboard.products.messages.importComplete', { success: successCount, total: finalTotal });
         
         setImportProgress({ 
           current: finalTotal, 
@@ -1634,10 +1661,10 @@ export default function ProductsManager() {
         }
         
         toast({
-          title: successCount > 0 ? 'تم الاستيراد بنجاح' : 'فشل الاستيراد',
+          title: successCount > 0 ? t('dashboard.products.messages.importSuccess') : t('dashboard.products.messages.importFailed'),
           description: allErrors.length > 0 
-            ? `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح، ورفض ${allErrors.length} منتج${allErrors.length !== 1 ? 'ات' : ''}`
-            : `تم استيراد ${successCount} منتج${successCount !== 1 ? 'ات' : ''} بنجاح`,
+            ? t('dashboard.products.messages.importSuccessDescWithErrors', { success: successCount, errors: allErrors.length })
+            : t('dashboard.products.messages.importSuccessDesc', { success: successCount }),
           variant: allErrors.length > successCount ? 'destructive' : successCount > 0 ? 'default' : 'destructive',
           duration: 5000,
         });
@@ -1658,8 +1685,8 @@ export default function ProductsManager() {
       setIsImporting(false);
       setImportProgress({ current: 0, total: 0, currentItem: '' });
       toast({ 
-        title: 'تعذر استيراد المنتجات', 
-        description: error instanceof Error ? error.message : 'حدث خطأ أثناء قراءة ملف الاستيراد. تأكد من صحة تنسيق الملف.', 
+        title: t('dashboard.products.messages.importErrorTitle'), 
+        description: error instanceof Error ? error.message : t('dashboard.products.messages.importErrorDesc'), 
         variant: 'destructive' 
       });
     } finally {
@@ -1671,7 +1698,7 @@ export default function ProductsManager() {
   };
 
     const stats = {
-      total: products.length,
+      total: totalItems,
       active: products.filter((p: Product) => p.status === 'ACTIVE').length,
       lowStock: products.filter((p: Product) => p.stock <= p.lowStockThreshold).length,
       outOfStock: products.filter((p: Product) => p.stock === 0).length,
@@ -1692,7 +1719,16 @@ export default function ProductsManager() {
             onClick={() => navigate('/dashboard/hierarchical')}
           >
             <FolderTree className="h-4 w-4" />
-            المستكشف الهرمي
+            {t('dashboard.products.messages.productsAndCollections')}
+          </Button>
+          <Button 
+            variant="outline"
+            className="gap-2"
+            onClick={() => setIsImportWizardOpen(true)}
+            id="tour-products-import-btn"
+          >
+            <Upload className="h-4 w-4" />
+            {t('dashboard.products.messages.importBtn')}
           </Button>
           <Button 
             className="gap-2" 
@@ -1701,559 +1737,47 @@ export default function ProductsManager() {
               resetForm();
               setIsAddDialogOpen(true);
             }}
+            id="tour-products-add-btn"
           >
             <Plus className="h-4 w-4" />
             {t('dashboard.products.addProduct')}
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 overflow-hidden">
+            <DialogHeader className="px-6 pt-6 pb-2 flex-shrink-0">
               <DialogTitle>{editingProduct ? t('dashboard.products.editProduct') : t('dashboard.products.addNewProduct')}</DialogTitle>
               <DialogDescription>
                 {t('dashboard.products.enterProductDetails')}
               </DialogDescription>
             </DialogHeader>
             
-            <Tabs defaultValue="basic" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="basic">الأساسية</TabsTrigger>
-                <TabsTrigger value="pricing">الأسعار</TabsTrigger>
-                <TabsTrigger value="seo">SEO</TabsTrigger>
-                <TabsTrigger value="advanced">متقدم</TabsTrigger>
-                <TabsTrigger value="settings">الإعدادات</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="basic" className="space-y-4 mt-4">
-                {/* Image Upload Section */}
-                <div>
-                  <Label>صور المنتج</Label>
-                  <div className="mt-2 space-y-3">
-                    {/* Image Preview Grid */}
-                    {productImages.length > 0 && (
-                      <div className="grid grid-cols-4 gap-3">
-                        {productImages.map((image, index) => (
-                          <div key={index} className="relative group">
-                            <img
-                              src={image}
-                              alt={`Product ${index + 1}`}
-                              className="w-full h-24 object-cover rounded-lg border"
-                            />
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="icon"
-                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => removeImage(index)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Upload Buttons */}
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="image-upload"
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => document.getElementById('image-upload')?.click()}
-                        disabled={uploadingImage}
-                        className="flex-1"
-                      >
-                        <ImageIcon className="ml-2 h-4 w-4" />
-                        {uploadingImage ? 'جاري الرفع...' : 'رفع صور'}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('🔵 [BUTTON CLICK] Opening Cloudinary picker dialog');
-                          setShowCloudinaryPicker(true);
-                        }}
-                        className="flex-1"
-                      >
-                        <Cloud className="ml-2 h-4 w-4" />
-                        اختر من Cloudinary
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="name">اسم المنتج (English) *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Product Name"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="nameAr">اسم المنتج (العربية)</Label>
-                    <Input
-                      id="nameAr"
-                      value={formData.nameAr}
-                      onChange={(e) => setFormData({ ...formData, nameAr: e.target.value })}
-                      placeholder="اسم المنتج"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="productId">معرف المنتج (Product ID)</Label>
-                    <Input
-                      id="productId"
-                      value={formData.productId}
-                      onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
-                      placeholder="معرف المنتج (اختياري)"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="productCode">رمز المنتج (Product Code)</Label>
-                    <Input
-                      id="productCode"
-                      value={formData.productCode}
-                      onChange={(e) => setFormData({ ...formData, productCode: e.target.value })}
-                      placeholder="رمز المنتج من المورد (اختياري)"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="odooProductId">معرف Odoo</Label>
-                    <Input
-                      id="odooProductId"
-                      value={formData.odooProductId}
-                      onChange={(e) => setFormData({ ...formData, odooProductId: e.target.value })}
-                      placeholder="معرف Odoo (اختياري)"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="brandId">العلامة التجارية</Label>
-                  <Select 
-                    value={formData.brandId} 
-                    onValueChange={(value) => setFormData({ ...formData, brandId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر العلامة التجارية (اختياري)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {brands.map((brand) => (
-                        <SelectItem key={brand.id} value={brand.id}>
-                          {brand.nameAr || brand.name} {brand.code && `(${brand.code})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="categories">الفئات (يمكن اختيار أكثر من فئة)</Label>
-                  <Select 
-                    value="" 
-                    onValueChange={(value) => {
-                      if (value && !formData.categoryIds.includes(value)) {
-                        setFormData({ ...formData, categoryIds: [...formData.categoryIds, value] });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر فئة لإضافتها" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.filter(cat => !formData.categoryIds.includes(cat.id)).map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.nameAr || category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {formData.categoryIds.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {formData.categoryIds.map((catId) => {
-                        const category = categories.find(c => c.id === catId);
-                        return category ? (
-                          <Badge key={catId} variant="secondary" className="flex items-center gap-1">
-                            {category.nameAr || category.name}
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => setFormData({ ...formData, categoryIds: formData.categoryIds.filter(id => id !== catId) })}
-                            />
-                          </Badge>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="description">الوصف (English)</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Product description..."
-                    rows={3}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="descriptionAr">الوصف (العربية)</Label>
-                  <Textarea
-                    id="descriptionAr"
-                    value={formData.descriptionAr}
-                    onChange={(e) => setFormData({ ...formData, descriptionAr: e.target.value })}
-                    placeholder="وصف المنتج..."
-                    rows={3}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="pricing" className="space-y-4 mt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="price">السعر (ريال) *</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="compareAtPrice">السعر قبل الخصم</Label>
-                    <Input
-                      id="compareAtPrice"
-                      type="number"
-                      step="0.01"
-                      value={formData.compareAtPrice}
-                      onChange={(e) => setFormData({ ...formData, compareAtPrice: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="cost">التكلفة</Label>
-                    <Input
-                      id="cost"
-                      type="number"
-                      step="0.01"
-                      value={formData.cost}
-                      onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sku">رمز المنتج (SKU)</Label>
-                    <Input
-                      id="sku"
-                      value={formData.sku}
-                      onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                      placeholder="SKU-001"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="unitId">الوحدة</Label>
-                  <Select
-                    value={formData.unitId}
-                    onValueChange={(value) => setFormData({ ...formData, unitId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر الوحدة (اختياري)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {units.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.id}>
-                          {unit.nameAr || unit.name} ({unit.code}) - {Number(unit.cost).toFixed(2)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">التكلفة المعروضة بالعملة الأساسية</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="stock">الكمية المتوفرة</Label>
-                    <Input
-                      id="stock"
-                      type="number"
-                      value={formData.stock}
-                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="lowStockThreshold">حد التنبيه</Label>
-                    <Input
-                      id="lowStockThreshold"
-                      type="number"
-                      value={formData.lowStockThreshold}
-                      onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
-                      placeholder="10"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="barcode">الباركود</Label>
-                  <Input
-                    id="barcode"
-                    value={formData.barcode}
-                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                    placeholder="123456789"
-                  />
-                </div>
-
-                {/* Quantity Slider Section for Supplier API Integration */}
-                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="enableSlider" className="text-base font-semibold">
-                        شريط الكمية للشراء (Slider)
-                      </Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        تفعيل شريط اختيار الكمية عند الشراء - جاهز للتكامل مع واجهات الموردين
-                      </p>
-                    </div>
-                    <Switch
-                      id="enableSlider"
-                      checked={formData.enableSlider}
-                      onCheckedChange={(checked) => setFormData({ ...formData, enableSlider: checked })}
-                    />
-                  </div>
-                  
-                  {formData.enableSlider && (
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                      <div>
-                        <Label htmlFor="minQuantity">الحد الأدنى للكمية</Label>
-                        <Input
-                          id="minQuantity"
-                          type="number"
-                          min="1"
-                          value={formData.minQuantity}
-                          onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
-                          placeholder="1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="maxQuantity">الحد الأقصى للكمية</Label>
-                        <Input
-                          id="maxQuantity"
-                          type="number"
-                          min="1"
-                          value={formData.maxQuantity}
-                          onChange={(e) => setFormData({ ...formData, maxQuantity: e.target.value })}
-                          placeholder="100"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="seo" className="space-y-4 mt-4">
-                <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <Globe className="h-5 w-5 text-blue-600" />
-                  <p className="text-sm text-blue-900 dark:text-blue-100">تحسين ظهور المنتج في محركات البحث</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="metaTitle">عنوان SEO</Label>
-                  <Input
-                    id="metaTitle"
-                    value={formData.metaTitle}
-                    onChange={(e) => setFormData({ ...formData, metaTitle: e.target.value })}
-                    placeholder="عنوان المنتج لمحركات البحث"
-                    maxLength={60}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">{formData.metaTitle.length}/60 حرف</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="metaDescription">وصف SEO</Label>
-                  <Textarea
-                    id="metaDescription"
-                    value={formData.metaDescription}
-                    onChange={(e) => setFormData({ ...formData, metaDescription: e.target.value })}
-                    placeholder="وصف المنتج لمحركات البحث"
-                    rows={3}
-                    maxLength={160}
-                  />
-                  <p className="text-xs text-gray-500 mt-1">{formData.metaDescription.length}/160 حرف</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="tags">
-                    <div className="flex items-center gap-2">
-                      <Tag className="h-4 w-4" />
-                      الوسوم (Tags)
-                    </div>
-                  </Label>
-                  <Input
-                    id="tags"
-                    value={formData.tags}
-                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="أدخل الوسوم مفصولة بفاصلة (مثال: إلكترونيات, هواتف, سامسونج)"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">استخدم الفاصلة للفصل بين الوسوم</p>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="advanced" className="space-y-4 mt-4">
-                <div className="flex items-center gap-2 mb-4 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <Settings className="h-5 w-5 text-purple-600" />
-                  <p className="text-sm text-purple-900 dark:text-purple-100">إعدادات متقدمة للمنتج</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="suppliers">الموردين (يمكن اختيار أكثر من مورد)</Label>
-                  <Select 
-                    value="" 
-                    onValueChange={(value) => {
-                      if (value && !formData.supplierIds.includes(value)) {
-                        setFormData({ ...formData, supplierIds: [...formData.supplierIds, value] });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر مورد لإضافته" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {suppliers.filter(sup => !formData.supplierIds.includes(sup.id)).map((supplier) => (
-                        <SelectItem key={supplier.id} value={supplier.id}>
-                          {supplier.nameAr || supplier.name} - خصم: {Number(supplier.discountRate).toFixed(2)}%
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {formData.supplierIds.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {formData.supplierIds.map((supId) => {
-                        const supplier = suppliers.find(s => s.id === supId);
-                        return supplier ? (
-                          <Badge key={supId} variant="secondary" className="flex items-center gap-1">
-                            {supplier.nameAr || supplier.name} ({Number(supplier.discountRate).toFixed(2)}%)
-                            <X 
-                              className="h-3 w-3 cursor-pointer" 
-                              onClick={() => setFormData({ ...formData, supplierIds: formData.supplierIds.filter(id => id !== supId) })}
-                            />
-                          </Badge>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="weight">الوزن (كجم)</Label>
-                    <Input
-                      id="weight"
-                      type="number"
-                      step="0.01"
-                      value={formData.weight}
-                      onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="dimensions">الأبعاد (سم)</Label>
-                    <Input
-                      id="dimensions"
-                      value={formData.dimensions}
-                      onChange={(e) => setFormData({ ...formData, dimensions: e.target.value })}
-                      placeholder="الطول × العرض × الارتفاع"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
-                  <h4 className="font-semibold mb-3 flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    معلومات إضافية
-                  </h4>
-                  <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                    <p>• يمكنك إضافة متغيرات المنتج (الألوان، المقاسات) لاحقاً</p>
-                    <p>• الوزن والأبعاد تساعد في حساب تكلفة الشحن</p>
-                    <p>• الوسوم تحسن من ظهور المنتج في البحث</p>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="settings" className="space-y-4 mt-4">
-                <div>
-                  <Label htmlFor="status">الحالة</Label>
-                  <Select value={formData.status} onValueChange={(value: 'ACTIVE' | 'DRAFT' | 'ARCHIVED') => setFormData({ ...formData, status: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">نشط</SelectItem>
-                      <SelectItem value="DRAFT">مسودة</SelectItem>
-                      <SelectItem value="ARCHIVED">مؤرشف</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <Label>منتج مميز</Label>
-                    <p className="text-sm text-gray-500">عرض هذا المنتج في القسم المميز</p>
-                  </div>
-                  <Switch
-                    checked={formData.featured}
-                    onCheckedChange={(checked) => setFormData({ ...formData, featured: checked })}
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            <DialogFooter className="flex justify-between items-center sm:justify-between">
-              {editingProduct && (
-                <Button variant="outline" asChild className="gap-2">
-                  <Link to={`/products/${editingProduct.id}`} target="_blank">
-                    <Eye className="h-4 w-4" />
-                    {t('dashboard.products.viewInStore')}
-                  </Link>
-                </Button>
-              )}
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  {t('dashboard.products.cancel')}
-                </Button>
-                <Button 
-                  onClick={handleSaveProduct}
-                  disabled={!formData.name?.trim() || !formData.price?.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 0}
-                >
-                  {editingProduct ? t('dashboard.products.update') : t('dashboard.products.add')}
-                </Button>
-              </div>
-            </DialogFooter>
+            <div className="flex-1 min-h-0 flex flex-col px-6 pb-6">
+              <ProductFormWizard
+                initialData={wizardInitialData}
+                initialImages={wizardInitialImages}
+                categories={categories}
+                brands={[]}
+                units={units}
+                suppliers={suppliers}
+                onSave={handleSaveProduct}
+                onCancel={() => setIsAddDialogOpen(false)}
+                isEditing={!!editingProduct}
+              />
+            </div>
           </DialogContent>
         </Dialog>
+
+        <ProductImportWizard
+          open={isImportWizardOpen}
+          onOpenChange={setIsImportWizardOpen}
+          categories={categories}
+          brands={brands}
+          units={units}
+          suppliers={suppliers}
+          onSuccess={() => {
+            loadData();
+          }}
+        />
         </div>
       </div>
 
@@ -2336,7 +1860,7 @@ export default function ProductsManager() {
         <Card>
         <CardHeader className="border-b">
           <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
+            <div className="flex-1 relative" id="tour-products-search">
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder={t('dashboard.products.searchPlaceholder')}
@@ -2379,7 +1903,7 @@ export default function ProductsManager() {
                 disabled={loading}
               >
                 <Package className="h-4 w-4" />
-                تحديد الكل
+                {t('dashboard.products.messages.selectAll')}
               </Button>
               {selectedProducts.size > 0 && (
                 <Button 
@@ -2389,10 +1913,10 @@ export default function ProductsManager() {
                   disabled={isDeleting}
                 >
                   <Trash2 className="h-4 w-4" />
-                  {isDeleting ? 'جاري الحذف...' : `حذف ${selectedProducts.size}`}
+                  {isDeleting ? t('dashboard.products.messages.deleting') : t('dashboard.products.messages.deleteSelected', { count: selectedProducts.size })}
                 </Button>
               )}
-              <Button variant="outline" className="gap-2" onClick={handleExportProducts}>
+              <Button variant="outline" className="gap-2" onClick={handleExportProducts} id="tour-products-export-btn">
                 <Download className="h-4 w-4" />
                 {t('dashboard.products.export')}
               </Button>
@@ -2443,6 +1967,7 @@ export default function ProductsManager() {
                   </TableHead>
                   <TableHead>{t('dashboard.products.product')}</TableHead>
                   <TableHead>SKU</TableHead>
+                  <TableHead>{t('dashboard.products.messages.path')}</TableHead>
                   <TableHead>{t('dashboard.products.price')}</TableHead>
                   <TableHead>{t('dashboard.products.stock')}</TableHead>
                   <TableHead>{t('dashboard.products.status')}</TableHead>
@@ -2489,6 +2014,7 @@ export default function ProductsManager() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm text-gray-600 dark:text-gray-300">{product.sku}</TableCell>
+                    <TableCell className="font-mono text-sm text-gray-600 dark:text-gray-300">{product.path || '-'}</TableCell>
                     <TableCell>
                       <div>
                         <p className="font-bold text-gray-900 dark:text-white">{Number(product.price || 0).toFixed(2)} ريال</p>
@@ -2764,19 +2290,7 @@ export default function ProductsManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Cloudinary Image Picker - Always render, Dialog handles visibility */}
-      <CloudinaryImagePicker
-        open={showCloudinaryPicker}
-        onOpenChange={(open) => {
-          console.log('🔵 CloudinaryImagePicker onOpenChange:', open);
-          setShowCloudinaryPicker(open);
-        }}
-        onSelect={(images) => {
-          console.log('🔵 CloudinaryImagePicker onSelect:', images);
-          handleCloudinarySelect(images);
-        }}
-        multiple={false}
-      />
+
       
       {/* Import Errors Dialog */}
       <Dialog 
@@ -2943,8 +2457,8 @@ export default function ProductsManager() {
             // Only show toast if import was actually running
             if (importProgress.total > 0 && importProgress.current < importProgress.total) {
               toast({
-                title: 'تم إيقاف الاستيراد',
-                description: 'تم إيقاف عملية الاستيراد بنجاح',
+                title: t('dashboard.products.importStopped'),
+                description: t('dashboard.products.importStoppedDesc'),
               });
             }
           } else {
@@ -2953,8 +2467,8 @@ export default function ProductsManager() {
           }
         }}
         progress={importProgress}
-        title="جاري استيراد المنتجات"
-        description="يرجى الانتظار بينما نقوم بمعالجة ورفع المنتجات..."
+        title={t('dashboard.products.importingProducts')}
+        description={t('dashboard.products.importingProductsDesc')}
       />
     </div>
   );

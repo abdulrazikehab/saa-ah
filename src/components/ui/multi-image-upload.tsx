@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { uploadService } from '@/services/upload.service';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, validateImageSignature } from '@/lib/utils';
 
 interface MultiImageUploadProps {
   value?: string[];
@@ -46,25 +46,42 @@ export function MultiImageUpload({ value = [], onChange, className, placeholder 
 
   const uploadFiles = async (files: File[]) => {
     // Validate files
-    const validFiles = files.filter(file => {
+    const validFiles: File[] = [];
+    
+    for (const file of files) {
+      // MIME type check
       if (!file.type.startsWith('image/')) {
         toast({
-          title: 'Invalid file type',
-          description: `${file.name} is not an image`,
+          title: 'نوع الملف غير صالح',
+          description: `الملف ${file.name} ليس صورة`,
           variant: 'destructive',
         });
-        return false;
+        continue;
       }
+
+      // Size check
       if (file.size > 5 * 1024 * 1024) {
         toast({
-          title: 'File too large',
-          description: `${file.name} is larger than 5MB`,
+          title: 'حجم الملف كبير جداً',
+          description: `الملف ${file.name} أكبر من 5 ميجابايت`,
           variant: 'destructive',
         });
-        return false;
+        continue;
       }
-      return true;
-    });
+
+      // Security Check: Validate Image Signature
+      const { isValid, reason } = await validateImageSignature(file);
+      if (!isValid) {
+        toast({
+          title: 'ملف غير آمن',
+          description: `تم رفض الملف ${file.name}: ${reason || 'لأسباب أمنية'}`,
+          variant: 'destructive',
+        });
+        continue;
+      }
+
+      validFiles.push(file);
+    }
 
     if (validFiles.length === 0) return;
 
@@ -75,14 +92,14 @@ export function MultiImageUpload({ value = [], onChange, className, placeholder 
       onChange([...value, ...newUrls]);
       
       toast({
-        title: 'Success',
-        description: `Successfully uploaded ${newUrls.length} images`,
+        title: 'تم بنجاح',
+        description: `تم رفع ${newUrls.length} صورة بنجاح`,
       });
     } catch (error) {
       console.error('Upload failed:', error);
       toast({
-        title: 'Upload failed',
-        description: 'Failed to upload some images. Please try again.',
+        title: 'فشل الرفع',
+        description: 'فشل رفع بعض الصور. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

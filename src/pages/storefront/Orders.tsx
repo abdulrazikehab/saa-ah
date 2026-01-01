@@ -31,14 +31,31 @@ export default function Orders() {
         return;
       }
 
-      // Fetch orders using customer token
-      const ordersData = await apiClient.fetch(`${apiClient.coreUrl}/orders`, {
-        headers: {
-          'Authorization': `Bearer ${customerToken}`,
-        },
-      });
+      // Fetch both types of orders
+      const [regularOrdersResponse, cardOrdersResponse] = await Promise.all([
+        apiClient.fetch(`${apiClient.coreUrl}/orders`, {
+          headers: { 'Authorization': `Bearer ${customerToken}` },
+        }).catch(() => ({ data: [] })),
+        apiClient.fetch(`${apiClient.coreUrl}/card-orders/my-orders`, {
+          headers: { 'Authorization': `Bearer ${customerToken}` },
+        }).catch(() => ({ data: [] })),
+      ]);
       
-      setOrders(Array.isArray(ordersData) ? ordersData : []);
+      // Handle paginated response format { data: [...], meta: {...} } or array
+      const regularOrders = Array.isArray(regularOrdersResponse) 
+        ? regularOrdersResponse 
+        : (regularOrdersResponse?.data || []);
+      const cardOrders = Array.isArray(cardOrdersResponse) 
+        ? cardOrdersResponse 
+        : (cardOrdersResponse?.data || []);
+      
+      // Merge and sort by date
+      const allOrders = [
+        ...regularOrders,
+        ...cardOrders.map((o: any) => ({ ...o, isCardOrder: true })),
+      ].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      setOrders(allOrders);
     } catch (error) {
       console.error('Failed to load orders:', error);
       toast({

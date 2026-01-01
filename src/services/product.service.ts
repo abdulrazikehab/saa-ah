@@ -12,18 +12,37 @@ import type {
 export const productService = {
   // Products
   getProducts: async (params?: ProductQueryParams, requireAuth = false): Promise<Product[] | { data: Product[]; meta: { total: number; page: number; limit: number; totalPages: number } }> => {
-    const url = `${apiClient.coreUrl}/products?${new URLSearchParams(params as Record<string, string>)}`;
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    // Always request categories to be included
+    queryParams.append('includeCategories', 'true');
+    
+    const url = `${apiClient.coreUrl}/products?${queryParams.toString()}`;
+    console.log('🔍 Fetching products from:', url);
+    
     const response = await apiClient.fetch(url, {
       requireAuth,
     });
+    
+    console.log('🔍 Products API response:', response);
+    
     // Backend returns { data: [...], meta: {...} } for paginated or just [...] for non-paginated
     // After central unwrapping, response is already the data object
     if (response && typeof response === 'object' && 'data' in response && 'meta' in response) {
       // Paginated response
+      console.log('🔍 Paginated response:', (response as { data: Product[] }).data.length, 'products');
       return response as { data: Product[]; meta: { total: number; page: number; limit: number; totalPages: number } };
     }
     // Non-paginated response (backward compatibility)
-    return (response as { data: Product[] })?.data || (response as Product[]) || [];
+    const products = (response as { data: Product[] })?.data || (response as Product[]) || [];
+    console.log('🔍 Non-paginated response:', products.length, 'products');
+    return products;
   },
 
   getProduct: async (id: string): Promise<Product> => {
@@ -72,10 +91,10 @@ export const productService = {
   },
 
   // Categories
-  getCategories: async (params?: { page?: number; limit?: number; all?: boolean }): Promise<Category[] | { categories: Category[]; meta: any }> => {
+  getCategories: async (params?: { page?: number; limit?: number; all?: boolean }, requireAuth = true): Promise<Category[] | { categories: Category[]; meta: any }> => {
     const queryString = params ? `?${new URLSearchParams(params as any)}` : '';
     const response = await apiClient.fetch(`${apiClient.coreUrl}/categories${queryString}`, {
-      requireAuth: false, 
+      requireAuth, 
     });
     
     if (response && typeof response === 'object' && 'categories' in response && 'meta' in response) {
@@ -91,7 +110,7 @@ export const productService = {
     });
   },
 
-  createCategory: async (data: CreateCategoryData): Promise<Category> => {
+  createCategory: async (data: CreateCategoryData): Promise<{ message: string; category: Category }> => {
     return apiClient.fetch(`${apiClient.coreUrl}/categories`, {
       method: 'POST',
       body: JSON.stringify(data),

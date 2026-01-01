@@ -10,10 +10,11 @@ import {
   Search,
   Loader2,
   CheckCircle,
-  XCircle,
-  Settings
+  XCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
+import { getAdminApiKeySync } from '@/lib/admin-config';
 
 interface GatewayCredentials {
   secretKey?: string;
@@ -44,11 +45,10 @@ const PROVIDERS = [
   { value: 'NEOLEAP', label: 'Neoleap' }
 ];
 
-import { getAdminApiKeySync } from '@/lib/admin-config';
-
 const ADMIN_API_KEY = getAdminApiKeySync();
 
 export default function PaymentGatewayManager() {
+  const { t } = useTranslation();
   const [gateways, setGateways] = useState<PaymentGateway[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,25 +68,32 @@ export default function PaymentGatewayManager() {
   const loadGateways = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await coreApi.get('/admin/master/payment-gateways', { requireAuth: true, adminApiKey: ADMIN_API_KEY });
+      interface GatewaysResponse {
+        gateways?: PaymentGateway[];
+        data?: {
+          gateways?: PaymentGateway[];
+        };
+      }
+      const response = await coreApi.get('/admin/master/payment-gateways', { requireAuth: true, adminApiKey: ADMIN_API_KEY }) as GatewaysResponse;
       // Handle different response formats - backend returns { gateways: [...] }
-      const gatewaysData = (response as any)?.gateways || (response as any)?.data?.gateways || (Array.isArray(response) ? response : []);
+      const gatewaysData = response?.gateways || response?.data?.gateways || (Array.isArray(response) ? response as unknown as PaymentGateway[] : []);
       // Backend already filters to show only admin-created gateways (tenantId is null), but double-check
       const adminGateways = Array.isArray(gatewaysData) 
-        ? gatewaysData.filter((g: any) => !g.tenantId || g.tenantId === null)
+        ? gatewaysData.filter((g: PaymentGateway & { tenantId?: string | null }) => !g.tenantId || g.tenantId === null)
         : [];
       setGateways(adminGateways);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load payment gateways:', error);
+      const err = error as { message?: string };
       toast({
-        title: 'Error',
-        description: error?.message || 'Failed to load payment gateways',
+        title: t('common.error'),
+        description: err?.message || t('masterDashboard.paymentGateways.loadError'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     loadGateways();
@@ -95,51 +102,52 @@ export default function PaymentGatewayManager() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) {
-      toast({ variant: 'destructive', title: 'Missing name', description: 'Please provide a gateway name.' });
+      toast({ variant: 'destructive', title: t('masterDashboard.paymentGateways.missingName'), description: t('masterDashboard.paymentGateways.missingNameDesc') });
       return;
     }
     if (formData.provider === 'HYPERPAY' && !formData.credentials.entityId) {
-      toast({ variant: 'destructive', title: 'Missing Entity ID', description: 'HyperPay requires Entity ID at minimum.' });
+      toast({ variant: 'destructive', title: t('masterDashboard.paymentGateways.missingEntityId'), description: t('masterDashboard.paymentGateways.missingEntityIdDesc') });
       return;
     }
     if (formData.provider === 'NEOLEAP' && !formData.credentials.clientId) {
-      toast({ variant: 'destructive', title: 'Missing Client ID', description: 'Neoleap requires Client ID.' });
+      toast({ variant: 'destructive', title: t('masterDashboard.paymentGateways.missingClientId'), description: t('masterDashboard.paymentGateways.missingClientIdDesc') });
       return;
     }
 
     try {
       await coreApi.post('/admin/master/payment-gateways', formData, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
-        title: 'Success',
-        description: 'Payment gateway created successfully'
+        title: t('common.success'),
+        description: t('masterDashboard.paymentGateways.createSuccess')
       });
       setShowCreateModal(false);
       resetForm();
       loadGateways();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { message?: string; response?: { data?: { message?: string } } };
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error?.message || error?.response?.data?.message || 'Failed to create gateway'
+        title: t('common.error'),
+        description: err?.message || err?.response?.data?.message || t('masterDashboard.paymentGateways.loadError')
       });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this gateway?')) return;
+    if (!confirm(t('masterDashboard.paymentGateways.deleteConfirm'))) return;
     
     try {
       await coreApi.delete(`/admin/master/payment-gateways/${id}`, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
-        title: 'Success',
-        description: 'Gateway deleted'
+        title: t('common.success'),
+        description: t('masterDashboard.paymentGateways.deleteSuccess')
       });
       loadGateways();
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to delete gateway'
+        title: t('common.error'),
+        description: error.response?.data?.message || t('masterDashboard.paymentGateways.loadError')
       });
     }
   };
@@ -148,15 +156,15 @@ export default function PaymentGatewayManager() {
     try {
       await coreApi.post(`/admin/master/payment-gateways/${id}/toggle`, {}, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
-        title: 'Success',
-        description: 'Gateway status updated'
+        title: t('common.success'),
+        description: t('masterDashboard.paymentGateways.toggleSuccess')
       });
       loadGateways();
     } catch (error: any) {
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to toggle gateway'
+        title: t('common.error'),
+        description: error.response?.data?.message || t('masterDashboard.paymentGateways.loadError')
       });
     }
   };
@@ -165,33 +173,34 @@ export default function PaymentGatewayManager() {
     e.preventDefault();
     if (!editingGateway) return;
     if (!formData.name) {
-      toast({ variant: 'destructive', title: 'Missing name', description: 'Please provide a gateway name.' });
+      toast({ variant: 'destructive', title: t('masterDashboard.paymentGateways.missingName'), description: t('masterDashboard.paymentGateways.missingNameDesc') });
       return;
     }
     if (formData.provider === 'HYPERPAY' && !formData.credentials.entityId) {
-      toast({ variant: 'destructive', title: 'Missing Entity ID', description: 'HyperPay requires Entity ID at minimum.' });
+      toast({ variant: 'destructive', title: t('masterDashboard.paymentGateways.missingEntityId'), description: t('masterDashboard.paymentGateways.missingEntityIdDesc') });
       return;
     }
     if (formData.provider === 'NEOLEAP' && !formData.credentials.clientId) {
-      toast({ variant: 'destructive', title: 'Missing Client ID', description: 'Neoleap requires Client ID.' });
+      toast({ variant: 'destructive', title: t('masterDashboard.paymentGateways.missingClientId'), description: t('masterDashboard.paymentGateways.missingClientIdDesc') });
       return;
     }
     
     try {
       await coreApi.put(`/admin/master/payment-gateways/${editingGateway.id}`, formData, { requireAuth: true, adminApiKey: ADMIN_API_KEY });
       toast({
-        title: 'Success',
-        description: 'Payment gateway updated successfully'
+        title: t('common.success'),
+        description: t('masterDashboard.paymentGateways.updateSuccess')
       });
       setShowCreateModal(false);
       setEditingGateway(null);
       resetForm();
       loadGateways();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { message?: string; response?: { data?: { message?: string } } };
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error?.message || error?.response?.data?.message || 'Failed to update gateway'
+        title: t('common.error'),
+        description: err?.message || err?.response?.data?.message || t('masterDashboard.paymentGateways.loadError')
       });
     }
   };
@@ -217,15 +226,15 @@ export default function PaymentGatewayManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Payment Gateway Management</h2>
-          <p className="text-gray-400">Configure and manage payment gateways</p>
+          <h2 className="text-3xl font-bold text-white mb-2">{t('masterDashboard.paymentGateways.title')}</h2>
+          <p className="text-gray-400">{t('masterDashboard.paymentGateways.subtitle')}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Add Gateway
+          {t('masterDashboard.paymentGateways.addGateway')}
         </button>
       </div>
 
@@ -234,7 +243,7 @@ export default function PaymentGatewayManager() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <input
           type="text"
-          placeholder="Search gateways..."
+          placeholder={t('masterDashboard.paymentGateways.searchPlaceholder')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-green-500"
@@ -285,7 +294,7 @@ export default function PaymentGatewayManager() {
                     setFormData({
                       name: gateway.name,
                       provider: gateway.provider,
-                      tenantId: (gateway as any).tenantId || null,
+                      tenantId: (gateway as PaymentGateway & { tenantId?: string | null }).tenantId || null,
                       credentials: gateway.credentials || {},
                       settings: gateway.settings || {},
                       isActive: gateway.isActive
@@ -295,7 +304,7 @@ export default function PaymentGatewayManager() {
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
                 >
                   <Edit className="w-4 h-4" />
-                  Edit
+                  {t('masterDashboard.paymentGateways.edit')}
                 </button>
                 <button
                   onClick={() => handleToggle(gateway.id)}
@@ -308,12 +317,12 @@ export default function PaymentGatewayManager() {
                   {gateway.isActive ? (
                     <>
                       <PowerOff className="w-4 h-4" />
-                      Disable
+                      {t('masterDashboard.paymentGateways.disable')}
                     </>
                   ) : (
                     <>
                       <Power className="w-4 h-4" />
-                      Enable
+                      {t('masterDashboard.paymentGateways.enable')}
                     </>
                   )}
                 </button>
@@ -328,7 +337,7 @@ export default function PaymentGatewayManager() {
           ))}
           {filteredGateways.length === 0 && (
             <div className="col-span-full p-8 text-center text-gray-400">
-              No payment gateways found
+              {t('masterDashboard.paymentGateways.noGateways')}
             </div>
           )}
         </div>
@@ -339,12 +348,12 @@ export default function PaymentGatewayManager() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white mb-6">
-              {editingGateway ? 'Edit Gateway' : 'Add New Gateway'}
+              {editingGateway ? t('masterDashboard.paymentGateways.modal.editTitle') : t('masterDashboard.paymentGateways.modal.addTitle')}
             </h3>
             <form onSubmit={editingGateway ? handleUpdate : handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Gateway Name
+                  {t('masterDashboard.paymentGateways.modal.gatewayName')}
                 </label>
                 <input
                   type="text"
@@ -357,7 +366,7 @@ export default function PaymentGatewayManager() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Provider
+                  {t('masterDashboard.paymentGateways.modal.provider')}
                 </label>
                 <select
                   value={formData.provider}
@@ -373,13 +382,13 @@ export default function PaymentGatewayManager() {
 
               {/* Dynamic Credentials Fields based on Provider */}
               <div className="space-y-4 border-t border-slate-800 pt-4 mt-4">
-                <h4 className="text-sm font-medium text-white">Credentials</h4>
+                <h4 className="text-sm font-medium text-white">{t('masterDashboard.paymentGateways.modal.credentials')}</h4>
                 
                 {formData.provider === 'STRIPE' && (
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Secret Key
+                        {t('masterDashboard.paymentGateways.modal.secretKey')}
                       </label>
                       <input
                         type="password"
@@ -393,7 +402,7 @@ export default function PaymentGatewayManager() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Publishable Key
+                        {t('masterDashboard.paymentGateways.modal.publishableKey')}
                       </label>
                       <input
                         type="text"
@@ -412,7 +421,7 @@ export default function PaymentGatewayManager() {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Client ID
+                        {t('masterDashboard.paymentGateways.modal.clientId')}
                       </label>
                       <input
                         type="text"
@@ -426,7 +435,7 @@ export default function PaymentGatewayManager() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Client Secret
+                        {t('masterDashboard.paymentGateways.modal.clientSecret')}
                       </label>
                       <input
                         type="password"
@@ -445,7 +454,7 @@ export default function PaymentGatewayManager() {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Entity ID
+                        {t('masterDashboard.paymentGateways.modal.entityId')}
                       </label>
                       <input
                         type="text"
@@ -459,7 +468,7 @@ export default function PaymentGatewayManager() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Access Token
+                        {t('masterDashboard.paymentGateways.modal.accessToken')}
                       </label>
                       <input
                         type="password"
@@ -485,13 +494,13 @@ export default function PaymentGatewayManager() {
                   }}
                   className="flex-1 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors"
                 >
-                  Cancel
+                  {t('masterDashboard.paymentGateways.modal.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
-                  {editingGateway ? 'Update Gateway' : 'Add Gateway'}
+                  {editingGateway ? t('masterDashboard.paymentGateways.modal.update') : t('masterDashboard.paymentGateways.modal.add')}
                 </button>
               </div>
             </form>

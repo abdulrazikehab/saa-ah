@@ -11,6 +11,9 @@ interface User {
   tenantName?: string;
   tenantLogo?: string | null;
   tenantSubdomain?: string;
+  mustChangePassword?: boolean;
+  permissions?: string[]; // Staff permissions array
+  employerEmail?: string;
 }
 
 interface SignUpResponse {
@@ -25,7 +28,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAuthenticated: boolean;
-  login: (identifier: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<boolean>; // Returns true if password change required
   loginWithTokens: (accessToken: string, refreshToken: string) => Promise<void>;
   signup: (email: string, password: string, storeName: string, subdomain: string) => Promise<void>;
   logout: () => void;
@@ -37,8 +40,20 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  // If we have a user from localStorage, we're not "loading" in the blocking sense
+  // We still verify in background, but we can show the app immediately
+  const [loading, setLoading] = useState(() => {
+    const storedUser = localStorage.getItem('user');
+    return !storedUser;
+  });
 
   useEffect(() => {
     checkAuth();
@@ -74,12 +89,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {
         // ignore storage errors
       }
-    } catch (error) {
-      // On auth failure, clear all local auth state
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      setUser(null);
+    } catch (error: any) {
+      // On auth failure, clear all local auth state ONLY if it's a 401 Unauthorized
+      // For other errors (network, 500), keep the user logged in (optimistic) or handle gracefully
+      if (error?.status === 401) {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        setUser(null);
+      } else {
+        console.error('checkAuth failed with non-401 error:', error);
+        // Optionally keep the user logged in if we have data in localStorage
+        // This prevents logout on network errors
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            setUser(JSON.parse(storedUser));
+          } catch (e) {
+            // If parse fails, then maybe we should logout
+          }
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -108,10 +138,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantName: data.tenantName,
       tenantSubdomain: data.tenantSubdomain,
       avatar: data.avatar,
+      mustChangePassword: (data as any).mustChangePassword || false,
+      permissions: (data as any).permissions,
+      employerEmail: (data as any).employerEmail,
     };
 
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
+    
+    // Return mustChangePassword flag so login component can redirect
+    return (data as any).mustChangePassword || false;
   };
 
   const loginWithTokens = async (accessToken: string, refreshToken: string) => {

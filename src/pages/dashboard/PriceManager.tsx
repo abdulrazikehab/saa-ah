@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Filter, Edit2, Save, X, DollarSign, TrendingUp, TrendingDown, Package, Loader2, Download, Upload, RefreshCw, Plus, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Edit2, Save, X, DollarSign, TrendingUp, TrendingDown, Package, Loader2, Download, Upload, RefreshCw, Plus, Minus, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -8,8 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface Product {
@@ -32,8 +34,25 @@ interface PriceUpdate {
   costPerItem?: number;
 }
 
+interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+interface CustomerTier {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  discountPercent: number;
+}
+
 export default function PriceManager() {
   const { toast } = useToast();
+  const { i18n } = useTranslation();
+  const isRTL = i18n.language === 'ar';
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([]);
@@ -61,12 +80,52 @@ export default function PriceManager() {
   const [bulkUpdateValue, setBulkUpdateValue] = useState('');
   const [bulkUpdateDirection, setBulkUpdateDirection] = useState<'increase' | 'decrease'>('increase');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  
+  // Customer and tier selection for pricing
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerTiers, setCustomerTiers] = useState<CustomerTier[]>([]);
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
+  const [selectedTier, setSelectedTier] = useState<string>('');
+  const [applyToCustomers, setApplyToCustomers] = useState(false);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  
+  // Quick price adjustment
+  const [quickAdjustValue, setQuickAdjustValue] = useState('10');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  const loadCustomers = useCallback(async () => {
+    try {
+      setCustomersLoading(true);
+      const data = await coreApi.get('/customers', { requireAuth: true }) as Customer[] | {customers: Customer[]};
+      setCustomers(Array.isArray(data) ? data : (data.customers || []));
+    } catch (error) {
+      console.error('Failed to load customers:', error);
+      setCustomers([]);
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, []);
+
+  const loadCustomerTiers = useCallback(async () => {
+    try {
+      // Load customer tiers from CategoriesManager or create default ones
+      // For now, we'll use a simple approach - you can extend this to fetch from API
+      const defaultTiers: CustomerTier[] = [
+        { id: '1', name: 'VIP Tier', description: 'VIP customers', color: '#FFD700', discountPercent: 15 },
+        { id: '2', name: 'Gold Tier', description: 'Gold customers', color: '#C0C0C0', discountPercent: 10 },
+        { id: '3', name: 'Regular Tier', description: 'Regular customers', color: '#CD7F32', discountPercent: 5 },
+      ];
+      setCustomerTiers(defaultTiers);
+    } catch (error) {
+      console.error('Failed to load customer tiers:', error);
+      setCustomerTiers([]);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -127,7 +186,9 @@ export default function PriceManager() {
   // Load data on mount and when pagination changes
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadCustomers();
+    loadCustomerTiers();
+  }, [loadData, loadCustomers, loadCustomerTiers]);
 
   // Filter products
   const filteredProducts = useMemo(() => {
@@ -184,6 +245,40 @@ export default function PriceManager() {
   const handleCancelEdit = () => {
     setEditingProductId(null);
     setEditingPrice({ price: '', compareAtPrice: '', costPerItem: '' });
+  };
+
+  const handleQuickPriceAdjust = async (productId: string, direction: 'increase' | 'decrease') => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    const adjustValue = parseFloat(quickAdjustValue) || 10;
+    let newPrice = product.price;
+
+    if (direction === 'increase') {
+      newPrice = product.price + adjustValue;
+    } else {
+      newPrice = Math.max(0, product.price - adjustValue);
+    }
+
+    try {
+      setSaving(true);
+      const encodedId = encodeURIComponent(productId);
+      await coreApi.updateProduct(encodedId, { price: newPrice });
+      await loadData();
+      toast({
+        title: 'نجح',
+        description: `تم ${direction === 'increase' ? 'زيادة' : 'تخفيض'} السعر بنجاح`,
+      });
+    } catch (error) {
+      console.error('Failed to adjust price:', error);
+      toast({
+        title: 'تعذر تحديث السعر',
+        description: 'حدث خطأ أثناء تحديث السعر',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveEdit = async (productId: string) => {
@@ -246,6 +341,15 @@ export default function PriceManager() {
       return;
     }
 
+    if (applyToCustomers && selectedCustomers.length === 0 && !selectedTier) {
+      toast({
+        title: 'اختيار مطلوب',
+        description: 'يرجى اختيار العملاء أو فئة العملاء لتطبيق السعر',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const value = parseFloat(bulkUpdateValue);
@@ -285,11 +389,29 @@ export default function PriceManager() {
           batch.map(update => {
             // Properly encode product ID to handle special characters
             const encodedId = encodeURIComponent(update.productId);
-            return coreApi.updateProduct(encodedId, {
+            const updateData: any = {
               price: update.price,
               compareAtPrice: update.compareAtPrice,
               costPerItem: update.costPerItem,
-            });
+            };
+
+            // Add customer/tier specific pricing metadata if applicable
+            if (applyToCustomers) {
+              if (selectedTier) {
+                updateData.customerTierPricing = {
+                  tierId: selectedTier,
+                  price: update.price,
+                };
+              }
+              if (selectedCustomers.length > 0) {
+                updateData.customerSpecificPricing = selectedCustomers.map(customerId => ({
+                  customerId,
+                  price: update.price,
+                }));
+              }
+            }
+
+            return coreApi.updateProduct(encodedId, updateData);
           })
         );
       }
@@ -297,15 +419,24 @@ export default function PriceManager() {
       // Reload data
       await loadData();
       
+      const customerInfo = applyToCustomers 
+        ? (selectedTier 
+            ? ` لفئة ${customerTiers.find(t => t.id === selectedTier)?.name || 'العملاء'}`
+            : ` لـ ${selectedCustomers.length} عميل`)
+        : '';
+      
       toast({
         title: 'نجح',
-        description: `تم تحديث ${updates.length} منتج بنجاح`,
+        description: `تم تحديث ${updates.length} منتج بنجاح${customerInfo}`,
       });
 
       setBulkUpdateDialogOpen(false);
       setBulkUpdateValue('');
       setBulkUpdateDirection('increase');
       setSelectedProducts(new Set());
+      setApplyToCustomers(false);
+      setSelectedCustomers([]);
+      setSelectedTier('');
     } catch (error) {
       console.error('Failed to bulk update:', error);
       toast({
@@ -346,11 +477,17 @@ export default function PriceManager() {
           <p className="text-muted-foreground text-lg">إدارة وتحديث أسعار جميع المنتجات بسهولة وسرعة</p>
         </div>
         <div className="flex gap-2">
+     
           <Button variant="outline" onClick={loadData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ml-2 ${loading ? 'animate-spin' : ''}`} />
             تحديث
           </Button>
-          <Button onClick={() => setBulkUpdateDialogOpen(true)}>
+          <Button onClick={() => {
+            setBulkUpdateDialogOpen(true);
+            if (applyToCustomers) {
+              loadCustomers();
+            }
+          }}>
             <TrendingUp className="h-4 w-4 ml-2" />
             تحديث جماعي
           </Button>
@@ -496,101 +633,76 @@ export default function PriceManager() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" dir={isRTL ? 'rtl' : 'ltr'}>
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold text-center">الإجراءات</TableHead>
+                    <TableHead className="font-semibold text-right">التكلفة</TableHead>
+                    <TableHead className="font-semibold text-right">سعر المقارنة</TableHead>
+                    <TableHead className="font-semibold text-right">السعر الحالي</TableHead>
+                    <TableHead className="font-semibold text-right">العلامة التجارية</TableHead>
+                    <TableHead className="font-semibold text-right">الفئة</TableHead>
+                    <TableHead className="font-semibold text-right">SKU</TableHead>
+                    <TableHead className="font-semibold text-right">المنتج</TableHead>
                     <TableHead className="w-12">
                       <input
                         type="checkbox"
                         checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
                         onChange={selectAll}
-                        className="rounded"
+                        className="rounded cursor-pointer"
                       />
                     </TableHead>
-                    <TableHead>المنتج</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>الفئة</TableHead>
-                    <TableHead>العلامة التجارية</TableHead>
-                    <TableHead>السعر الحالي</TableHead>
-                    <TableHead>سعر المقارنة</TableHead>
-                    <TableHead>التكلفة</TableHead>
-                    <TableHead>الإجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProducts.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={selectedProducts.has(product.id)}
-                          onChange={() => toggleProductSelection(product.id)}
-                          className="rounded"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{product.name}</p>
-                          {product.nameAr && (
-                            <p className="text-sm text-muted-foreground">{product.nameAr}</p>
+                    <TableRow key={product.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="py-4">
+                        <div className="flex items-center justify-center">
+                          {editingProductId === product.id ? (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleSaveEdit(product.id)}
+                                disabled={saving}
+                                className="h-8"
+                              >
+                                <Save className="h-4 w-4 ml-1" />
+                                حفظ
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleCancelEdit}
+                                disabled={saving}
+                                className="h-8 w-8 p-0"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleStartEdit(product)}
+                              className="h-8"
+                            >
+                              <Edit2 className="h-4 w-4 ml-1" />
+                              تعديل
+                            </Button>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {product.sku || '-'}
-                      </TableCell>
-                      <TableCell>
-                        {product.category ? (
-                          <Badge variant="outline">{product.category.name}</Badge>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {product.brand ? (
-                          <Badge variant="secondary">{product.brand.name}</Badge>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingProductId === product.id ? (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={editingPrice.price}
-                            onChange={(e) => setEditingPrice({ ...editingPrice, price: e.target.value })}
-                            className="w-24"
-                          />
-                        ) : (
-                          <span className="font-semibold text-lg">{product.price.toFixed(2)} ر.س</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editingProductId === product.id ? (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={editingPrice.compareAtPrice}
-                            onChange={(e) => setEditingPrice({ ...editingPrice, compareAtPrice: e.target.value })}
-                            className="w-24"
-                            placeholder="اختياري"
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {product.compareAtPrice ? `${product.compareAtPrice.toFixed(2)} ر.س` : '-'}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4 text-right">
                         {editingProductId === product.id ? (
                           <Input
                             type="number"
                             step="0.01"
                             value={editingPrice.costPerItem}
                             onChange={(e) => setEditingPrice({ ...editingPrice, costPerItem: e.target.value })}
-                            className="w-24"
+                            className="w-28 text-right"
                             placeholder="اختياري"
                           />
                         ) : (
@@ -599,37 +711,75 @@ export default function PriceManager() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-4 text-right">
                         {editingProductId === product.id ? (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleSaveEdit(product.id)}
-                              disabled={saving}
-                            >
-                              <Save className="h-4 w-4 ml-1" />
-                              حفظ
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={handleCancelEdit}
-                              disabled={saving}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editingPrice.compareAtPrice}
+                            onChange={(e) => setEditingPrice({ ...editingPrice, compareAtPrice: e.target.value })}
+                            className="w-28 text-right"
+                            placeholder="اختياري"
+                          />
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleStartEdit(product)}
-                          >
-                            <Edit2 className="h-4 w-4 ml-1" />
-                            تعديل
-                          </Button>
+                          <span className="text-muted-foreground">
+                            {product.compareAtPrice ? `${product.compareAtPrice.toFixed(2)} ر.س` : '-'}
+                          </span>
                         )}
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
+                        {editingProductId === product.id ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editingPrice.price}
+                            onChange={(e) => setEditingPrice({ ...editingPrice, price: e.target.value })}
+                            className="w-28 text-right"
+                          />
+                        ) : (
+                          <span className="font-semibold text-lg text-primary">
+                            {product.price.toFixed(2)} ر.س
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
+                        {product.brand ? (
+                          <Badge variant="secondary" className="font-normal">
+                            {product.brand.name}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
+                        {product.category ? (
+                          <Badge variant="outline" className="font-normal">
+                            {product.category.name}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
+                        <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
+                          {product.sku || '-'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-4 text-right">
+                        <div className="space-y-1">
+                          <p className="font-medium">{product.name || '-'}</p>
+                          {product.nameAr && (
+                            <p className="text-sm text-muted-foreground">{product.nameAr}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.has(product.id)}
+                          onChange={() => toggleProductSelection(product.id)}
+                          className="rounded cursor-pointer"
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -657,7 +807,7 @@ export default function PriceManager() {
 
       {/* Bulk Update Dialog */}
       <Dialog open={bulkUpdateDialogOpen} onOpenChange={setBulkUpdateDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>تحديث جماعي للأسعار</DialogTitle>
             <DialogDescription>
@@ -756,9 +906,97 @@ export default function PriceManager() {
                 </p>
               )}
             </div>
+
+            {/* Customer/Tier Selection */}
+            <div className="grid gap-2 border-t pt-4">
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <Checkbox
+                  id="applyToCustomers"
+                  checked={applyToCustomers}
+                  onCheckedChange={(checked) => {
+                    setApplyToCustomers(checked as boolean);
+                    if (!checked) {
+                      setSelectedCustomers([]);
+                      setSelectedTier('');
+                    }
+                  }}
+                />
+                <Label htmlFor="applyToCustomers" className="cursor-pointer">
+                  تطبيق السعر على عملاء محددين أو فئة عملاء
+                </Label>
+              </div>
+
+              {applyToCustomers && (
+                <div className="grid gap-4 pr-6 mt-2">
+                  <div className="grid gap-2">
+                    <Label>فئة العملاء (اختياري)</Label>
+                    <Select value={selectedTier} onValueChange={setSelectedTier}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر فئة العملاء" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">لا شيء</SelectItem>
+                        {customerTiers.map(tier => (
+                          <SelectItem key={tier.id} value={tier.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: tier.color }}
+                              />
+                              {tier.name} ({tier.discountPercent}%)
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>العملاء المحددون (اختياري)</Label>
+                    {customersLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        <span className="text-sm text-muted-foreground mr-2">جاري تحميل العملاء...</span>
+                      </div>
+                    ) : customers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">لا يوجد عملاء متاحون</p>
+                    ) : (
+                      <div className="max-h-40 overflow-y-auto border rounded-md p-2">
+                        {customers.map(customer => (
+                          <div key={customer.id} className="flex items-center space-x-2 space-x-reverse py-1">
+                            <Checkbox
+                              id={`customer-${customer.id}`}
+                              checked={selectedCustomers.includes(customer.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedCustomers([...selectedCustomers, customer.id]);
+                                } else {
+                                  setSelectedCustomers(selectedCustomers.filter(id => id !== customer.id));
+                                }
+                              }}
+                            />
+                            <Label 
+                              htmlFor={`customer-${customer.id}`} 
+                              className="cursor-pointer flex-1 text-sm"
+                            >
+                              {customer.name || customer.email} {customer.email && customer.name && `(${customer.email})`}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkUpdateDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setBulkUpdateDialogOpen(false);
+              setApplyToCustomers(false);
+              setSelectedCustomers([]);
+              setSelectedTier('');
+            }}>
               إلغاء
             </Button>
             <Button onClick={handleBulkUpdate} disabled={saving || !bulkUpdateValue}>

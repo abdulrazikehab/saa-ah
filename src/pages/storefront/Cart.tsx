@@ -20,86 +20,46 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { useCart } from '@/contexts/CartContext';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
+import { StorefrontLoading } from '@/components/storefront/StorefrontLoading';
+
+import { CartItem } from '@/services/types';
 
 export default function Cart() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const { cart, loading, updateQuantity, removeItem, refreshCart } = useCart();
+  const { settings } = useStoreSettings();
   const [couponCode, setCouponCode] = useState('');
-
-  console.log('🛒 Cart Page: Component rendered');
-  console.log('🛒 Cart Page: Current cart state:', cart);
-  console.log('🛒 Cart Page: Cart type:', typeof cart);
-  console.log('🛒 Cart Page: Cart is null?', cart === null);
-  console.log('🛒 Cart Page: Cart keys:', cart && typeof cart === 'object' ? Object.keys(cart) : 'N/A');
-  
-  const cartItemsArray = (cart as any)?.cartItems || (cart as any)?.items || [];
-  console.log('🛒 Cart Page: Cart items array:', cartItemsArray);
-  console.log('🛒 Cart Page: Cart items length:', cartItemsArray.length);
-  console.log('🛒 Cart Page: Cart items is array?', Array.isArray(cartItemsArray));
-  
-  // Force re-render check
-  useEffect(() => {
-    console.log('🛒 Cart Page: Cart changed, items:', cartItemsArray.length);
-  }, [cart]);
 
   const applyCoupon = () => {
     if (!couponCode) return;
     toast({
-      title: 'كود الخصم',
-      description: 'تم تطبيق كود الخصم بنجاح',
+      title: t('cart.couponCode', 'Coupon Code'),
+      description: t('cart.couponApplied', 'Coupon code applied successfully'),
     });
   };
 
-  // Debug function to manually test cart API
-  const debugCart = async () => {
-    console.log('🔍 DEBUG: Manual cart fetch test');
-    try {
-      await refreshCart();
-      console.log('🔍 DEBUG: Cart refreshed manually');
-      toast({
-        title: 'Debug',
-        description: 'Cart refreshed. Check console for details.',
-      });
-    } catch (error) {
-      console.error('🔍 DEBUG: Error refreshing cart:', error);
-      toast({
-        title: 'Debug Error',
-        description: 'Failed to refresh cart. Check console.',
-        variant: 'destructive',
-      });
-    }
-  };
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
-        </div>
-      </div>
-    );
+    return <StorefrontLoading />;
   }
 
   // Get cart items - ensure it's always an array
-  const cartItems = Array.isArray((cart as any)?.cartItems) 
-    ? (cart as any).cartItems 
-    : Array.isArray((cart as any)?.items) 
-      ? (cart as any).items 
+  const cartItems: CartItem[] = Array.isArray(cart?.cartItems) 
+    ? cart!.cartItems! 
+    : Array.isArray(cart?.items) 
+      ? cart!.items 
       : [];
   
   // Filter out invalid items and ensure all items have product data
-  const validCartItems = cartItems.filter((item: any) => {
+  const validCartItems = cartItems.filter((item: CartItem) => {
     if (!item || !item.id) {
-      console.warn('🛒 Cart Page: Invalid cart item (missing id):', item);
       return false;
     }
     // Only show items with valid product data
     if (!item.product) {
-      console.warn('🛒 Cart Page: Cart item missing product data:', item.id, item.productId);
       // Try to refresh cart to reload product data
       if (item.productId) {
-        console.log('🛒 Cart Page: Attempting to refresh cart to reload product data');
         setTimeout(() => refreshCart(), 1000);
       }
       return false;
@@ -107,28 +67,29 @@ export default function Cart() {
     return true;
   });
   
-  // Debug: Log everything about the cart
-  console.log('🛒 Cart Page: ========== CART DEBUG ==========');
-  console.log('🛒 Cart Page: cart object:', cart);
-  console.log('🛒 Cart Page: cart type:', typeof cart);
-  console.log('🛒 Cart Page: cart is null?', cart === null);
-  console.log('🛒 Cart Page: cart keys:', cart && typeof cart === 'object' ? Object.keys(cart) : 'N/A');
-  console.log('🛒 Cart Page: cart.cartItems:', (cart as any)?.cartItems);
-  console.log('🛒 Cart Page: cart.items:', (cart as any)?.items);
-  console.log('🛒 Cart Page: cartItems array (raw):', cartItems);
-  console.log('🛒 Cart Page: cartItems.length (raw):', cartItems.length);
-  console.log('🛒 Cart Page: validCartItems array:', validCartItems);
-  console.log('🛒 Cart Page: validCartItems.length:', validCartItems.length);
-  console.log('🛒 Cart Page: cartItems is array?', Array.isArray(cartItems));
-  console.log('🛒 Cart Page: =================================');
-  
   const isEmpty = !validCartItems || validCartItems.length === 0;
-  const subtotal = validCartItems.reduce((sum: number, item: any) => {
-    const price = item.productVariant?.price ?? item.product?.price ?? 0;
-    return sum + Number(price) * item.quantity;
+  const subtotal = validCartItems.reduce((sum: number, item: CartItem) => {
+    // Priority: 1. unitPriceSnapshot 2. productVariant 3. retailPrice 4. wholesalePrice 5. product.price
+    const price = 
+      item.unitPriceSnapshot ??
+      item.productVariant?.price ?? 
+      item.product?.retailPrice ?? 
+      item.product?.wholesalePrice ?? 
+      item.product?.price ?? 
+      0;
+    return sum + Number(price) * (item.quantity || 1);
   }, 0) ?? 0;
-  const shipping = subtotal > 200 ? 0 : 25;
-  const total = subtotal + shipping;
+  
+  // Respect settings for shipping and tax
+  const isShippingEnabled = settings?.shippingEnabled === true && settings?.storeType !== 'DIGITAL_CARDS';
+  const shipping = isShippingEnabled ? (subtotal > 200 ? 0 : 25) : 0;
+  
+  // Tax calculation (if enabled)
+  const isTaxEnabled = settings?.taxEnabled !== false;
+  const taxRate = settings?.taxRate ?? 15; // Use tax rate from settings, default to 15%
+  const taxAmount = isTaxEnabled ? (subtotal * taxRate / 100) : 0;
+  
+  const total = subtotal + shipping + taxAmount;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -136,11 +97,11 @@ export default function Cart() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            سلة التسوق
+            {t('nav.cart', 'Shopping Cart')}
           </h1>
           {!isEmpty && (
             <p className="text-gray-600 dark:text-gray-400 text-lg">
-              لديك {validCartItems.length} {validCartItems.length === 1 ? 'منتج' : 'منتجات'} في سلتك
+              {t('cart.itemsCount', { count: validCartItems.length })}
             </p>
           )}
         </div>
@@ -148,14 +109,14 @@ export default function Cart() {
         {isEmpty ? (
           <Card className="p-16 text-center border-0 shadow-lg">
             <ShoppingBag className="h-24 w-24 mx-auto text-gray-400 mb-6" />
-            <h2 className="text-3xl font-bold mb-4">سلة التسوق فارغة</h2>
+            <h2 className="text-3xl font-bold mb-4">{t('cart.emptyTitle', 'Your cart is empty')}</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-8 text-lg max-w-md mx-auto">
-              ابدأ التسوق الآن واكتشف منتجاتنا المميزة
+              {t('cart.emptyDesc', 'Start shopping now and discover our amazing products')}
             </p>
                 <div className="flex gap-4 justify-center">
                   <Link to="/products">
                     <Button size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-8">
-                      تصفح المنتجات
+                      {t('cart.browseProducts', 'Browse Products')}
                       <ArrowRight className="mr-2 h-5 w-5" />
                     </Button>
                   </Link>
@@ -295,10 +256,10 @@ export default function Cart() {
                           {/* Price */}
                           <div className="text-left">
                             <p className="font-bold text-2xl text-indigo-600">
-                              {(productPrice * quantity).toFixed(2)} ر.س
+                              {(productPrice * quantity).toFixed(2)} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}
                             </p>
                             <p className="text-sm text-gray-500">
-                              {productPrice.toFixed(2)} ر.س × {quantity}
+                              {productPrice.toFixed(2)} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')} × {quantity}
                             </p>
                           </div>
                         </div>
@@ -313,7 +274,7 @@ export default function Cart() {
               <Link to="/products">
                 <Button variant="outline" size="lg" className="w-full border-2">
                   <ShoppingCart className="ml-2 h-5 w-5" />
-                  متابعة التسوق
+                  {t('cart.continueShopping', 'Continue Shopping')}
                 </Button>
               </Link>
             </div>
@@ -322,22 +283,22 @@ export default function Cart() {
             <div>
               <Card className="sticky top-4 border-0 shadow-lg">
                 <div className="p-6">
-                  <h2 className="text-2xl font-bold mb-6">ملخص الطلب</h2>
+                  <h2 className="text-2xl font-bold mb-6">{t('checkout.orderSummary', 'Order Summary')}</h2>
 
                   {/* Coupon Code */}
                   <div className="mb-6">
                     <label className="block text-sm font-medium mb-2">
-                      كود الخصم
+                      {t('cart.couponCode', 'Coupon Code')}
                     </label>
                     <div className="flex gap-2">
                       <Input
-                        placeholder="أدخل الكود"
+                        placeholder={t('cart.enterCode', 'Enter code')}
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
                         className="flex-1"
                       />
                       <Button onClick={applyCoupon} variant="outline">
-                        تطبيق
+                        {t('common.apply', 'Apply')}
                       </Button>
                     </div>
                   </div>
@@ -347,25 +308,36 @@ export default function Cart() {
                   {/* Price Breakdown */}
                   <div className="space-y-4 mb-6">
                     <div className="flex justify-between text-lg">
-                      <span className="text-gray-600 dark:text-gray-400">المجموع الفرعي</span>
-                      <span className="font-semibold">{subtotal.toFixed(2)} ر.س</span>
+                      <span className="text-gray-600 dark:text-gray-400">{t('cart.subtotal', 'Subtotal')}</span>
+                      <span className="font-semibold">{subtotal.toFixed(2)} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">الشحن</span>
-                      <span className="font-semibold">
-                        {shipping === 0 ? (
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                            مجاني
-                          </Badge>
-                        ) : (
-                          `${shipping.toFixed(2)} ر.س`
+                    {isShippingEnabled && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 dark:text-gray-400">{t('cart.shipping', 'Shipping')}</span>
+                          <span className="font-semibold">
+                            {shipping === 0 ? (
+                              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                {t('common.free', 'Free')}
+                              </Badge>
+                            ) : (
+                              `${shipping.toFixed(2)} ${i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}`
+                            )}
+                          </span>
+                        </div>
+                        {shipping > 0 && (
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {t('cart.freeShippingHint', { amount: (200 - subtotal).toFixed(2), currency: i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR') })}
+                          </p>
                         )}
-                      </span>
-                    </div>
-                    {shipping > 0 && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        أضف {(200 - subtotal).toFixed(2)} ر.س للحصول على شحن مجاني
-                      </p>
+                      </>
+                    )}
+                    
+                    {isTaxEnabled && taxAmount > 0 && (
+                      <div className="flex justify-between text-lg">
+                        <span className="text-gray-600 dark:text-gray-400">{t('cart.tax', 'Tax')} ({taxRate}%)</span>
+                        <span className="font-semibold">{taxAmount.toFixed(2)} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}</span>
+                      </div>
                     )}
                   </div>
 
@@ -373,9 +345,9 @@ export default function Cart() {
 
                   {/* Total */}
                   <div className="flex justify-between items-center mb-6">
-                    <span className="text-xl font-bold">الإجمالي</span>
+                    <span className="text-xl font-bold">{t('cart.total', 'Total')}</span>
                     <span className="text-3xl font-bold text-indigo-600">
-                      {total.toFixed(2)} ر.س
+                      {total.toFixed(2)} {i18n.language === 'ar' ? 'ر.س' : (settings?.currency || 'SAR')}
                     </span>
                   </div>
 
@@ -385,7 +357,7 @@ export default function Cart() {
                       size="lg" 
                       className="w-full h-14 text-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg mb-4"
                     >
-                      إتمام الطلب
+                      {t('cart.checkout', 'Checkout')}
                       <ArrowRight className="mr-2 h-5 w-5" />
                     </Button>
                   </Link>
@@ -394,15 +366,17 @@ export default function Cart() {
                   <div className="space-y-3 pt-4 border-t">
                     <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
                       <Shield className="h-5 w-5 text-green-600 flex-shrink-0" />
-                      <span>دفع آمن ومشفر</span>
+                      <span>{t('checkout.securePayment', 'Secure and encrypted payment')}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
-                      <Truck className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                      <span>شحن سريع وموثوق</span>
-                    </div>
+                    {isShippingEnabled && (
+                      <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+                        <Truck className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                        <span>{t('checkout.fastShipping', 'Fast and reliable shipping')}</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
                       <Tag className="h-5 w-5 text-purple-600 flex-shrink-0" />
-                      <span>أفضل الأسعار مضمونة</span>
+                      <span>{t('checkout.bestPrices', 'Best prices guaranteed')}</span>
                     </div>
                   </div>
                 </div>

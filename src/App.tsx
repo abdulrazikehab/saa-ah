@@ -7,6 +7,9 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { DarkModeProvider } from "@/contexts/DarkModeContext";
 import { TabUpdatesProvider } from "@/contexts/TabUpdatesContext";
+import { WishlistProvider } from "@/contexts/WishlistContext";
+import { StoreSettingsProvider } from "@/contexts/StoreSettingsContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import { useTranslation } from "react-i18next";
 import { useEffect } from "react";
 import "./i18n";
@@ -16,9 +19,11 @@ import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
+import ChangePassword from "./pages/auth/ChangePassword";
 import OAuthCallback from "./pages/auth/OAuthCallback";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import CustomerProtectedRoute from "./components/auth/CustomerProtectedRoute";
+import PermissionRoute from "./components/auth/PermissionRoute";
 import Dashboard from "./pages/dashboard/Dashboard";
 import ProductsManager from "./pages/dashboard/ProductsManager";
 import CategoriesManager from "./pages/dashboard/CategoriesManager";
@@ -46,12 +51,12 @@ import UsersSettings from "./pages/dashboard/settings/UsersSettings";
 import IntegrationsSettings from "./pages/dashboard/settings/IntegrationsSettings";
 import KycSettings from "./pages/dashboard/settings/KycSettings";
 import BillingSettings from "./pages/dashboard/settings/BillingSettings";
+import Limits from "./pages/dashboard/settings/Limits";
 import DomainManagement from "./pages/dashboard/DomainManagement";
 import TemplatesPage from "./pages/dashboard/TemplatesPage";
 import MarketSetup from "./pages/dashboard/MarketSetup";
 import NavigationEditor from "./pages/dashboard/NavigationEditor";
 import ChatInterface from "./pages/dashboard/ChatInterface";
-import StorefrontEditor from "./pages/dashboard/StorefrontEditor";
 import Management from "./pages/dashboard/Management";
 import AppBuilder from "./pages/dashboard/AppBuilder";
 import InstalledApps from "./pages/dashboard/InstalledApps";
@@ -60,32 +65,34 @@ import SmartLinePage from "./pages/dashboard/SmartLinePage";
 import SupportPage from "./pages/dashboard/SupportPage";
 import ThemesStore from "./pages/dashboard/ThemesStore";
 import AppsStore from "./pages/dashboard/AppsStore";
-import Home from "./pages/storefront/Home";
-import Products from "./pages/storefront/Products";
-import ProductDetail from "./pages/storefront/ProductDetail";
-import Cart from "./pages/storefront/Cart";
-import Checkout from "./pages/storefront/Checkout";
-import Profile from "./pages/storefront/Profile";
-import Orders from "./pages/storefront/Orders";
-import AccountProfile from "./pages/storefront/AccountProfile";
-import OrderDetail from "./pages/storefront/OrderDetail";
-import Collection from "./pages/storefront/Collection";
-import Categories from "./pages/storefront/Categories";
-import CategoryDetail from "./pages/storefront/CategoryDetail";
-import DynamicPage from "./pages/storefront/DynamicPage";
-import PagesManager from "./pages/dashboard/PagesManager";
-import PageBuilderPage from "./pages/dashboard/PageBuilderPage";
-import DashboardProfile from "./pages/dashboard/DashboardProfile";
-import Help from "./pages/dashboard/Help";
-import WalletTransactions from "./pages/dashboard/WalletTransactions";
-import WalletPage from "./pages/dashboard/wallet/WalletPage";
-import ActivityLogs from "./pages/dashboard/ActivityLogs";
-import Chat from "./pages/dashboard/Chat";
-import Reports from "./pages/dashboard/Reports";
-import { StorefrontLayout } from "./components/storefront/StorefrontLayout";
-import { DashboardLayout } from "./components/dashboard/DashboardLayout";
-import { BuyerDashboardLayout } from "./components/buyer-dashboard/BuyerDashboardLayout";
-import { TenantRouter } from "./TenantRouter";
+import Home from "@/pages/storefront/Home";
+import Products from "@/pages/storefront/Products";
+import ProductDetail from "@/pages/storefront/ProductDetail";
+import Cart from "@/pages/storefront/Cart";
+import Checkout from "@/pages/storefront/Checkout";
+import Profile from "@/pages/storefront/Profile";
+import Orders from "@/pages/storefront/Orders";
+import AccountProfile from "@/pages/storefront/AccountProfile";
+import OrderDetail from "@/pages/storefront/OrderDetail";
+import Collection from "@/pages/storefront/Collection";
+import Categories from "@/pages/storefront/Categories";
+import CategoryDetail from "@/pages/storefront/CategoryDetail";
+import DynamicPage from "@/pages/storefront/DynamicPage";
+import PagesManager from "@/pages/dashboard/PagesManager";
+import PageBuilderPage from "@/pages/dashboard/PageBuilderPage";
+import DashboardProfile from "@/pages/dashboard/DashboardProfile";
+import Help from "@/pages/dashboard/Help";
+import WalletTransactions from "@/pages/dashboard/WalletTransactions";
+import WalletPage from "@/pages/dashboard/wallet/WalletPage";
+import ActivityLogs from "@/pages/dashboard/ActivityLogs";
+import Chat from "@/pages/dashboard/Chat";
+import Reports from "@/pages/dashboard/Reports";
+import { StorefrontLayout } from "@/components/storefront/StorefrontLayout";
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import HierarchicalStandalone from "@/pages/dashboard/HierarchicalStandalone";
+import { BuyerDashboardLayout } from "@/components/buyer-dashboard/BuyerDashboardLayout";
+import { TenantRouter } from "@/TenantRouter";
 // Buyer Dashboard Pages
 import BuyerDashboard from "./pages/buyer-dashboard/BuyerDashboard";
 import BuyerProducts from "./pages/buyer-dashboard/BuyerProducts";
@@ -94,8 +101,8 @@ import BuyerWallet from "./pages/buyer-dashboard/BuyerWallet";
 import BuyerFavorites from "./pages/buyer-dashboard/BuyerFavorites";
 import BuyerSupport from "./pages/buyer-dashboard/BuyerSupport";
 import BuyerProfile from "./pages/buyer-dashboard/BuyerProfile";
-import SystemAdminPanel from "./pages/SystemAdminPanel";
-import StaticPage from "./pages/StaticPage";
+import SystemAdminPanel from "@/pages/SystemAdminPanel";
+import StaticPage from "@/pages/StaticPage";
 import './i18n'; // Initialize i18n
 import './styles/theme.css'; // Import theme CSS
 // import './styles/theme-force.css'; // Force theme application - DISABLED to preserve dashboard design
@@ -107,11 +114,12 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import CookieConsent from './components/ui/CookieConsent';
 import CookieRequired from './components/ui/CookieRequired';
 import i18n from './i18n';
-import CardsStore from "./pages/dashboard/cards/CardsStore";
-import CardsFavorites from "./pages/dashboard/cards/CardsFavorites";
-import CardsOrders from "./pages/dashboard/cards/CardsOrders";
-import CardsReports from "./pages/dashboard/cards/CardsReports";
-import EmployeesManager from "./pages/dashboard/EmployeesManager";
+import CardsStore from "@/pages/dashboard/cards/CardsStore";
+import CardsFavorites from "@/pages/dashboard/cards/CardsFavorites";
+import CardsOrders from "@/pages/dashboard/cards/CardsOrders";
+import CardsReports from "@/pages/dashboard/cards/CardsReports";
+import EmployeesManager from "@/pages/dashboard/EmployeesManager";
+import PermissionsManager from "@/pages/dashboard/PermissionsManager";
 import { ThemeCustomizer } from "@/components/ui/ThemeCustomizer";
 import { isMainDomain } from "@/lib/domain";
 
@@ -132,6 +140,9 @@ const DirectionHandler = () => {
     
     const updateDirection = (lng: string) => {
       const dir = lng === 'ar' ? 'rtl' : 'ltr';
+      document.documentElement.setAttribute('dir', dir);
+      document.documentElement.classList.remove('rtl', 'ltr');
+      document.documentElement.classList.add(dir);
       
       // Inject CSS directly into style tag for maximum priority
       styleEl.textContent = `
@@ -209,8 +220,11 @@ const App = () => {
     <DarkModeProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <CartProvider>
-            <TabUpdatesProvider>
+          <StoreSettingsProvider>
+            <CartProvider>
+              <WishlistProvider>
+                <TabUpdatesProvider>
+                  <NotificationProvider>
               <TooltipProvider>
                 <Toaster />
                 <Sonner />
@@ -240,6 +254,7 @@ const App = () => {
                 <Route path="/auth/signup" element={<Signup />} />
                 <Route path="/auth/forgot-password" element={<ForgotPassword />} />
                 <Route path="/auth/reset-password" element={<ResetPassword />} />
+                <Route path="/auth/change-password" element={<ChangePassword />} />
                 <Route path="/oauth/callback" element={<OAuthCallback />} />
                 
                 {/* Storefront Preview Routes (With Layout) - Keep these for previewing on main domain */}
@@ -267,21 +282,28 @@ const App = () => {
                 <Route path="/builder/new" element={<ProtectedRoute><PageBuilderPage /></ProtectedRoute>} />
                 <Route path="/builder/:id" element={<ProtectedRoute><PageBuilderPage /></ProtectedRoute>} />
                 
+                {/* Full Screen Hierarchical Explorer (Protected, Custom Layout) */}
+                <Route path="/hierarchical-fullscreen" element={
+                  <ProtectedRoute>
+                    <HierarchicalStandalone />
+                  </ProtectedRoute>
+                } />
+
                 {/* Dashboard Routes (Protected, With Dashboard Layout) */}
                 <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/dashboard/market-setup" element={<MarketSetup />} />
                   <Route path="/dashboard/profile" element={<DashboardProfile />} />
-                  <Route path="/dashboard/products" element={<ProductsManager />} />
-                  <Route path="/dashboard/categories" element={<CategoriesManager />} />
-                  <Route path="/dashboard/hierarchical" element={<HierarchicalManager />} />
-                  <Route path="/dashboard/prices" element={<PriceManager />} />
-                  <Route path="/dashboard/orders" element={<OrdersManager />} />
-                  <Route path="/dashboard/customers" element={<CustomersManager />} />
-                  <Route path="/dashboard/reports" element={<ReportsPage />} />
+                  <Route path="/dashboard/products" element={<PermissionRoute route="/dashboard/products"><ProductsManager /></PermissionRoute>} />
+                  <Route path="/dashboard/categories" element={<PermissionRoute route="/dashboard/categories"><CategoriesManager /></PermissionRoute>} />
+                  <Route path="/dashboard/hierarchical" element={<PermissionRoute route="/dashboard/hierarchical"><HierarchicalManager /></PermissionRoute>} />
+                  <Route path="/dashboard/prices" element={<PermissionRoute route="/dashboard/prices"><PriceManager /></PermissionRoute>} />
+                  <Route path="/dashboard/orders" element={<PermissionRoute route="/dashboard/orders"><OrdersManager /></PermissionRoute>} />
+                  <Route path="/dashboard/customers" element={<PermissionRoute route="/dashboard/customers"><CustomersManager /></PermissionRoute>} />
+                  <Route path="/dashboard/reports" element={<PermissionRoute route="/dashboard/reports"><ReportsPage /></PermissionRoute>} />
                   <Route path="/dashboard/pages" element={<PagesManager />} />
                   <Route path="/dashboard/chat" element={<ChatInterface />} />
-                  <Route path="/dashboard/storefront" element={<StorefrontEditor />} />
+                  <Route path="/dashboard/storefront" element={<NavigationEditor />} />
                   <Route path="/dashboard/navigation" element={<NavigationEditor />} />
                   <Route path="/dashboard/marketing" element={<MarketingDashboard />} />
                   <Route path="/dashboard/smart-line" element={<SmartLinePage />} />
@@ -304,21 +326,23 @@ const App = () => {
                   <Route path="/dashboard/cards/orders" element={<CardsOrders />} />
                   <Route path="/dashboard/cards/reports" element={<CardsReports />} />
                   
-                  {/* Employees Route */}
-                  <Route path="/dashboard/employees" element={<EmployeesManager />} />
+                  {/* Employees & Permissions Routes - Only for owners/admins (but allow staff to view their own permissions) */}
+                  <Route path="/dashboard/employees" element={<PermissionRoute requiredPermissions={[]}><EmployeesManager /></PermissionRoute>} />
+                  <Route path="/dashboard/permissions" element={<PermissionRoute requiredPermissions={[]}><PermissionsManager /></PermissionRoute>} />
 
                   {/* Direct access settings pages (from sidebar) */}
-                  <Route path="/dashboard/settings/suppliers" element={<SuppliersPage />} />
-                  <Route path="/dashboard/settings/brands" element={<BrandsPage />} />
-                  <Route path="/dashboard/settings/units" element={<UnitsPage />} />
-                  <Route path="/dashboard/settings/currencies" element={<CurrenciesPage />} />
+                  <Route path="/dashboard/settings/suppliers" element={<PermissionRoute route="/dashboard/settings/suppliers"><SuppliersPage /></PermissionRoute>} />
+                  <Route path="/dashboard/settings/brands" element={<PermissionRoute route="/dashboard/settings/brands"><BrandsPage /></PermissionRoute>} />
+                  <Route path="/dashboard/settings/units" element={<PermissionRoute route="/dashboard/settings/units"><UnitsPage /></PermissionRoute>} />
+                  <Route path="/dashboard/settings/currencies" element={<PermissionRoute route="/dashboard/settings/currencies"><CurrenciesPage /></PermissionRoute>} />
                   {/* Settings Routes - Nested layout */}
-                  <Route path="/dashboard/settings" element={<SettingsLayout />}>
+                  <Route path="/dashboard/settings" element={<PermissionRoute route="/dashboard/settings"><SettingsLayout /></PermissionRoute>}>
                     <Route index element={<Settings />} />
                     <Route path="notifications" element={<NotificationsSettings />} />
                     <Route path="payment" element={<PaymentSettings />} />
                     <Route path="payment-options" element={<PaymentOptions />} />
                     <Route path="checkout" element={<CheckoutSettings />} />
+                    <Route path="limits" element={<Limits />} />
                     <Route path="domains" element={<DomainsSettings />} />
                     <Route path="suppliers" element={<SupplierSettings />} />
                     <Route path="brands" element={<BrandSettings />} />
@@ -342,10 +366,13 @@ const App = () => {
           </BrowserRouter>
           <ThemeCustomizer />
         </TooltipProvider>
-            </TabUpdatesProvider>
-      </CartProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+              </NotificationProvider>
+              </TabUpdatesProvider>
+            </WishlistProvider>
+          </CartProvider>
+          </StoreSettingsProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </DarkModeProvider>
     </>
   );

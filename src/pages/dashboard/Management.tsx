@@ -2,6 +2,7 @@ import { Users, Shield, Activity, FileText } from 'lucide-react';
 import PlaceholderPage from '@/components/dashboard/PlaceholderPage';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import EmployeesManager from './EmployeesManager';
+import PermissionsManager from './PermissionsManager';
 
 export default function Management() {
   return (
@@ -23,11 +24,7 @@ export default function Management() {
         </TabsContent>
         
         <TabsContent value="roles" className="mt-6">
-          <PlaceholderPage 
-            title="الأدوار والصلاحيات" 
-            description="تخصيص أدوار الموظفين والتحكم في وصولهم."
-            icon={Shield}
-          />
+          <PermissionsManager />
         </TabsContent>
         
         <TabsContent value="logs" className="mt-6">

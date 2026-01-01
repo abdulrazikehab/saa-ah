@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Layout, Type, Image, ShoppingCart, Star, Phone, Images, Repeat, CreditCard, BarChart3, MessageSquare, Heart, Wallet, Users, User, FolderTree } from 'lucide-react';
+import { Layout, Type, Image, ShoppingCart, Star, Phone, Images, Repeat, CreditCard, BarChart3, MessageSquare, Heart, Wallet, Users, User, FolderTree, Building2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface SectionLibraryProps {
@@ -41,6 +41,7 @@ export function SectionLibrary({ onAddSection }: SectionLibraryProps) {
     { type: 'charge-wallet', label: t('sections.chargeWallet.label', 'Charge Wallet'), icon: CreditCard, description: t('sections.chargeWallet.desc', 'Wallet recharge form') },
     { type: 'reports-page', label: t('sections.reportsPage.label', 'Reports Page'), icon: BarChart3, description: t('sections.reportsPage.desc', 'Product and order reports') },
     { type: 'profile-page', label: t('sections.profilePage.label', 'Profile Page'), icon: User, description: t('sections.profilePage.desc', 'Merchant profile page') },
+    { type: 'bank-accounts', label: t('sections.bankAccounts.label', 'Bank Accounts'), icon: Building2, description: t('sections.bankAccounts.desc', 'Customer bank accounts management') },
   ];
 
   return (
@@ -52,7 +53,7 @@ export function SectionLibrary({ onAddSection }: SectionLibraryProps) {
           className="w-full justify-start h-auto py-3 px-4"
           onClick={() => onAddSection(type)}
         >
-          <div className="flex items-start gap-3 text-left">
+          <div className="flex items-start gap-3">
             <Icon className="w-5 h-5 mt-0.5 flex-shrink-0" />
             <div>
               <div className="font-medium">{label}</div>

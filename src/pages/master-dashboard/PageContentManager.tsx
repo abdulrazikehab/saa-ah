@@ -136,7 +136,7 @@ export default function PageContentManager({ adminApiKey }: PageContentManagerPr
                 <TabsList>
                   <TabsTrigger value="ar" className="gap-2">
                     <Globe className="h-4 w-4" />
-                    Arabic (العربية)
+                    Arabic
                   </TabsTrigger>
                   <TabsTrigger value="en" className="gap-2">
                     <Globe className="h-4 w-4" />

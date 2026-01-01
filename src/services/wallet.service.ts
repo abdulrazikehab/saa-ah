@@ -161,7 +161,7 @@ export const walletService = {
    * GET /api/merchant/wallet/balance
    */
   getBalance: (): Promise<Wallet> =>
-    apiClient.get('/merchant/wallet/balance', {
+    apiClient.get('/wallet/balance', {
       requireAuth: true,
     }),
 
@@ -170,17 +170,18 @@ export const walletService = {
    * GET /api/merchant/wallet/transactions?page=1&limit=20
    */
   getTransactions: (page: number = 1, limit: number = 20): Promise<WalletTransactionsResponse> =>
-    apiClient.get(`/merchant/wallet/transactions?page=${page}&limit=${limit}`, {
+    apiClient.get(`/wallet/transactions?page=${page}&limit=${limit}`, {
       requireAuth: true,
     }),
 
   /**
    * Get available banks for top-ups (active only)
-   * GET /api/merchant/wallet/banks
+   * GET /api/wallet/banks
+   * This endpoint is public and uses tenant context from subdomain/domain
    */
   getBanks: (): Promise<Bank[]> =>
-    apiClient.get('/merchant/wallet/banks', {
-      requireAuth: true,
+    apiClient.get('/wallet/banks', {
+      requireAuth: false, // Public endpoint - tenantId comes from subdomain/domain
     }),
 
   /**
@@ -246,7 +247,7 @@ export const walletService = {
    * GET /api/merchant/wallet/bank-accounts
    */
   getBankAccounts: (): Promise<BankAccount[]> =>
-    apiClient.get('/merchant/wallet/bank-accounts', {
+    apiClient.get('/wallet/bank-accounts', {
       requireAuth: true,
     }),
 
@@ -255,7 +256,16 @@ export const walletService = {
    * POST /api/merchant/wallet/bank-accounts
    */
   addBankAccount: (data: AddBankAccountDto): Promise<BankAccount> =>
-    apiClient.post('/merchant/wallet/bank-accounts', data, {
+    apiClient.post('/wallet/bank-accounts', data, {
+      requireAuth: true,
+    }),
+
+  /**
+   * Delete a bank account
+   * DELETE /api/merchant/wallet/bank-accounts/:id
+   */
+  deleteBankAccount: (id: string): Promise<void> =>
+    apiClient.delete(`/wallet/bank-accounts/${id}`, {
       requireAuth: true,
     }),
 
@@ -264,20 +274,27 @@ export const walletService = {
    * POST /api/merchant/wallet/topup
    */
   createTopUpRequest: (data: CreateTopUpRequestDto): Promise<TopUpRequest> =>
-    apiClient.post('/merchant/wallet/topup', data, {
+    apiClient.post('/wallet/topup', data, {
       requireAuth: true,
     }),
 
   /**
    * Get top-up requests for the authenticated user
    * GET /api/merchant/wallet/topup-requests?status=PENDING
+   * Tries merchant endpoint first, falls back to customer endpoint
    */
   getTopUpRequests: (status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'): Promise<TopUpRequest[]> => {
-    const url = status 
-      ? `/merchant/wallet/topup-requests?status=${status}`
-      : '/merchant/wallet/topup-requests';
-    return apiClient.get(url, {
+    const query = status ? `?status=${status}` : '';
+    const merchantUrl = `/merchant/wallet/topup-requests${query}`;
+    const customerUrl = `/wallet/topup-requests${query}`;
+    
+    // Try merchant endpoint first (for owners), fall back to customer endpoint
+    return apiClient.get(merchantUrl, {
       requireAuth: true,
+    }).catch(() => {
+      return apiClient.get(customerUrl, {
+        requireAuth: true,
+      });
     });
   },
 
@@ -305,6 +322,34 @@ export const walletService = {
    */
   rejectTopUp: (id: string, reason: string): Promise<RejectTopUpResponse> =>
     apiClient.post(`/merchant/wallet/admin/topup/${id}/reject`, { reason }, {
+      requireAuth: true,
+    }),
+
+  /**
+   * Get staff list for customers
+   * GET /api/merchant/wallet/staff-list
+   */
+  getStaffListForCustomer: (): Promise<{ data: Array<{ id: string; email: string; name?: string }> }> =>
+    apiClient.get('/merchant/wallet/staff-list', {
+      requireAuth: true,
+    }),
+
+  /**
+   * Give balance to a staff/employee (for customers)
+   * POST /api/merchant/wallet/admin/give-balance
+   */
+  giveBalanceToStaff: (data: {
+    staffId: string;
+    amount: number;
+    description?: string;
+    descriptionAr?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    wallet: Wallet;
+    transaction: WalletTransaction;
+  }> =>
+    apiClient.post('/merchant/wallet/admin/give-balance', data, {
       requireAuth: true,
     }),
 };

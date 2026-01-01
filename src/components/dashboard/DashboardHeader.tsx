@@ -57,7 +57,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { getLogoUrl } from '@/config/logo.config';
+import { TourHelpButton } from './TourGuide';
 
 interface DashboardHeaderProps {
   onMenuClick?: () => void;
@@ -86,11 +88,10 @@ export const DashboardHeader = ({
   const [dateRange, setDateRange] = useState('month');
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout, user, refreshUser } = useAuth();
-  const { toast } = useToast();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [currency, setCurrency] = useState<string>('SAR');
+
   const [currencySymbol, setCurrencySymbol] = useState<string>('ر.س');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilterDialog, setShowFilterDialog] = useState(false);
@@ -98,117 +99,8 @@ export const DashboardHeader = ({
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        interface OrderItem {
-          id: string;
-          status: string;
-          orderNumber: string;
-          totalAmount: number;
-          createdAt: string;
-        }
-        interface ProductVariant {
-          inventoryQuantity: number;
-          trackInventory: boolean;
-        }
-        interface ProductItem {
-          id: string;
-          name: string;
-          variants?: ProductVariant[];
-        }
-        
-        let ordersRes: { orders?: OrderItem[] } = { orders: [] };
-        let productsRes: { products?: ProductItem[] } = { products: [] };
-        
-        try {
-          const [ordersResponse, productsResponse] = await Promise.all([
-            coreApi.get('/orders', { requireAuth: true }),
-            coreApi.get('/products', { requireAuth: true })
-          ]);
-          
-          // Validate orders response
-          if (ordersResponse && typeof ordersResponse === 'object' && !('error' in ordersResponse)) {
-            if (Array.isArray(ordersResponse)) {
-              ordersRes = { orders: ordersResponse };
-            } else if (ordersResponse.orders && Array.isArray(ordersResponse.orders)) {
-              ordersRes = ordersResponse;
-            }
-          }
-          
-          // Validate products response
-          if (productsResponse && typeof productsResponse === 'object' && !('error' in productsResponse)) {
-            if (Array.isArray(productsResponse)) {
-              productsRes = { products: productsResponse };
-            } else if (productsResponse.products && Array.isArray(productsResponse.products)) {
-              productsRes = productsResponse;
-            }
-          }
-        } catch (apiError) {
-          console.error('Failed to fetch orders/products for notifications', apiError);
-        }
+  // Removed local fetchNotifications polling as it's now handled by NotificationContext
 
-        const newNotifications: Notification[] = [];
-
-        // Check for pending orders
-        const orders = ordersRes.orders || [];
-        const pendingOrders = orders.filter((o) => o && o.status === 'PENDING');
-        pendingOrders.forEach((order) => {
-          if (order && order.id) {
-            const title = t('dashboard.header.newOrder') || 'New Order';
-            const message = t('dashboard.header.newOrderMessage', { 
-              orderNumber: String(order.orderNumber || order.id), 
-              amount: Number(order.totalAmount) || 0 
-            }) || `Order ${order.orderNumber || order.id}`;
-            const time = order.createdAt 
-              ? new Date(order.createdAt).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })
-              : 'Now';
-            
-            newNotifications.push({
-              id: `order-${order.id}`,
-              type: 'order',
-              title: typeof title === 'string' ? title : String(title),
-              message: typeof message === 'string' ? message : String(message),
-              time: typeof time === 'string' ? time : String(time),
-              read: false
-            });
-          }
-        });
-
-        // Check for low stock
-        const products = productsRes.products || [];
-        const lowStockProducts = products.filter((p) => 
-            p && p.variants?.some((v) => v.inventoryQuantity < 5 && v.trackInventory)
-        );
-        
-        lowStockProducts.forEach((product) => {
-          if (product && product.id) {
-            const title = t('dashboard.header.lowStockAlert') || 'Low Stock Alert';
-            const message = t('dashboard.header.lowStockMessage', { productName: String(product.name || '') }) || `Low stock: ${product.name}`;
-            const time = t('dashboard.header.now') || 'Now';
-            
-            newNotifications.push({
-              id: `stock-${product.id}`,
-              type: 'stock',
-              title: typeof title === 'string' ? title : String(title),
-              message: typeof message === 'string' ? message : String(message),
-              time: typeof time === 'string' ? time : String(time),
-              read: false
-            });
-          }
-        });
-
-        setNotifications(newNotifications);
-      } catch (error) {
-        console.error('Failed to fetch notifications', error);
-        setNotifications([]);
-      }
-    };
-    
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
-  }, [t, i18n.language]);
 
   // Load currency from settings
   useEffect(() => {
@@ -224,7 +116,7 @@ export const DashboardHeader = ({
             try {
               const currencies = await coreApi.get('/currencies', { requireAuth: true });
               if (Array.isArray(currencies)) {
-                const currencyData = currencies.find((c: any) => c?.code === currencyCode);
+                const currencyData = currencies.find((c: { code: string; symbol?: string }) => c?.code === currencyCode);
                 if (currencyData?.symbol && typeof currencyData.symbol === 'string') {
                   setCurrencySymbol(currencyData.symbol);
                 } else {
@@ -272,11 +164,45 @@ export const DashboardHeader = ({
     loadCurrency();
   }, []);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // const unreadCount = notifications.filter(n => !n.read).length; // Now from hook
 
-  const handleLogout = () => {
-    logout();
-    navigate('/auth/login');
+
+  const handleLogout = async () => {
+    try {
+      console.log('Logout initiated');
+      
+      // Call logout from AuthContext
+      await logout();
+      
+      // Clear any additional data
+      localStorage.removeItem('user');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('customerToken');
+      localStorage.removeItem('customerData');
+      localStorage.removeItem('adminApiKey');
+      
+      // Clear all cookies
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        const eqPos = cookie.indexOf('=');
+        const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+        document.cookie = `${name}=; path=/; domain=${window.location.hostname}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+      }
+      
+      // Navigate to login immediately
+      window.location.href = '/auth/login';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Force navigation even on error
+      localStorage.clear();
+      // Clear all cookies
+      document.cookie.split(';').forEach(c => {
+        document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+      });
+      window.location.href = '/auth/login';
+    }
   };
 
   const handleDownload = async () => {
@@ -358,37 +284,33 @@ export const DashboardHeader = ({
   };
 
   const clearAllNotifications = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    toast({
-      title: t('dashboard.header.notificationsCleared'),
-      description: t('dashboard.header.allNotificationsCleared', 'All notifications marked as read'),
-    });
+    markAllAsRead();
   };
 
-  const handleNotificationClick = (notification: Notification) => {
+
+  const handleNotificationClick = (notification: any) => {
     // Mark as read
-    setNotifications(prev => 
-      prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
-    );
+    markAsRead(notification.id);
 
     // Navigate based on notification type
     switch (notification.type) {
-      case 'order':
+      case 'ORDER':
         navigate('/dashboard/orders');
         break;
-      case 'payment':
-        navigate('/dashboard/reports');
+      case 'CUSTOMER':
+        navigate('/dashboard/customers');
         break;
-      case 'stock':
+      case 'INVENTORY':
         navigate('/dashboard/products');
         break;
-      case 'review':
-        navigate('/dashboard/reviews');
+      case 'MARKETING':
+        navigate('/dashboard/marketing');
         break;
       default:
         break;
     }
   };
+
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -491,15 +413,20 @@ export const DashboardHeader = ({
           </div>
 
           {/* Theme Toggle */}
-          <ThemeToggle />
+          <div id="tour-header-theme">
+            <ThemeToggle />
+          </div>
 
           {/* Language Toggle */}
           <LanguageToggle />
+          
+          {/* Tour Help */}
+          <TourHelpButton />
 
           {/* Notifications */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10">
+              <Button id="tour-header-notifications" variant="ghost" size="icon" className="relative h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10">
                 <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
                 {unreadCount > 0 && (
                   <Badge 
@@ -533,29 +460,34 @@ export const DashboardHeader = ({
                         key={notification.id}
                         onClick={() => handleNotificationClick(notification)}
                         className={`p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
-                          !notification.read ? 'bg-cyan-50/30 dark:bg-cyan-900/10' : ''
+                          !notification.readAt ? 'bg-cyan-50/30 dark:bg-cyan-900/10' : ''
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className={`p-2 rounded-lg ${
-                            notification.type === 'order' ? 'bg-green-100 dark:bg-green-900/30' :
-                            notification.type === 'payment' ? 'bg-blue-100 dark:bg-blue-900/30' :
-                            notification.type === 'stock' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
+                            notification.type === 'ORDER' ? 'bg-green-100 dark:bg-green-900/30' :
+                            notification.type === 'CUSTOMER' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                            notification.type === 'INVENTORY' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
                             'bg-purple-100 dark:bg-purple-900/30'
                           }`}>
                             <Bell className="h-4 w-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{String(notification.title || '')}</p>
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              {String(notification.message || '')}
+                            <p className="text-sm font-medium">
+                              {isRTL ? notification.titleAr || notification.titleEn : notification.titleEn}
                             </p>
-                            <p className="text-xs text-muted-foreground mt-2">{String(notification.time || '')}</p>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {isRTL ? notification.bodyAr || notification.bodyEn : notification.bodyEn}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {new Date(notification.createdAt).toLocaleTimeString(isRTL ? 'ar-SA' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
                           </div>
-                          {!notification.read && (
+                          {!notification.readAt && (
                             <div className="w-2 h-2 bg-cyan-500 rounded-full mt-2" />
                           )}
                         </div>
+
                       </div>
                     ))}
                   </div>
@@ -569,7 +501,7 @@ export const DashboardHeader = ({
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-1 sm:gap-1.5 md:gap-2 px-1 sm:px-1.5 md:px-2 h-8 sm:h-9 md:h-10">
+              <Button id="tour-header-profile" variant="ghost" className="gap-1 sm:gap-1.5 md:gap-2 px-1 sm:px-1.5 md:px-2 h-8 sm:h-9 md:h-10">
                 <Avatar className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8">
                   <AvatarImage src={userAvatar} alt={userName} />
                   <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-[10px] sm:text-xs md:text-sm">
@@ -606,7 +538,18 @@ export const DashboardHeader = ({
                 <span>{t('dashboard.header.helpAndSupport')}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={handleLogout}>
+              <DropdownMenuItem 
+                className="text-red-600 focus:text-red-600 cursor-pointer" 
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleLogout();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleLogout();
+                }}
+              >
                 <LogOut className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
                 <span>{t('dashboard.header.logout')}</span>
               </DropdownMenuItem>

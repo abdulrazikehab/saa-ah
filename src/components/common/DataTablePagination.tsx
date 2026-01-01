@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Pagination,
   PaginationContent,
@@ -39,6 +40,8 @@ export function DataTablePagination({
   showItemsPerPage = true,
   className = '',
 }: DataTablePaginationProps) {
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language === 'ar';
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
@@ -87,11 +90,13 @@ export function DataTablePagination({
   }
 
   return (
-    <div className={`flex items-center justify-between px-2 py-4 ${className}`}>
-      <div className="flex items-center gap-6">
+    <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 ${className}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 sm:gap-6">
         {showItemsPerPage && onItemsPerPageChange && (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Items per page</span>
+            <span className="text-sm text-muted-foreground">
+              {isRtl ? 'العناصر لكل صفحة' : 'Items per page'}
+            </span>
             <Select
               value={itemsPerPage.toString()}
               onValueChange={(value) => {
@@ -113,10 +118,12 @@ export function DataTablePagination({
           </div>
         )}
         <div className="text-sm text-muted-foreground">
-          Showing {startItem} to {endItem} of {totalItems} results
+          {isRtl 
+            ? `عرض ${startItem} إلى ${endItem} من ${totalItems} نتيجة`
+            : `Showing ${startItem} to ${endItem} of ${totalItems} results`
+          }
         </div>
       </div>
-
       {totalPages > 1 && (
         <Pagination>
           <PaginationContent>
@@ -124,7 +131,9 @@ export function DataTablePagination({
               <PaginationPrevious
                 onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                 className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
+              >
+                {isRtl ? 'السابق' : 'Previous'}
+              </PaginationPrevious>
             </PaginationItem>
 
             {getPageNumbers().map((page, index) => (
@@ -147,7 +156,9 @@ export function DataTablePagination({
               <PaginationNext
                 onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
                 className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
+              >
+                {isRtl ? 'التالي' : 'Next'}
+              </PaginationNext>
             </PaginationItem>
           </PaginationContent>
         </Pagination>

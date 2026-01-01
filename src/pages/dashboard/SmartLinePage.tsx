@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Sparkles, 
   Search, 
-  Filter, 
   ArrowRight, 
   Check, 
   Star, 
@@ -19,111 +18,108 @@ import {
   Rocket
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-
-// Mock Data for Services
-const SERVICES = [
-  {
-    id: 'social-media-management',
-    title: 'إدارة حسابات التواصل',
-    titleEn: 'Social Media Management',
-    description: 'إدارة شاملة لحساباتك على منصات التواصل الاجتماعي لزيادة التفاعل والوصول.',
-    price: 999,
-    category: 'social',
-    rating: 4.8,
-    reviews: 124,
-    icon: MessageSquare,
-    color: 'text-purple-500',
-    bgColor: 'bg-purple-100 dark:bg-purple-900/20',
-    features: ['3 منصات', '12 منشور شهرياً', 'تصميم جرافيك', 'رد على التعليقات']
-  },
-  {
-    id: 'seo-optimization',
-    title: 'تحسين محركات البحث SEO',
-    titleEn: 'SEO Optimization',
-    description: 'تحسين ظهور موقعك في نتائج البحث الأولى وزيادة الزيارات العضوية.',
-    price: 1499,
-    category: 'seo',
-    rating: 4.9,
-    reviews: 85,
-    icon: Search,
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-100 dark:bg-blue-900/20',
-    features: ['تحليل الكلمات المفتاحية', 'تحسين المحتوى', 'بناء روابط', 'تقارير شهرية']
-  },
-  {
-    id: 'content-creation',
-    title: 'صناعة المحتوى الإبداعي',
-    titleEn: 'Creative Content Creation',
-    description: 'كتابة محتوى تسويقي جذاب وتصميم صور وفيديوهات احترافية.',
-    price: 799,
-    category: 'content',
-    rating: 4.7,
-    reviews: 210,
-    icon: PenTool,
-    color: 'text-pink-500',
-    bgColor: 'bg-pink-100 dark:bg-pink-900/20',
-    features: ['كتابة مقالات', 'تصميم صور', 'سيناريو فيديو', 'نشرة بريدية']
-  },
-  {
-    id: 'paid-ads',
-    title: 'إدارة الإعلانات الممولة',
-    titleEn: 'Paid Ads Management',
-    description: 'إدارة حملات إعلانية على جوجل وفيسبوك وانستجرام لتحقيق أعلى عائد.',
-    price: 1200,
-    category: 'ads',
-    rating: 4.9,
-    reviews: 156,
-    icon: BarChart3,
-    color: 'text-green-500',
-    bgColor: 'bg-green-100 dark:bg-green-900/20',
-    features: ['Google Ads', 'Facebook Ads', 'تحليل ROI', 'استهداف دقيق']
-  },
-  {
-    id: 'video-production',
-    title: 'إنتاج الفيديو والموشن',
-    titleEn: 'Video Production',
-    description: 'إنتاج فيديوهات ترويجية وموشن جرافيك لتعزيز هوية علامتك التجارية.',
-    price: 2500,
-    category: 'content',
-    rating: 5.0,
-    reviews: 42,
-    icon: Video,
-    color: 'text-orange-500',
-    bgColor: 'bg-orange-100 dark:bg-orange-900/20',
-    features: ['فيديو تعريفي', 'موشن جرافيك', 'تصوير منتجات', 'مونتاج احترافي']
-  },
-  {
-    id: 'web-development',
-    title: 'تطوير وتحسين المتجر',
-    titleEn: 'Store Development',
-    description: 'خدمات برمجية لتحسين سرعة وأداء متجرك وإضافة خصائص مخصصة.',
-    price: 1800,
-    category: 'dev',
-    rating: 4.6,
-    reviews: 98,
-    icon: Globe,
-    color: 'text-cyan-500',
-    bgColor: 'bg-cyan-100 dark:bg-cyan-900/20',
-    features: ['تحسين السرعة', 'تخصيص القالب', 'ربط بوابات دفع', 'صيانة شهرية']
-  }
-];
-
-const CATEGORIES = [
-  { id: 'all', name: 'الكل' },
-  { id: 'social', name: 'تواصل اجتماعي' },
-  { id: 'seo', name: 'SEO' },
-  { id: 'content', name: 'محتوى' },
-  { id: 'ads', name: 'إعلانات' },
-  { id: 'dev', name: 'تطوير' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function SmartLinePage() {
+  const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Mock Data for Services
+  const SERVICES = [
+    {
+      id: 'social-media-management',
+      title: t('dashboard.smartLineMarket.services.socialMedia.title'),
+      description: t('dashboard.smartLineMarket.services.socialMedia.description'),
+      price: 999,
+      category: 'social',
+      rating: 4.8,
+      reviews: 124,
+      icon: MessageSquare,
+      color: 'text-purple-500',
+      bgColor: 'bg-purple-100 dark:bg-purple-900/20',
+      features: t('dashboard.smartLineMarket.services.socialMedia.features', { returnObjects: true }) as string[]
+    },
+    {
+      id: 'seo-optimization',
+      title: t('dashboard.smartLineMarket.services.seo.title'),
+      description: t('dashboard.smartLineMarket.services.seo.description'),
+      price: 1499,
+      category: 'seo',
+      rating: 4.9,
+      reviews: 85,
+      icon: Search,
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20',
+      features: t('dashboard.smartLineMarket.services.seo.features', { returnObjects: true }) as string[]
+    },
+    {
+      id: 'content-creation',
+      title: t('dashboard.smartLineMarket.services.content.title'),
+      description: t('dashboard.smartLineMarket.services.content.description'),
+      price: 799,
+      category: 'content',
+      rating: 4.7,
+      reviews: 210,
+      icon: PenTool,
+      color: 'text-pink-500',
+      bgColor: 'bg-pink-100 dark:bg-pink-900/20',
+      features: t('dashboard.smartLineMarket.services.content.features', { returnObjects: true }) as string[]
+    },
+    {
+      id: 'paid-ads',
+      title: t('dashboard.smartLineMarket.services.ads.title'),
+      description: t('dashboard.smartLineMarket.services.ads.description'),
+      price: 1200,
+      category: 'ads',
+      rating: 4.9,
+      reviews: 156,
+      icon: BarChart3,
+      color: 'text-green-500',
+      bgColor: 'bg-green-100 dark:bg-green-900/20',
+      features: t('dashboard.smartLineMarket.services.ads.features', { returnObjects: true }) as string[]
+    },
+    {
+      id: 'video-production',
+      title: t('dashboard.smartLineMarket.services.video.title'),
+      description: t('dashboard.smartLineMarket.services.video.description'),
+      price: 2500,
+      category: 'content',
+      rating: 5.0,
+      reviews: 42,
+      icon: Video,
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+      features: t('dashboard.smartLineMarket.services.video.features', { returnObjects: true }) as string[]
+    },
+    {
+      id: 'web-development',
+      title: t('dashboard.smartLineMarket.services.dev.title'),
+      description: t('dashboard.smartLineMarket.services.dev.description'),
+      price: 1800,
+      category: 'dev',
+      rating: 4.6,
+      reviews: 98,
+      icon: Globe,
+      color: 'text-cyan-500',
+      bgColor: 'bg-cyan-100 dark:bg-cyan-900/20',
+      features: t('dashboard.smartLineMarket.services.dev.features', { returnObjects: true }) as string[]
+    }
+  ];
+
+  const CATEGORIES = [
+    { id: 'all', name: t('dashboard.smartLineMarket.categories.all') },
+    { id: 'social', name: t('dashboard.smartLineMarket.categories.social') },
+    { id: 'seo', name: t('dashboard.smartLineMarket.categories.seo') },
+    { id: 'content', name: t('dashboard.smartLineMarket.categories.content') },
+    { id: 'ads', name: t('dashboard.smartLineMarket.categories.ads') },
+    { id: 'dev', name: t('dashboard.smartLineMarket.categories.dev') },
+  ];
+
   const filteredServices = SERVICES.filter(service => {
     const matchesCategory = selectedCategory === 'all' || service.category === selectedCategory;
-    const matchesSearch = service.title.includes(searchQuery) || service.titleEn.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = service.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         service.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -135,21 +131,21 @@ export default function SmartLinePage() {
           <div className="space-y-4 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-sm font-medium">
               <Sparkles className="w-4 h-4 text-yellow-300" />
-              <span>سوق الخدمات التسويقية الذكي</span>
+              <span>{t('dashboard.smartLineMarket.badge')}</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-bold leading-tight">
-              Smart Line Market
+              {t('dashboard.smartLineMarket.title')}
             </h1>
             <p className="text-lg text-white/90 leading-relaxed">
-              ارتقِ بمتجرك إلى المستوى التالي مع خدمات تسويقية احترافية. اختر من بين مجموعة واسعة من الخدمات المصممة خصيصاً لنمو تجارتك.
+              {t('dashboard.smartLineMarket.description')}
             </p>
             <div className="flex flex-wrap gap-4 pt-4">
               <Button size="lg" className="bg-white text-purple-600 hover:bg-gray-100 border-0 font-bold">
-                تصفح الخدمات
+                {t('dashboard.smartLineMarket.browseServices')}
                 <ArrowRight className="mr-2 h-5 w-5 rtl:rotate-180" />
               </Button>
               <Button size="lg" variant="outline" className="bg-transparent border-white text-white hover:bg-white/10">
-                تواصل مع خبير
+                {t('dashboard.smartLineMarket.contactExpert')}
               </Button>
             </div>
           </div>
@@ -184,7 +180,7 @@ export default function SmartLinePage() {
         <div className="relative w-full md:w-72">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="ابحث عن خدمة..." 
+            placeholder={t('dashboard.smartLineMarket.searchPlaceholder')} 
             className="pr-9"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -218,7 +214,7 @@ export default function SmartLinePage() {
               
               <CardContent className="flex-1">
                 <div className="space-y-3">
-                  {service.features.map((feature, idx) => (
+                  {Array.isArray(service.features) && service.features.map((feature, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
                       <div className="w-5 h-5 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
                         <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
@@ -232,10 +228,10 @@ export default function SmartLinePage() {
               <CardFooter className="pt-4 border-t bg-muted/20 flex items-center justify-between">
                 <div>
                   <span className="text-2xl font-bold text-primary">{service.price}</span>
-                  <span className="text-sm text-muted-foreground mr-1">ريال / شهرياً</span>
+                  <span className="text-sm text-muted-foreground mr-1">{t('dashboard.smartLineMarket.service.pricePerMonth')}</span>
                 </div>
                 <Button className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-md hover:shadow-lg transition-all">
-                  اشترك الآن
+                  {t('dashboard.smartLineMarket.service.subscribeNow')}
                 </Button>
               </CardFooter>
             </Card>
@@ -249,10 +245,10 @@ export default function SmartLinePage() {
           <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <Search className="w-10 h-10 text-muted-foreground" />
           </div>
-          <h3 className="text-xl font-semibold">لا توجد خدمات مطابقة</h3>
-          <p className="text-muted-foreground mt-2">جرب البحث بكلمات مختلفة أو تصفح فئات أخرى</p>
+          <h3 className="text-xl font-semibold">{t('dashboard.smartLineMarket.emptyState.title')}</h3>
+          <p className="text-muted-foreground mt-2">{t('dashboard.smartLineMarket.emptyState.desc')}</p>
           <Button variant="link" onClick={() => {setSearchQuery(''); setSelectedCategory('all');}} className="mt-4">
-            عرض كل الخدمات
+            {t('dashboard.smartLineMarket.emptyState.showAll')}
           </Button>
         </div>
       )}
@@ -263,22 +259,22 @@ export default function SmartLinePage() {
           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Zap className="w-6 h-6 text-blue-600" />
           </div>
-          <h3 className="font-bold mb-2">سرعة في التنفيذ</h3>
-          <p className="text-sm text-muted-foreground">نلتزم بتقديم خدماتنا في الوقت المحدد وبأعلى جودة</p>
+          <h3 className="font-bold mb-2">{t('dashboard.smartLineMarket.trust.speed.title')}</h3>
+          <p className="text-sm text-muted-foreground">{t('dashboard.smartLineMarket.trust.speed.desc')}</p>
         </div>
         <div className="bg-card border rounded-2xl p-6 text-center">
           <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <Check className="w-6 h-6 text-green-600" />
           </div>
-          <h3 className="font-bold mb-2">نتائج مضمونة</h3>
-          <p className="text-sm text-muted-foreground">نضمن لك تحسن ملحوظ في أداء متجرك ومبيعاتك</p>
+          <h3 className="font-bold mb-2">{t('dashboard.smartLineMarket.trust.results.title')}</h3>
+          <p className="text-sm text-muted-foreground">{t('dashboard.smartLineMarket.trust.results.desc')}</p>
         </div>
         <div className="bg-card border rounded-2xl p-6 text-center">
           <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <MessageSquare className="w-6 h-6 text-purple-600" />
           </div>
-          <h3 className="font-bold mb-2">دعم متواصل</h3>
-          <p className="text-sm text-muted-foreground">فريقنا متاح دائماً للإجابة على استفساراتك ومساعدتك</p>
+          <h3 className="font-bold mb-2">{t('dashboard.smartLineMarket.trust.support.title')}</h3>
+          <p className="text-sm text-muted-foreground">{t('dashboard.smartLineMarket.trust.support.desc')}</p>
         </div>
       </div>
     </div>

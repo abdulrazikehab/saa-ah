@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Users, UserPlus, Search, Shield, Trash2, Edit, Check, Phone } from 'lucide-react';
+import { Users, UserPlus, Search, Shield, Trash2, Edit, Check, Phone, Copy, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { staffService, StaffUser } from '@/services/staff.service';
 import { coreApi } from '@/lib/api';
 
@@ -44,6 +45,10 @@ export default function EmployeesManager() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [generatedEmail, setGeneratedEmail] = useState('');
+  const [passwordCopied, setPasswordCopied] = useState(false);
 
   const loadStaff = useCallback(async () => {
     try {
@@ -198,7 +203,7 @@ export default function EmployeesManager() {
 
     try {
       setIsSubmitting(true);
-      await staffService.createStaff({
+      const response = await staffService.createStaff({
         email: newStaffEmail,
         phone: newStaffPhone,
         role: newStaffRole,
@@ -206,10 +211,20 @@ export default function EmployeesManager() {
         assignedCustomers: selectedCustomers,
       });
       
-      toast({
-        title: 'تم بنجاح',
-        description: 'تم إضافة الموظف بنجاح',
-      });
+      // If password was auto-generated, show it in a dialog
+      const responseData = response as any;
+      if (responseData.password) {
+        setGeneratedPassword(responseData.password);
+        setGeneratedEmail(newStaffEmail);
+        setPasswordDialogOpen(true);
+        // Also log to console for easy copy
+        console.log(`Employee Password for ${newStaffEmail}: ${responseData.password}`);
+      } else {
+        toast({
+          title: 'تم بنجاح',
+          description: 'تم إضافة الموظف بنجاح',
+        });
+      }
       
       setIsAddDialogOpen(false);
       setNewStaffEmail('');
@@ -260,6 +275,25 @@ export default function EmployeesManager() {
 
   const getInitials = (email: string) => {
     return email.substring(0, 2).toUpperCase();
+  };
+
+  const copyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedPassword);
+      setPasswordCopied(true);
+      toast({
+        title: 'تم النسخ',
+        description: 'تم نسخ كلمة المرور إلى الحافظة',
+      });
+      setTimeout(() => setPasswordCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy password:', error);
+      toast({
+        title: 'فشل النسخ',
+        description: 'تعذر نسخ كلمة المرور. يرجى نسخها يدوياً.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const filteredStaff = staff.filter(user => 
@@ -512,6 +546,62 @@ export default function EmployeesManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* Password Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>تم إنشاء الموظف بنجاح</DialogTitle>
+            <DialogDescription>
+              تم إنشاء حساب الموظف. يرجى نسخ كلمة المرور التالية وإعطائها للموظف.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>البريد الإلكتروني</Label>
+              <Input value={generatedEmail} readOnly className="font-mono" />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>كلمة المرور المؤقتة</Label>
+              <div className="flex gap-2">
+                <Input 
+                  value={generatedPassword} 
+                  readOnly 
+                  className="font-mono text-lg font-bold" 
+                  type="text"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={copyPassword}
+                  className="shrink-0"
+                >
+                  {passwordCopied ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <Alert>
+              <AlertDescription>
+                <strong>مهم:</strong> سيتعين على الموظف تغيير كلمة المرور عند تسجيل الدخول لأول مرة.
+              </AlertDescription>
+            </Alert>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setPasswordDialogOpen(false)}>
+              فهمت
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

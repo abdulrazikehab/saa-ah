@@ -108,9 +108,11 @@ async function refreshAccessToken(): Promise<string | null> {
     // Build refresh URL - handle both cases:
     // Production: https://saeaa.net/auth/refresh
     // Development: http://localhost:3001/auth/refresh
-    const refreshUrl = AUTH_BASE_URL.includes('localhost') 
-      ? `${AUTH_BASE_URL}/auth/refresh`
-      : `${AUTH_BASE_URL}/refresh`;
+    // Ensure we don't double-append /auth if it's already in the base URL
+    const baseUrl = AUTH_BASE_URL.replace(/\/$/, '');
+    const refreshUrl = baseUrl.endsWith('/auth') 
+      ? `${baseUrl}/refresh`
+      : `${baseUrl}/auth/refresh`;
     
     const response = await fetch(refreshUrl, {
       method: 'POST',
@@ -179,9 +181,55 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
 
   // Always attach token if available, regardless of requireAuth
   // This allows public endpoints to benefit from auth context if it exists
+  // Check if this is a customer request (using customerToken) or merchant request (using accessToken)
   const cookieToken = getCookie('accessToken');
-  const token = cookieToken || localStorage.getItem('accessToken');
-  if (token) {
+  const accessToken = cookieToken || localStorage.getItem('accessToken');
+  const customerToken = localStorage.getItem('customerToken');
+  
+  // Check if Authorization header is already set (e.g., by caller explicitly setting customerToken)
+  const existingAuth = (headers as Record<string, string>)['Authorization'] || (headers as Record<string, string>)['authorization'];
+  
+  // Determine if this is a customer endpoint (should use customerToken) or merchant endpoint (should use accessToken)
+  const isDashboardPage = typeof window !== 'undefined' && window.location.pathname.includes('/dashboard/');
+  const isCustomerEndpoint = (url.includes('/customers/') || url.includes('/auth/customers/')) && !url.includes('/dashboard/');
+  // Special case: /merchant/employees can be accessed by both customers and shop owners
+  // Exclude /merchant/internal/employees from this check as it is strictly for shop owners/merchants
+  const isMerchantEmployeesEndpoint = url.includes('/merchant/employees') && !url.includes('/merchant/internal/employees');
+  const isWalletEndpoint = url.includes('/merchant/wallet/');
+  const isMerchantEndpoint = (url.includes('/merchant/') || url.includes('/api/merchant/') || url.includes('/dashboard/') || url.includes('/auth/staff/') || isDashboardPage) && !isMerchantEmployeesEndpoint && !isWalletEndpoint;
+  
+  let isCustomerRequest = false;
+  let token: string | undefined = undefined;
+  
+  if (existingAuth) {
+    // If Authorization is already set, check if it's using customerToken
+    const existingToken = existingAuth.replace('Bearer ', '').trim();
+    const storedCustomerToken = customerToken;
+    isCustomerRequest = !!storedCustomerToken && existingToken === storedCustomerToken;
+    token = undefined; // Don't override existing auth header
+  } else {
+    // No existing auth header, determine which token to use based on endpoint type
+    if (isCustomerEndpoint) {
+      // Customer endpoints: prefer customerToken, fallback to accessToken if customerToken not available
+      token = customerToken || accessToken;
+      isCustomerRequest = !!customerToken;
+    } else if (isMerchantEmployeesEndpoint || isWalletEndpoint) {
+      // Merchant employees or wallet endpoints: can use either customerToken or accessToken
+      // Prefer customerToken if available (for customers), otherwise use accessToken (for shop owners)
+      token = customerToken || accessToken;
+      isCustomerRequest = !!customerToken;
+    } else if (isMerchantEndpoint) {
+      // Other merchant endpoints: ONLY use accessToken, never use customerToken
+      token = accessToken;
+      isCustomerRequest = false;
+    } else {
+      // Other endpoints: prefer accessToken, fallback to customerToken if accessToken not available
+      token = accessToken || customerToken;
+      isCustomerRequest = !accessToken && !!customerToken;
+    }
+  }
+  
+  if (token && !existingAuth) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
@@ -222,7 +270,21 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       
       // Handle 401 Unauthorized with automatic token refresh
       if (response.status === 401) {
-        console.log(`[API] 401 Unauthorized: ${url}, requireAuth: ${requireAuth}, _retry: ${_retry}`);
+        console.log(`[API] 401 Unauthorized: ${url}, requireAuth: ${requireAuth}, _retry: ${_retry}, isCustomerRequest: ${isCustomerRequest}`);
+        
+        // For customer requests, don't try to refresh merchant tokens
+        if (isCustomerRequest) {
+          console.log('[API] Customer request failed with 401, clearing customer tokens only');
+          localStorage.removeItem('customerToken');
+          localStorage.removeItem('customerData');
+          
+          // Redirect to storefront login, not merchant login
+          if (requireAuth && !window.location.pathname.includes('/auth/login') && !window.location.pathname.includes('/login')) {
+            console.log('[API] Redirecting customer to storefront login');
+            window.location.href = '/auth/login';
+          }
+          throw new ApiError(401, i18n.t('common.sessionExpired'));
+        }
         
         if (requireAuth && !_retry) {
           if (isRefreshing) {
@@ -252,57 +314,73 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
               processQueue(new Error('Token refresh failed'), null);
               isRefreshing = false;
               
-              // Clear invalid tokens
+              // Clear invalid merchant tokens only (don't clear customer tokens)
               localStorage.removeItem('accessToken');
               localStorage.removeItem('refreshToken');
               document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
               document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-              localStorage.removeItem('user');
-              localStorage.removeItem('customerToken');
-              localStorage.removeItem('customerData');
+              
+              // Don't clear user data if we're on a dashboard page - let ProtectedRoute handle it
+              const isDashboardPage = window.location.pathname.includes('/dashboard/');
+              if (!isDashboardPage) {
+                localStorage.removeItem('user');
+              }
 
-              // Only redirect if auth was strictly required
-              if (requireAuth && !window.location.pathname.includes('/auth/login')) {
+              // Only redirect if auth was strictly required and not on dashboard
+              if (requireAuth && !window.location.pathname.includes('/auth/login') && !isDashboardPage) {
                 console.log('[API] Redirecting to login (refresh failed)');
                 window.location.href = '/auth/login';
               }
-              throw new ApiError(401, 'Session expired. Please login again.');
+              throw new ApiError(401, i18n.t('common.sessionExpired'));
             }
           } catch (refreshError) {
             console.error('[API] Refresh failed:', refreshError);
             processQueue(refreshError instanceof Error ? refreshError : new Error('Unknown error'), null);
             isRefreshing = false;
             
-            // Refresh failed, clear tokens
+            // Refresh failed, clear merchant tokens only (don't clear customer tokens)
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
             document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-            localStorage.removeItem('user');
-            localStorage.removeItem('customerToken');
-            localStorage.removeItem('customerData');
+            
+            // Don't clear user data if we're on a dashboard page - let ProtectedRoute handle it
+            const isDashboardPage = window.location.pathname.includes('/dashboard/');
+            if (!isDashboardPage) {
+              localStorage.removeItem('user');
+            }
 
-            if (requireAuth && !window.location.pathname.includes('/auth/login')) {
+            // Don't redirect from dashboard pages - let the ProtectedRoute handle it
+            if (requireAuth && !window.location.pathname.includes('/auth/login') && !isDashboardPage) {
               console.log('[API] Redirecting to login (refresh error)');
               window.location.href = '/auth/login';
             }
-            throw new ApiError(401, 'Session expired. Please login again.');
+            throw new ApiError(401, i18n.t('common.sessionExpired'));
           }
         } else if (requireAuth && _retry) {
           // If we get 401 after retry, don't try again
-          console.log('[API] 401 after retry, clearing tokens');
+          console.log('[API] 401 after retry, clearing merchant tokens only');
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
           document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
           
-          if (!window.location.pathname.includes('/auth/login')) {
+          // Don't clear user data if we're on a dashboard page - let ProtectedRoute handle it
+          const isDashboardPage = window.location.pathname.includes('/dashboard/');
+          if (!isDashboardPage) {
+            localStorage.removeItem('user');
+          }
+          
+          // Don't redirect from dashboard pages - let the ProtectedRoute handle it
+          if (!window.location.pathname.includes('/auth/login') && !isDashboardPage) {
             console.log('[API] Redirecting to login (retry failed)');
             window.location.href = '/auth/login';
           }
-          throw new ApiError(401, 'Authentication failed. Please login again.');
+          throw new ApiError(401, i18n.t('common.authFailed'));
         } else if (!requireAuth) {
           console.log('[API] 401 on public endpoint, ignoring redirect');
+          // Don't throw error for public endpoints - let the component handle it
+          throw new ApiError(401, 'Unauthorized', data);
         }
       }
 
@@ -399,12 +477,7 @@ async function fetchApi(url: string, options: ApiOptions = {}) {
       throw error;
     }
     // Network errors - logged to backend error logs
-    const isArabic = i18n.language === 'ar';
-    toast.error(
-      isArabic
-        ? 'تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.'
-        : 'Unable to connect to the server. Please check your internet connection.'
-    );
+    toast.error(i18n.t('common.networkError'));
     throw new ApiError(500, 'Network error');
   }
 }

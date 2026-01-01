@@ -7,9 +7,11 @@ import Checkout from "@/pages/storefront/Checkout";
 import Orders from "@/pages/storefront/Orders";
 import AccountProfile from "@/pages/storefront/AccountProfile";
 import OrderDetail from "@/pages/storefront/OrderDetail";
+import RechargeBalance from "@/pages/storefront/RechargeBalance";
 import Collection from "@/pages/storefront/Collection";
 import Categories from "@/pages/storefront/Categories";
 import CategoryDetail from "@/pages/storefront/CategoryDetail";
+import Wishlist from "@/pages/storefront/Wishlist";
 import DynamicPage from "@/pages/storefront/DynamicPage";
 import { StorefrontLayout } from "@/components/storefront/StorefrontLayout";
 import CustomerProtectedRoute from "@/components/auth/CustomerProtectedRoute";
@@ -23,6 +25,8 @@ import AboutUs from "@/pages/AboutUs";
 import ContactUs from "@/pages/ContactUs";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import StorefrontAuth from "@/pages/storefront/auth/StorefrontAuth";
+import ForgotPassword from "@/pages/auth/ForgotPassword";
+import ResetPassword from "@/pages/auth/ResetPassword";
 
 export const TenantRouter = () => {
   console.log('Rendering TenantRouter');
@@ -37,7 +41,7 @@ export const TenantRouter = () => {
         <Route path="/cards/:id" element={<CardDetail />} />
         <Route path="/account/cards" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
         <Route path="/account/wallet" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
-        <Route path="/account/favorites" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
+        <Route path="/account/favorites" element={<Wishlist />} />
       </Route>
 
       {/* Standard Storefront Routes */}
@@ -54,10 +58,11 @@ export const TenantRouter = () => {
         <Route path="/account" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
         <Route path="/account/orders" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
         <Route path="/account/profile" element={<CustomerProtectedRoute><AccountProfile /></CustomerProtectedRoute>} />
+        <Route path="/account/recharge" element={<CustomerProtectedRoute><RechargeBalance /></CustomerProtectedRoute>} />
         <Route path="/orders/:id" element={<CustomerProtectedRoute><OrderDetail /></CustomerProtectedRoute>} />
         
         {/* Additional Storefront Pages */}
-        <Route path="/wishlist" element={<CustomerProtectedRoute><Orders /></CustomerProtectedRoute>} />
+        <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/track-order" element={<DynamicPage />} />
         <Route path="/returns" element={<DynamicPage />} />
         <Route path="/faq" element={<DynamicPage />} />
@@ -65,6 +70,9 @@ export const TenantRouter = () => {
         <Route path="/policies" element={<DynamicPage />} />
         <Route path="/rules" element={<DynamicPage />} />
         <Route path="/offers" element={<DynamicPage />} />
+        
+        {/* Dynamic Pages - from Page Builder */}
+        <Route path="/page/:slug" element={<DynamicPage />} />
         
         <Route path="/:slug" element={<DynamicPage />} />
         
@@ -78,6 +86,8 @@ export const TenantRouter = () => {
       {/* Auth Routes */}
       <Route path="/auth/login" element={<StorefrontAuth />} />
       <Route path="/auth/signup" element={<StorefrontAuth />} />
+      <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+      <Route path="/auth/reset-password" element={<ResetPassword />} />
       <Route path="/login" element={<StorefrontAuth />} />
       <Route path="/signup" element={<StorefrontAuth />} />
       

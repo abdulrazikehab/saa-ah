@@ -10,6 +10,8 @@ import { getProfessionalErrorMessage } from '@/lib/toast-errors';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { getTenantContext } from '@/lib/storefront-utils';
+import { useStoreSettings } from '@/contexts/StoreSettingsContext';
+import { OptimizedImage } from '@/components/ui/OptimizedImage';
 
 interface CustomerLoginProps {
   onClose: () => void;
@@ -21,6 +23,8 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
   const { toast } = useToast();
   const { i18n } = useTranslation();
   const isRTL = i18n.language === 'ar';
+  const { settings } = useStoreSettings();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -69,18 +73,48 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
         throw new Error('Invalid response from server');
       }
       
-      localStorage.setItem('customerToken', String(response.token || ''));
-      if (response.customer) {
-        localStorage.setItem('customerData', JSON.stringify(response.customer));
+      // Validate token exists
+      if (!response.token) {
+        throw new Error('No token received from server');
       }
+      
+      // Store token and customer data
+      localStorage.setItem('customerToken', String(response.token));
+      if (response.customer) {
+        // Include employee-specific fields if present
+        const customerData = {
+          ...response.customer,
+          ...(response.isEmployee && { isEmployee: true }),
+          ...(response.employerEmail && { employerEmail: response.employerEmail }),
+          ...(response.permissions && { permissions: response.permissions }),
+        };
+        localStorage.setItem('customerData', JSON.stringify(customerData));
+      }
+      
+      // Dispatch custom event to notify other components (like CustomerProtectedRoute)
+      // that login was successful in the same tab
+      window.dispatchEvent(new CustomEvent('customerLogin', { 
+        detail: { 
+          token: response.token, 
+          customer: response.customer,
+          isEmployee: response.isEmployee,
+          employerEmail: response.employerEmail,
+          permissions: response.permissions,
+        } 
+      }));
       
       toast({
         title: isRTL ? 'تم تسجيل الدخول بنجاح' : 'Login successful',
         description: isRTL ? 'مرحباً بك في متجرنا' : 'Welcome back!',
       });
       
+      // Call success callback before closing
       onLoginSuccess?.();
-      onClose();
+      
+      // Small delay to ensure state updates before closing modal
+      setTimeout(() => {
+        onClose();
+      }, 100);
     } catch (error: unknown) {
       console.error('Login error:', error);
       const { title, description } = getProfessionalErrorMessage(
@@ -121,13 +155,31 @@ export function CustomerLogin({ onClose, onSwitchToSignup, onLoginSuccess }: Cus
 
           {/* Header */}
           <div className="relative pt-10 pb-6 px-8 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl gradient-primary shadow-lg">
-              <ShoppingBag className="h-8 w-8 text-white" />
+            <div className="flex flex-col items-center gap-4 mb-6">
+              <div className="w-24 h-24 rounded-2xl overflow-hidden bg-white shadow-xl border-2 border-primary/10 p-2">
+                <OptimizedImage 
+                  src={settings.storeLogoUrl || settings.logoUrl || ''} 
+                  alt={isRTL ? settings.storeNameAr || settings.storeName : settings.storeName}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold gradient-text">
+                  {isRTL ? settings.storeNameAr || settings.storeName : settings.storeName}
+                </h2>
+                <p className="text-sm text-muted-foreground line-clamp-2 max-w-[250px] mx-auto">
+                  {isRTL ? settings.storeDescriptionAr || settings.storeDescription : settings.storeDescription}
+                </p>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold gradient-text mb-2">
+            
+            <div className="inline-flex items-center justify-center w-12 h-12 mb-4 rounded-xl bg-primary/10 text-primary">
+              <ShoppingBag className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">
               {isRTL ? 'مرحباً بعودتك' : 'Welcome Back'}
-            </h2>
-            <p className="text-muted-foreground">
+            </h3>
+            <p className="text-muted-foreground text-sm">
               {isRTL ? 'سجل دخولك للمتابعة مع طلبك' : 'Sign in to continue with your order'}
             </p>
           </div>

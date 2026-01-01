@@ -38,6 +38,8 @@ export default function WalletTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+
 
   useEffect(() => {
     if (user?.tenantId) {
@@ -93,6 +95,44 @@ export default function WalletTransactions() {
       setPrintingId(null);
     }
   };
+
+  // Handle refund transaction
+  const handleRefund = async (transaction: Transaction) => {
+    if (!confirm('هل أنت متأكد من رغبتك في استرجاع هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء.')) {
+      return;
+    }
+
+    try {
+      setRefundingId(transaction.id);
+      
+      await coreApi.refundTransaction(user!.tenantId!, transaction.id);
+      
+      // Update local state to reflect refunded status
+      setTransactions(prev => prev.map(t => 
+        t.id === transaction.id 
+          ? { ...t, status: 'REFUNDED' }
+          : t
+      ));
+      
+      // Reload balance to reflect the refund
+      const balanceData = await coreApi.getBalance(user!.tenantId!);
+      setBalance(balanceData);
+      
+      toast({
+        title: 'تم الاسترجاع',
+        description: `تم استرجاع مبلغ المعاملة ${transaction.orderNumber || transaction.id} بنجاح`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'فشل الاسترجاع',
+        description: error.response?.data?.message || 'حدث خطأ أثناء استرجاع المعاملة',
+        variant: 'destructive',
+      });
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
 
   // Format card number with BIN
   const formatCardDisplay = (cardNumber?: string, cardBin?: string, cardLast4?: string) => {
@@ -214,6 +254,8 @@ export default function WalletTransactions() {
                   <TableHead>الصافي</TableHead>
                   <TableHead className="text-center">عدد الطباعة</TableHead>
                   <TableHead className="text-center">إعادة طباعة</TableHead>
+                  <TableHead className="text-center">استرجاع</TableHead>
+
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -262,11 +304,24 @@ export default function WalletTransactions() {
                         {printingId === transaction.id ? 'جاري...' : 'طباعة'}
                       </Button>
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRefund(transaction)}
+                        disabled={refundingId === transaction.id || transaction.status === 'REFUNDED' || transaction.status !== 'COMPLETED'}
+                        className={`gap-1 ${transaction.status === 'REFUNDED' ? 'text-muted-foreground' : 'text-red-500 hover:text-red-600 hover:bg-red-50'}`}
+                      >
+                        <ArrowDownRight className={`h-4 w-4 ${refundingId === transaction.id ? 'animate-pulse' : ''}`} />
+                        {transaction.status === 'REFUNDED' ? 'تم الاسترجاع' : refundingId === transaction.id ? 'جاري...' : 'استرجاع'}
+                      </Button>
+                    </TableCell>
+
                   </TableRow>
                 ))}
                 {transactions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       لا توجد معاملات حتى الآن
                     </TableCell>
                   </TableRow>

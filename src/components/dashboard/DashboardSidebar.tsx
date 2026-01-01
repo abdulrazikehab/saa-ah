@@ -51,6 +51,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { APP_VERSION, GIT_COMMIT } from '@/version';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency-utils';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface DashboardSidebarProps {
   className?: string;
@@ -89,6 +90,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
   const isRTL = i18n.language === 'ar';
   const location = useLocation();
   const navigate = useNavigate();
+  const { canAccessRoute, isStaff } = usePermissions();
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [partnerStatus, setPartnerStatus] = useState<PartnerStatus>({});
   const [balance, setBalance] = useState<number>(0);
@@ -175,65 +177,81 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
     fetchBalance();
   }, []);
 
+  // Filter navigation items based on permissions
+  const filterNavigationItems = (items: Array<{ name: string; href: string; icon: LucideIcon; badge?: string | null }>) => {
+    return items.filter(item => {
+      // Always allow dashboard home
+      if (item.href === '/dashboard') return true;
+      // Check if user has permission to access this route
+      return canAccessRoute(item.href);
+    });
+  };
+
   const navigationSections: NavigationSection[] = [
     {
       title: t('dashboard.sidebar.home'),
-      items: [
+      items: filterNavigationItems([
         { name: t('dashboard.sidebar.dashboard'), href: '/dashboard', icon: Home, badge: null },
-      ],
+      ]),
     },
     {
       title: t('dashboard.sidebar.salesAndOrders'),
-      items: [
+      items: filterNavigationItems([
         { name: t('dashboard.sidebar.products'), href: '/dashboard/products', icon: Package, badge: null },
-        { name: t('dashboard.sidebar.hierarchical', 'المستكشف الهرمي'), href: '/dashboard/hierarchical', icon: FolderOpen, badge: null },
+        { name: t('dashboard.sidebar.hierarchical'), href: '/dashboard/hierarchical', icon: FolderOpen, badge: null },
         { name: t('dashboard.sidebar.priceManagement'), href: '/dashboard/prices', icon: DollarSign, badge: null },
         { name: t('dashboard.sidebar.orders'), href: '/dashboard/orders', icon: ShoppingCart, badge: null },
         { name: t('dashboard.sidebar.customers'), href: '/dashboard/customers', icon: Users, badge: null },
         { name: t('dashboard.sidebar.reports'), href: '/dashboard/reports', icon: BarChart3, badge: null },
-      ],
+      ]),
     },
     {
       title: t('dashboard.sidebar.contentAndDesign'),
-      items: [
+      items: filterNavigationItems([
         { name: t('dashboard.sidebar.categories'), href: '/dashboard/categories', icon: FolderOpen, badge: null },
         { name: t('dashboard.sidebar.pages'), href: '/dashboard/pages', icon: FileText, badge: null },
         { name: t('dashboard.sidebar.storefront'), href: '/dashboard/storefront', icon: Store, badge: null },
         { name: t('dashboard.sidebar.storeDesign'), href: '/dashboard/design', icon: Palette, badge: null },
         { name: t('dashboard.sidebar.templates'), href: '/dashboard/templates', icon: LayoutDashboard, badge: null },
-      ],
+      ]),
     },
     {
       title: t('dashboard.sidebar.marketing'),
-      items: [
+      items: filterNavigationItems([
         { name: t('dashboard.sidebar.potentialAndMarketing'), href: '/dashboard/marketing', icon: Tag, badge: null },
         { name: t('dashboard.sidebar.smartLine'), href: '/dashboard/smart-line', icon: Rocket, badge: null },
-      ],
+      ]),
     },
     {
       title: t('dashboard.sidebar.storeSettings'),
-      items: [
+      items: filterNavigationItems([
         { name: t('dashboard.sidebar.generalSettings'), href: '/dashboard/settings', icon: Settings, badge: null },
         { name: t('dashboard.sidebar.notifications'), href: '/dashboard/settings/notifications', icon: Bell, badge: null },
         { name: t('dashboard.sidebar.payment'), href: '/dashboard/settings/payment', icon: CreditCard, badge: null },
         { name: t('dashboard.sidebar.checkoutSettings'), href: '/dashboard/settings/checkout', icon: ShoppingCart, badge: null },
+        { name: t('dashboard.sidebar.limits'), href: '/dashboard/settings/limits', icon: ShieldCheck, badge: null },
         { name: t('dashboard.sidebar.domains'), href: '/dashboard/settings/domains', icon: Globe, badge: null },
         { name: t('dashboard.sidebar.suppliers'), href: '/dashboard/settings/suppliers', icon: Building2, badge: null },
         { name: t('dashboard.sidebar.brands'), href: '/dashboard/settings/brands', icon: Package, badge: null },
         { name: t('dashboard.sidebar.units'), href: '/dashboard/settings/units', icon: Package, badge: null },
         { name: t('dashboard.sidebar.currencies'), href: '/dashboard/settings/currencies', icon: DollarSign, badge: null },
-      ],
+      ]),
     },
     {
       title: t('dashboard.sidebar.advanced'),
-      items: [
+      items: filterNavigationItems([
         { name: t('dashboard.sidebar.usersAndPermissions'), href: '/dashboard/settings/users', icon: Users, badge: null },
+        // Only show employees and permissions management to owners/admins (not staff)
+        ...(isStaff ? [] : [
+          { name: t('dashboard.sidebar.employees'), href: '/dashboard/employees', icon: Users, badge: null },
+          { name: t('dashboard.sidebar.permissions'), href: '/dashboard/permissions', icon: ShieldCheck, badge: null },
+        ]),
         { name: t('dashboard.sidebar.integrations'), href: '/dashboard/settings/integrations', icon: Plug, badge: null },
         { name: t('dashboard.sidebar.identityVerification'), href: '/dashboard/settings/kyc', icon: ShieldCheck, badge: null },
         { name: t('dashboard.sidebar.appStore'), href: '/dashboard/apps', icon: Smartphone, badge: null },
         { name: t('dashboard.sidebar.storeManagement'), href: '/dashboard/management', icon: Settings, badge: null },
         { name: t('dashboard.sidebar.chat'), href: '/dashboard/chat', icon: MessageSquare, badge: null },
-      ],
+      ]),
     },
   ];
 
@@ -315,7 +333,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
             collapsed && "flex-col gap-2 justify-center"
           )}>
             <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-              {isRTL ? 'المعاملات' : 'Transactions'}
+              {t('dashboard.sidebar.transactions')}
             </span>
             <div className={cn(
               "rounded-full bg-green-100 dark:bg-green-900/40 p-2.5 flex items-center justify-center",
@@ -366,6 +384,7 @@ export const DashboardSidebar = ({ className, collapsed = false, onToggleCollaps
                       return (
                         <div key={item.name} className="relative">
                           <Link
+                            id={`tour-sidebar-${item.href.split('/').pop()}`}
                             to={item.href}
                             title={collapsed ? item.name : undefined}
                             className={cn(

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { getAdminApiKey } from '@/lib/admin-config';
+import { useTranslation } from 'react-i18next';
 
 interface PlatformOverview {
   tenants: {
@@ -44,6 +45,7 @@ interface PlatformOverview {
 }
 
 export default function MasterOverview() {
+  const { t } = useTranslation();
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -62,7 +64,6 @@ export default function MasterOverview() {
 
   useEffect(() => {
     loadOverview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -76,53 +77,53 @@ export default function MasterOverview() {
   if (!overview) {
     return (
       <div className="text-center text-gray-400 py-12">
-        Failed to load platform overview
+        {t('masterDashboard.overview.loadError')}
       </div>
     );
   }
 
   const statCards = [
     {
-      title: 'Total Tenants',
+      title: t('masterDashboard.overview.stats.totalTenants'),
       value: overview.tenants.total,
       icon: Store,
       color: 'purple',
-      subtitle: `${overview.tenants.active} active`,
+      subtitle: `${overview.tenants.active} ${t('masterDashboard.overview.stats.activeTenants')}`,
     },
     {
-      title: 'Total Revenue',
+      title: t('masterDashboard.overview.stats.totalRevenue'),
       value: `$${(overview.transactions.totalRevenue || 0).toLocaleString()}`,
       icon: DollarSign,
       color: 'green',
-      subtitle: `$${(overview.transactions.platformFees || 0).toLocaleString()} platform fees`,
+      subtitle: `$${(overview.transactions.platformFees || 0).toLocaleString()} ${t('masterDashboard.overview.stats.platformFees')}`,
     },
     {
-      title: 'Transactions',
+      title: t('masterDashboard.overview.stats.transactions'),
       value: overview.transactions.total.toLocaleString(),
       icon: TrendingUp,
       color: 'blue',
-      subtitle: 'All time',
+      subtitle: t('masterDashboard.overview.stats.allTime'),
     },
     {
-      title: 'Total Users',
+      title: t('masterDashboard.overview.stats.totalUsers'),
       value: overview.totalUsers.toLocaleString(),
       icon: Users,
       color: 'orange',
-      subtitle: 'Across all tenants',
+      subtitle: t('masterDashboard.overview.stats.acrossTenants'),
     },
     {
-      title: 'Payment Gateways',
+      title: t('masterDashboard.overview.stats.paymentGateways'),
       value: overview.activePaymentGateways,
       icon: CreditCard,
       color: 'pink',
-      subtitle: 'Active',
+      subtitle: t('masterDashboard.overview.stats.active'),
     },
     {
-      title: 'Partners',
+      title: t('masterDashboard.overview.stats.partners'),
       value: overview.activePartners,
       icon: Handshake,
       color: 'indigo',
-      subtitle: 'Active',
+      subtitle: t('masterDashboard.overview.stats.active'),
     },
   ];
 
@@ -137,8 +138,8 @@ export default function MasterOverview() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-3xl font-bold text-white mb-2">Platform Overview</h2>
-        <p className="text-gray-400">Monitor your entire platform at a glance</p>
+        <h2 className="text-3xl font-bold text-white mb-2">{t('masterDashboard.overview.title')}</h2>
+        <p className="text-gray-400">{t('masterDashboard.overview.subtitle')}</p>
       </div>
 
       {/* Stats Grid */}
@@ -152,7 +153,7 @@ export default function MasterOverview() {
             orange: 'from-orange-500/20 to-orange-600/20 border-orange-500/30',
             pink: 'from-pink-500/20 to-pink-600/20 border-pink-500/30',
             indigo: 'from-indigo-500/20 to-indigo-600/20 border-indigo-500/30',
-          }[stat.color];
+          }[stat.color as keyof typeof colorClasses];
 
           const iconColorClasses = {
             purple: 'text-purple-400',
@@ -161,7 +162,7 @@ export default function MasterOverview() {
             orange: 'text-orange-400',
             pink: 'text-pink-400',
             indigo: 'text-indigo-400',
-          }[stat.color];
+          }[stat.color as keyof typeof iconColorClasses];
 
           return (
             <div
@@ -185,42 +186,42 @@ export default function MasterOverview() {
 
       {/* Tenant Status */}
       <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4">Tenant Status</h3>
+        <h3 className="text-xl font-bold text-white mb-4">{t('masterDashboard.overview.tenantStatus.title')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
               <CheckCircle className="w-5 h-5 text-green-400" />
               <span className="text-2xl font-bold text-white">{overview.tenants.active}</span>
             </div>
-            <p className="text-sm text-gray-400">Active</p>
+            <p className="text-sm text-gray-400">{t('masterDashboard.overview.tenantStatus.active')}</p>
           </div>
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
               <AlertCircle className="w-5 h-5 text-yellow-400" />
               <span className="text-2xl font-bold text-white">{overview.tenants.suspended}</span>
             </div>
-            <p className="text-sm text-gray-400">Suspended</p>
+            <p className="text-sm text-gray-400">{t('masterDashboard.overview.tenantStatus.suspended')}</p>
           </div>
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
               <XCircle className="w-5 h-5 text-red-400" />
               <span className="text-2xl font-bold text-white">{overview.tenants.inactive}</span>
             </div>
-            <p className="text-sm text-gray-400">Inactive</p>
+            <p className="text-sm text-gray-400">{t('masterDashboard.overview.tenantStatus.inactive')}</p>
           </div>
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
               <Store className="w-5 h-5 text-purple-400" />
               <span className="text-2xl font-bold text-white">{overview.tenants.total}</span>
             </div>
-            <p className="text-sm text-gray-400">Total</p>
+            <p className="text-sm text-gray-400">{t('masterDashboard.overview.tenantStatus.total')}</p>
           </div>
         </div>
       </div>
 
       {/* Plan Distribution */}
       <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4">Plan Distribution</h3>
+        <h3 className="text-xl font-bold text-white mb-4">{t('masterDashboard.overview.planDistribution.title')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {overview.planDistribution.map((plan, index) => (
             <div key={index} className="bg-gray-700/30 rounded-lg p-4">
@@ -233,7 +234,7 @@ export default function MasterOverview() {
 
       {/* Recent Activity */}
       <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4">Recent Activity</h3>
+        <h3 className="text-xl font-bold text-white mb-4">{t('masterDashboard.overview.recentActivity.title')}</h3>
         <div className="space-y-3">
           {overview.recentActivity.length > 0 ? (
             overview.recentActivity.map((activity) => (
@@ -253,7 +254,7 @@ export default function MasterOverview() {
               </div>
             ))
           ) : (
-            <p className="text-center text-gray-400 py-4">No recent activity</p>
+            <p className="text-center text-gray-400 py-4">{t('masterDashboard.overview.recentActivity.noActivity')}</p>
           )}
         </div>
       </div>

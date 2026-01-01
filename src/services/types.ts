@@ -52,7 +52,10 @@ export interface Product {
   name: string;
   nameAr?: string;
   description?: string;
+  descriptionAr?: string;
   price: number;
+  retailPrice?: number;
+  wholesalePrice?: number;
   compareAtPrice?: number;
   categoryId?: string;
   images?: ProductImage[];
@@ -107,16 +110,27 @@ export interface CreateProductData {
 export interface Category {
   id: string;
   name: string;
+  nameAr?: string;
   description?: string;
+  descriptionAr?: string;
   parentId?: string;
   image?: string;
+  slug?: string;
+  isActive?: boolean;
+  productCount?: number;
 }
 
 export interface CreateCategoryData {
   name: string;
+  nameAr?: string;
   description?: string;
+  descriptionAr?: string;
   slug?: string;
   parentId?: string;
+  image?: string;
+  icon?: string;
+  isActive?: boolean;
+  sortOrder?: number;
 }
 
 export interface ProductVariant {
@@ -146,11 +160,15 @@ export interface CartItem {
   variantId?: string;
   quantity: number;
   price: number;
+  product?: Product;
+  productVariant?: ProductVariant;
+  unitPriceSnapshot?: number;
 }
 
 export interface Cart {
   id: string;
   items: CartItem[];
+  cartItems?: CartItem[];
   total: number;
   sessionId?: string;
 }
@@ -193,10 +211,15 @@ export interface Address {
 }
 
 export interface CreateOrderData {
+  cartId?: string;
   items?: CartItem[];
   shippingAddress: Address;
   paymentMethod: string;
   shippingMethod?: string;
+  useWalletBalance?: boolean;
+  customerEmail?: string;
+  customerName?: string;
+  customerPhone?: string;
   contact?: {
     email: string;
     phone: string;
@@ -351,10 +374,33 @@ export interface Plugin {
 // Site Config Types
 export interface SiteSettings {
   storeName?: string;
+  storeNameAr?: string;
+  storeDescription?: string;
+  storeDescriptionAr?: string;
   logoUrl?: string;
+  storeLogoUrl?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  postalCode?: string;
   currency?: string;
+  timezone?: string;
   language?: string;
+  taxEnabled?: boolean;
+  taxRate?: number;
+  shippingEnabled?: boolean;
+  inventoryTracking?: boolean;
+  lowStockThreshold?: number;
+  allowGuestCheckout?: boolean;
+  requireEmailVerification?: boolean;
+  maintenanceMode?: boolean;
+  storeType?: 'GENERAL' | 'DIGITAL_CARDS';
   paymentMethods?: string[];
+  googlePlayUrl?: string;
+  appStoreUrl?: string;
+  blockVpnUsers?: boolean;
   [key: string]: unknown;
 }
 
@@ -366,7 +412,7 @@ export interface Link {
 
 export interface SiteConfig {
   tenantId: string;
-  header: { title: string; links: Link[] };
+  header: { title: string; links: Link[]; buttons?: (Link & { variant?: string })[] };
   footer: { links: Link[] };
   background: { type: string; value: string };
   language: string;

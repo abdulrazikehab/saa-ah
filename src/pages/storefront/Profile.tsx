@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authApi, coreApi } from '@/lib/api';
+import { authApi, coreApi, apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Package, User, LogOut } from 'lucide-react';
+import { Loader2, Package, User, LogOut, Lock } from 'lucide-react';
+
 import {
   Table,
   TableBody,
@@ -22,14 +23,14 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       const userData = await authApi.me();
       setUser(userData);
@@ -51,7 +52,11 @@ export default function Profile() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [navigate]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   function handleLogout() {
     localStorage.removeItem('accessToken');
@@ -62,6 +67,55 @@ export default function Profile() {
       description: 'You have been successfully logged out.',
     });
   }
+
+  const handleChangePassword = async () => {
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'New passwords do not match.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      
+      const customerToken = localStorage.getItem('customerToken');
+      if (customerToken) {
+        // Customer change password
+        await apiClient.post(`${apiClient.authUrl}/auth/customers/change-password`, {
+          currentPassword,
+          newPassword,
+        }, {
+          headers: {
+            'Authorization': `Bearer ${customerToken}`
+          }
+        });
+      } else {
+        // Merchant change password
+        await authApi.changePassword(currentPassword, newPassword);
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Password updated successfully.',
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: unknown) {
+      console.error('Failed to change password:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast({
+        title: 'Error',
+        description: errorMessage || 'Failed to update password.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -108,6 +162,7 @@ export default function Profile() {
                 <div className="text-center py-10 text-muted-foreground">
                   No orders found.
                 </div>
+
               ) : (
                 <Table>
                   <TableHeader>
@@ -164,6 +219,43 @@ export default function Profile() {
                 <Input id="role" value={user.role} disabled />
               </div>
               {/* Add more fields as needed */}
+              {/* Password Change Section */}
+              <div className="grid gap-2 mt-6">
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2 mt-4">
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2 mt-4">
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+              <Button
+                className="mt-4"
+                onClick={handleChangePassword}
+                disabled={isChangingPassword}
+              >
+                {isChangingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+                Change Password
+              </Button>
+
             </CardContent>
           </Card>
         </TabsContent>

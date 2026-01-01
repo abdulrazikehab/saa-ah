@@ -1,8 +1,10 @@
 // Logo configuration with version for cache-busting
 // Increment this version when you update the logo file
-export const LOGO_VERSION = '5';
+export const LOGO_VERSION = '7';
 
-// Saeaa shopping cart gaming logo - the colorful cart with controller, dice, phone
+// Saeaa logo - shopping cart with gradient colors (blue to green to orange/yellow)
+// Contains gaming items (controller, playing card with crown, dice) with digital circuit traces
+// Features Arabic text "سعة" both inside the cart and below it
 export const DEFAULT_LOGO_PATH = '/branding/saeaa-logo.png';
 
 // Brand name in both languages

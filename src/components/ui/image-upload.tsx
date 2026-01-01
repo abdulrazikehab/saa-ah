@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { uploadService } from '@/services/upload.service';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, validateImageSignature } from '@/lib/utils';
 
 interface ImageUploadProps {
   value?: string;
@@ -45,11 +45,11 @@ export function ImageUpload({ value, onChange, className, placeholder = "Upload 
   };
 
   const uploadFile = async (file: File) => {
-    // Validate file type
+    // Validate file type (MIME type check)
     if (!file.type.startsWith('image/')) {
       toast({
-        title: 'Invalid file type',
-        description: 'Please upload an image file (JPEG, PNG, WEBP)',
+        title: 'نوع الملف غير صالح',
+        description: 'يرجى تحميل ملف صورة (JPEG, PNG, WEBP)',
         variant: 'destructive',
       });
       return;
@@ -58,8 +58,19 @@ export function ImageUpload({ value, onChange, className, placeholder = "Upload 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: 'File too large',
-        description: 'Image size should be less than 5MB',
+        title: 'حجم الملف كبير جداً',
+        description: 'يجب أن يكون حجم الصورة أقل من 5 ميجابايت',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Security Check: Validate Image Signature (Magic Numbers)
+    const { isValid, reason } = await validateImageSignature(file);
+    if (!isValid) {
+      toast({
+        title: 'ملف غير آمن',
+        description: reason || 'تم رفض الملف لأسباب أمنية',
         variant: 'destructive',
       });
       return;
@@ -70,14 +81,14 @@ export function ImageUpload({ value, onChange, className, placeholder = "Upload 
       const response = await uploadService.uploadImage(file);
       onChange(response.secureUrl || response.url);
       toast({
-        title: 'Success',
-        description: 'Image uploaded successfully',
+        title: 'تم بنجاح',
+        description: 'تم رفع الصورة بنجاح',
       });
     } catch (error) {
       console.error('Upload failed:', error);
       toast({
-        title: 'Upload failed',
-        description: 'Failed to upload image. Please try again.',
+        title: 'فشل الرفع',
+        description: 'فشل رفع الصورة. يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {

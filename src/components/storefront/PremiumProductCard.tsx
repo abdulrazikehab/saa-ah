@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Heart, Eye, Star, Zap } from 'lucide-react';
+import { OptimizedImage } from '@/components/ui/OptimizedImage';
 
 interface Product {
   id: string;
@@ -68,7 +69,7 @@ export function PremiumProductCard({
     >
       {/* Image Container */}
       <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-purple-900/20 to-pink-900/20">
-        <img
+        <OptimizedImage
           src={product.image}
           alt={language === 'ar' ? product.nameAr : product.name}
           className={`w-full h-full object-cover transition-transform duration-500 ${

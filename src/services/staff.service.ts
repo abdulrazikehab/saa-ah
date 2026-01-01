@@ -3,12 +3,16 @@ import { apiClient } from './core/api-client';
 export interface StaffUser {
   id: string;
   email: string;
+  name?: string;
+  phone?: string;
+  role?: string;
   createdAt: string;
   updatedAt: string;
   staffPermissions: {
     permission: string;
     grantedAt: string;
-    grantedByUser: {
+    grantedBy: string;
+    grantedByUser?: {
       email: string;
     };
   }[];
@@ -25,11 +29,16 @@ export interface CreateStaffDto {
 export const staffService = {
   getStaffUsers: (page: number = 1, limit: number = 50): Promise<{ data: StaffUser[]; meta: any }> =>
     apiClient.fetch(`${apiClient.authUrl}/staff?page=${page}&limit=${limit}`, {
-      requireAuth: false,
+      requireAuth: true,
     }),
 
   getStaffUser: (id: string): Promise<StaffUser> =>
     apiClient.fetch(`${apiClient.authUrl}/staff/${id}`, {
+      requireAuth: true,
+    }),
+
+  getAvailablePermissions: (): Promise<string[]> =>
+    apiClient.fetch(`${apiClient.authUrl}/staff/permissions`, {
       requireAuth: true,
     }),
 

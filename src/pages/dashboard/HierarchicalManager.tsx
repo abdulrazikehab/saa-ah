@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { coreApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -24,10 +24,25 @@ interface Product {
   name: string;
   nameAr?: string;
   brandId?: string;
-  categories?: Array<{ categoryId?: string; category?: { id: string }; id?: string }>;
+  categories?: Array<{ 
+    categoryId?: string; 
+    category?: { id: string; name: string; nameAr?: string }; 
+    id?: string;
+  }>;
+  description?: string;
+  descriptionAr?: string;
+  price?: number;
+  cost?: number;
+  sku?: string;
+  barcode?: string;
+  stock?: number;
+  status?: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  images?: string[];
+  featured?: boolean;
+  path?: string;
 }
 
-export default function HierarchicalManager() {
+export default function HierarchicalManager({ isFullScreen = false }: { isFullScreen?: boolean }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -36,17 +51,14 @@ export default function HierarchicalManager() {
   const [loading, setLoading] = useState(true);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      // Use authenticated API calls since this is a dashboard page
       const [brandsData, categoriesData, productsData] = await Promise.all([
-        coreApi.getBrands().catch(() => []),
-        coreApi.getCategories(),
-        coreApi.getProducts({ limit: '1000' } as any).catch(() => []),
+        coreApi.getBrands(true).catch(() => []), // Require auth for dashboard
+        coreApi.getCategories(undefined, true).catch(() => []), // Require auth for dashboard
+        coreApi.getProducts({ limit: '10000' } as any, true).catch(() => []), // Require auth for dashboard
       ]);
 
       setBrands(Array.isArray(brandsData) ? brandsData : []);
@@ -63,21 +75,31 @@ export default function HierarchicalManager() {
 
       const productsList = Array.isArray(productsData) 
         ? productsData 
-        : ((productsData as any).products || []);
-      setProducts(productsList.map((p: any) => {
-        // Normalize categories - handle both formats: array of objects or array with category property
-        let normalizedCategories = [];
+        : ((productsData as any).data || (productsData as any).products || []);
+      
+      const processedProducts = productsList.map((p: any) => {
+        // Normalize categories - handle both formats
+        let normalizedCategories: any[] = [];
         if (p.categories && Array.isArray(p.categories)) {
-          normalizedCategories = p.categories.map((cat: any) => {
-            if (typeof cat === 'string') {
-              return { categoryId: cat };
+          const categoryMap = new Map<string, any>();
+          p.categories.forEach((cat: any) => {
+            const categoryId = typeof cat === 'string' 
+              ? cat 
+              : (cat.categoryId || cat.id || cat.category?.id);
+            
+            if (categoryId && !categoryMap.has(categoryId)) {
+              if (typeof cat === 'string') {
+                categoryMap.set(categoryId, { categoryId: cat });
+              } else {
+                categoryMap.set(categoryId, {
+                  categoryId: cat.categoryId || cat.id || cat.category?.id,
+                  category: cat.category,
+                  id: cat.id,
+                });
+              }
             }
-            return {
-              categoryId: cat.categoryId || cat.id || cat.category?.id,
-              category: cat.category,
-              id: cat.id,
-            };
           });
+          normalizedCategories = Array.from(categoryMap.values());
         }
         
         return {
@@ -86,32 +108,78 @@ export default function HierarchicalManager() {
           nameAr: p.nameAr || p.name,
           brandId: p.brandId || p.brand?.id,
           categories: normalizedCategories,
+          description: p.description,
+          descriptionAr: p.descriptionAr,
+          price: typeof p.price === 'string' ? parseFloat(p.price) : p.price,
+          cost: p.costPerItem || p.cost || p.variants?.[0]?.cost,
+          sku: p.sku,
+          barcode: p.barcode,
+          stock: p.variants?.[0]?.inventoryQuantity || 0,
+          status: p.isAvailable ? 'ACTIVE' : 'DRAFT',
+          images: p.images?.map((img: any) => typeof img === 'string' ? img : img.url) || [],
+          featured: p.featured,
+          path: p.slug || p.path,
         };
-      }));
+      });
+
+      // Deduplicate products by ID (most important)
+      const uniqueById = Array.from(new Map(processedProducts.map((p: any) => [p.id, p])).values());
+      
+      // Additional deduplication by normalized name to catch any edge cases
+      const uniqueProducts = Array.from(new Map(uniqueById.map((p: any) => {
+        const name = (p.nameAr || p.name || '').toString().trim().toLowerCase();
+        return [name, p];
+      })).values());
+      
+      setProducts(uniqueProducts as Product[]);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast({
-        title: 'تعذر تحميل البيانات',
-        description: 'حدث خطأ أثناء تحميل البيانات. يرجى تحديث الصفحة.',
+        title: t('common.error'),
+        description: t('dashboard.products.hierarchical.loadError'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, t]);
+
+  useEffect(() => {
+    loadData();
+    
+    // Listen for product updates from other pages
+    const handleProductsUpdate = () => {
+      loadData();
+    };
+    
+    // Also reload when page becomes visible (user returns from another tab/page)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadData();
+      }
+    };
+    
+    window.addEventListener('productsUpdated', handleProductsUpdate);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('productsUpdated', handleProductsUpdate);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadData]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          المستكشف الهرمي
+    <div className={isFullScreen ? "flex flex-col h-full" : "space-y-6"}>
+      <div className={isFullScreen ? "flex-none mb-2 px-2" : ""}>
+        <h1 className={isFullScreen ? "text-xl font-bold text-gray-900 dark:text-white" : "text-3xl font-bold text-gray-900 dark:text-white"}>
+          {t('dashboard.products.hierarchical.title')}
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          إدارة العلامات التجارية والفئات والمنتجات بشكل هرمي
+        <p className={isFullScreen ? "text-xs text-gray-500 mt-0.5" : "text-sm text-gray-500 mt-1"}>
+          {t('dashboard.products.hierarchical.description')}
         </p>
       </div>
 
-      <div className="mt-6">
+      <div className={isFullScreen ? "flex-1 min-h-0" : "mt-6"}>
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
@@ -122,6 +190,7 @@ export default function HierarchicalManager() {
               categories={categories}
               products={products}
               selectedCategoryIds={selectedCategoryIds}
+              isFullScreen={isFullScreen}
               onCategorySelect={(categoryId) => {
                 if (!selectedCategoryIds.includes(categoryId)) {
                   setSelectedCategoryIds([...selectedCategoryIds, categoryId]);
@@ -129,13 +198,21 @@ export default function HierarchicalManager() {
               }}
               loadProductsByCategory={async (categoryId: string) => {
                 try {
-                  const productsData = await coreApi.getProducts({ categoryId, limit: '1000' } as any);
-                  const productsList = Array.isArray(productsData) 
-                    ? productsData 
-                    : ((productsData as any).products || []);
-                  return productsList.map((p: any) => {
+                  console.log('🔍 Loading products for category:', categoryId);
+                  
+                  // First, try to get all products (without category filter) to see what we have
+                  const allProductsData = await coreApi.getProducts({ 
+                    limit: '1000'
+                  } as any);
+                  
+                  const allProductsList = Array.isArray(allProductsData) 
+                    ? allProductsData 
+                    : ((allProductsData as any)?.data || (allProductsData as any)?.products || []);
+                  
+                  // Process all products and filter by category
+                  const processedProducts = allProductsList.map((p: any) => {
                     // Normalize categories - handle both formats
-                    let normalizedCategories = [];
+                    let normalizedCategories: any[] = [];
                     if (p.categories && Array.isArray(p.categories)) {
                       normalizedCategories = p.categories.map((cat: any) => {
                         if (typeof cat === 'string') {
@@ -155,10 +232,25 @@ export default function HierarchicalManager() {
                       nameAr: p.nameAr || p.name,
                       brandId: p.brandId || p.brand?.id,
                       categories: normalizedCategories,
+                      // Include slug as path for HierarchicalExplorer
+                      path: p.slug || p.path,
+                      // Include availability and published status
+                      isAvailable: (p.isAvailable !== false && p.isAvailable !== undefined) ? true : false,
+                      isPublished: (p.isPublished !== false && p.isPublished !== undefined) ? true : false,
                     };
                   });
+                  
+                  // Filter products that belong to this category
+                  const categoryProducts = processedProducts.filter((p: any) => {
+                    return p.categories?.some((cat: any) => {
+                      const catId = cat.categoryId || cat.id || cat.category?.id;
+                      return catId === categoryId;
+                    });
+                  });
+                  
+                  return categoryProducts;
                 } catch (error) {
-                  console.error('Failed to load products by category:', error);
+                  console.error('❌ Failed to load products by category:', error);
                   return [];
                 }
               }}
@@ -174,10 +266,10 @@ export default function HierarchicalManager() {
                   
                   // Return normalized category object
                   const createdCategory = {
-                    id: newCategory.id || (newCategory as any).category?.id || (newCategory as any).id,
-                    name: newCategory.name || (newCategory as any).category?.name || categoryData.name,
-                    nameAr: newCategory.nameAr || (newCategory as any).category?.nameAr || categoryData.nameAr || categoryData.name,
-                    parentId: typeof newCategory.parentId === 'object' ? newCategory.parentId?.id : (newCategory.parentId || (newCategory as any).category?.parentId || categoryData.parentId),
+                    id: (newCategory as any).category?.id || (newCategory as any).id,
+                    name: (newCategory as any).category?.name || (newCategory as any).name,
+                    nameAr: (newCategory as any).category?.nameAr || (newCategory as any).nameAr || (newCategory as any).category?.name || (newCategory as any).name,
+                    parentId: typeof (newCategory as any).category?.parentId === 'object' ? (newCategory as any).category?.parentId?.id : ((newCategory as any).category?.parentId || (newCategory as any).parentId),
                   };
                   
                   // Add to local state immediately for instant UI update
@@ -212,21 +304,19 @@ export default function HierarchicalManager() {
               }}
               onCreateProduct={async (productData) => {
                 try {
+                  // Pass all data from HierarchicalExplorer's prepareProductData
                   const newProduct = await coreApi.createProduct({
-                    name: productData.name,
-                    nameAr: productData.nameAr,
-                    description: productData.description,
-                    price: productData.price || 0,
-                    categoryIds: productData.categoryId ? [productData.categoryId] : [],
-                    brandId: productData.brandId,
+                    ...productData,
                     isAvailable: true,
                     isPublished: true,
-                    variants: [{
+                    // Ensure variants are created if not present
+                    variants: (productData as any).variants || [{
                       name: 'Default',
                       price: productData.price || 0,
-                      inventoryQuantity: 0,
+                      inventoryQuantity: (productData as any).stockCount || 0,
                     }],
-                  });
+                  } as any);
+                  
                   await loadData();
                   return {
                     id: newProduct.id,
@@ -247,4 +337,3 @@ export default function HierarchicalManager() {
     </div>
   );
 }
-

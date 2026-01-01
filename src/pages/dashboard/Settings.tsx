@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { coreApi } from '@/lib/api';
-import { Loader2, Save, Store, Globe, Mail, Phone, MapPin, Clock, CreditCard, DollarSign, Truck } from 'lucide-react';
+import { Loader2, Save, Store, Globe, Mail, Phone, MapPin, Clock, CreditCard, DollarSign, Truck, Wallet, Plus, Trash2, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+
+interface Tax {
+  id: string;
+  name: string;
+  rate: number;
+  enabled: boolean;
+  mode: 'ALL' | 'CATEGORY' | 'PRODUCT';
+  categories: string[];
+  products: string[];
+}
 
 interface StoreSettings {
   storeName: string;
@@ -34,15 +45,21 @@ interface StoreSettings {
   allowGuestCheckout: boolean;
   requireEmailVerification: boolean;
   maintenanceMode: boolean;
+  storeType: 'GENERAL' | 'DIGITAL_CARDS';
   storeLogoUrl?: string;
   googlePlayUrl?: string;
   appStoreUrl?: string;
+  vatNumber?: string;
   paymentMethods: string[];
   hyperpayConfig?: {
     entityId: string;
     accessToken: string;
     testMode: boolean;
   };
+  taxMode: 'ALL' | 'CATEGORY' | 'PRODUCT';
+  taxableCategories: string[];
+  taxableProducts: string[];
+  taxes: Tax[];
 }
 
 const DEFAULT_SETTINGS: StoreSettings = {
@@ -67,15 +84,21 @@ const DEFAULT_SETTINGS: StoreSettings = {
   allowGuestCheckout: true,
   requireEmailVerification: false,
   maintenanceMode: false,
+  storeType: 'GENERAL',
   storeLogoUrl: '',
   googlePlayUrl: '',
   appStoreUrl: '',
+  vatNumber: '',
   paymentMethods: ['CASH_ON_DELIVERY'],
   hyperpayConfig: {
     entityId: '',
     accessToken: '',
     testMode: true,
   },
+  taxMode: 'ALL',
+  taxableCategories: [],
+  taxableProducts: [],
+  taxes: [],
 };
 
 interface Currency {
@@ -87,6 +110,19 @@ interface Currency {
   isActive: boolean;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  nameAr?: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  nameAr?: string;
+  categories?: { id: string }[];
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -94,6 +130,38 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [taxSearch, setTaxSearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, string[]>>({});
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await coreApi.get('/categories?limit=1000', { requireAuth: true });
+      if (Array.isArray(response)) {
+        setCategories(response);
+      } else if (response && Array.isArray(response.categories)) {
+        setCategories(response.categories);
+      } else if (response && Array.isArray(response.data)) {
+        setCategories(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    try {
+      const response = await coreApi.get('/products?limit=1000', { requireAuth: true });
+      if (Array.isArray(response)) {
+        setProducts(response);
+      } else if (response && Array.isArray(response.data)) {
+        setProducts(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load products:', error);
+    }
+  }, []);
 
   const loadCurrencies = useCallback(async () => {
     try {
@@ -101,12 +169,12 @@ export default function Settings() {
       
       // Validate response is an array
       if (Array.isArray(response)) {
-        const validCurrencies = response.filter((c: any) => 
+        const validCurrencies = response.filter((c: unknown) => 
           c && 
           typeof c === 'object' && 
-          c.code && 
-          typeof c.code === 'string' &&
-          c.isActive === true
+          (c as Record<string, unknown>).code && 
+          typeof (c as Record<string, unknown>).code === 'string' &&
+          (c as Record<string, unknown>).isActive === true
         ) as Currency[];
         setCurrencies(validCurrencies);
       } else {
@@ -133,7 +201,7 @@ export default function Settings() {
   const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
-      await loadCurrencies();
+      await Promise.all([loadCurrencies(), loadCategories(), loadProducts()]);
       const [configData, currencySettings] = await Promise.all([
         coreApi.get('/site-config', { requireAuth: true }),
         coreApi.get('/currencies/settings', { requireAuth: true }).catch(() => null),
@@ -144,17 +212,46 @@ export default function Settings() {
         // Otherwise use the currency from site-config settings
         const currency = currencySettings?.baseCurrency || configData.settings.currency || 'SAR';
         
-        setSettings({ 
+        // Ensure paymentMethods are loaded correctly
+        // We explicitly check for Array.isArray to handle empty arrays correctly
+        let paymentMethods = DEFAULT_SETTINGS.paymentMethods;
+        
+        // Prioritize settings.paymentMethods because that's what we are definitely saving.
+        // The root paymentMethods might not be updating correctly on the backend.
+        if (Array.isArray(configData.settings?.paymentMethods)) {
+          paymentMethods = configData.settings.paymentMethods;
+        } else if (Array.isArray(configData.paymentMethods)) {
+          paymentMethods = configData.paymentMethods;
+        }
+
+        const loadedSettings = { 
           ...DEFAULT_SETTINGS, 
           ...configData.settings,
+          paymentMethods,
           currency, // Override with CurrencySettings if available
-        });
+        };
+
+        // Migrate legacy tax settings to taxes array if empty
+        if (!loadedSettings.taxes || loadedSettings.taxes.length === 0) {
+          loadedSettings.taxes = [{
+            id: 'default',
+            name: 'الضريبة الافتراضية',
+            rate: loadedSettings.taxRate || 15,
+            enabled: loadedSettings.taxEnabled ?? true,
+            mode: loadedSettings.taxMode || 'ALL',
+            categories: loadedSettings.taxableCategories || [],
+            products: loadedSettings.taxableProducts || [],
+          }];
+        }
+
+        setSettings(loadedSettings);
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load settings:', error);
-      const errorMessage = error?.message || error?.data?.message || '';
+      const err = error as { message?: string; data?: { message?: string }; status?: number };
+      const errorMessage = err?.message || err?.data?.message || '';
       const errorMessageLower = errorMessage.toLowerCase();
       
       // Check if the error indicates that the tenant doesn't exist
@@ -162,7 +259,7 @@ export default function Settings() {
         errorMessageLower.includes('does not exist') ||
         errorMessageLower.includes('set up your market') ||
         errorMessageLower.includes('set up a market') ||
-        (error?.status === 400 && errorMessageLower.includes('tenant'));
+        (err?.status === 400 && errorMessageLower.includes('tenant'));
       
       if (isTenantNotFound) {
         toast({
@@ -185,7 +282,7 @@ export default function Settings() {
     } finally {
       setLoading(false);
     }
-  }, [toast, loadCurrencies]);
+  }, [toast, loadCurrencies, loadCategories, loadProducts, navigate]);
 
   useEffect(() => {
     loadSettings();
@@ -193,6 +290,50 @@ export default function Settings() {
 
   const updateSetting = <K extends keyof StoreSettings>(field: K, value: StoreSettings[K]) => {
     setSettings((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updatePaymentMethod = async (method: string, checked: boolean) => {
+    const methods = checked 
+      ? [...settings.paymentMethods, method]
+      : settings.paymentMethods.filter(m => m !== method);
+    updateSetting('paymentMethods', methods);
+    
+    // Auto-save payment methods immediately
+    try {
+      setSaving(true);
+      const updatedSettings = { ...settings, paymentMethods: methods };
+      const cleanedSettings = Object.fromEntries(
+        Object.entries(updatedSettings).filter(([_, value]) => value !== undefined)
+      );
+      
+      await coreApi.post('/site-config', { 
+        settings: {
+          ...cleanedSettings,
+          paymentMethods: methods,
+          payment_methods: methods 
+        },
+        paymentMethods: methods,
+        payment_methods: methods
+      }, { requireAuth: true });
+      
+      toast({
+        title: 'نجح',
+        description: 'تم حفظ طريقة الدفع بنجاح',
+      });
+    } catch (error: unknown) {
+      console.error('Failed to save payment method:', error);
+      const err = error as { message?: string; data?: { message?: string }; status?: number };
+      const errorMessage = err?.message || err?.data?.message || 'حدث خطأ أثناء حفظ طريقة الدفع. يرجى المحاولة مرة أخرى.';
+      toast({
+        title: 'تعذر حفظ طريقة الدفع',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      // Revert the change on error
+      updateSetting('paymentMethods', settings.paymentMethods);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveSettings = async () => {
@@ -208,7 +349,17 @@ export default function Settings() {
         Object.entries(settings).filter(([_, value]) => value !== undefined)
       );
 
-      await coreApi.post('/site-config', { settings: cleanedSettings }, { requireAuth: true });
+      // Send paymentMethods at root level and inside settings
+      // Also send as snake_case just in case backend expects it
+      await coreApi.post('/site-config', { 
+        settings: {
+          ...cleanedSettings,
+          paymentMethods: settings.paymentMethods,
+          payment_methods: settings.paymentMethods 
+        },
+        paymentMethods: settings.paymentMethods,
+        payment_methods: settings.paymentMethods
+      }, { requireAuth: true });
       
       // If currency was changed, also update CurrencySettings to keep them in sync
       if (settings.currency) {
@@ -235,9 +386,10 @@ export default function Settings() {
       
       // Reload settings to get the latest currency value
       await loadSettings();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to save settings:', error);
-      const errorMessage = error?.message || error?.data?.message || 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.';
+      const err = error as { message?: string; data?: { message?: string }; status?: number };
+      const errorMessage = err?.message || err?.data?.message || 'حدث خطأ أثناء حفظ الإعدادات. يرجى المحاولة مرة أخرى.';
       
       // Check if the error indicates that the tenant doesn't exist
       const errorMessageLower = errorMessage.toLowerCase();
@@ -245,7 +397,7 @@ export default function Settings() {
         errorMessageLower.includes('does not exist') ||
         errorMessageLower.includes('set up your market') ||
         errorMessageLower.includes('set up a market') ||
-        (error?.status === 400 && errorMessageLower.includes('tenant'));
+        (err?.status === 400 && errorMessageLower.includes('tenant'));
       
       if (isTenantNotFound) {
         toast({
@@ -285,7 +437,7 @@ export default function Settings() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">إعدادات المتجر</h1>
           <p className="text-sm text-gray-500 mt-1">إدارة إعدادات المتجر والتكوينات</p>
         </div>
-        <Button onClick={saveSettings} disabled={saving} size="lg" className="gap-2">
+        <Button onClick={saveSettings} disabled={saving} size="lg" className="gap-2" id="tour-settings-save-btn">
           {saving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -493,6 +645,22 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <Label htmlFor="storeType">نوع المتجر</Label>
+                <Select value={settings.storeType} onValueChange={(value: 'GENERAL' | 'DIGITAL_CARDS') => updateSetting('storeType', value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GENERAL">متجر عام (منتجات فيزيائية)</SelectItem>
+                    <SelectItem value="DIGITAL_CARDS">متجر بطاقات ألعاب رقمية</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  تغيير نوع المتجر يؤثر على كيفية معالجة الطلبات وعرض المنتجات.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -612,16 +780,401 @@ export default function Settings() {
               </div>
 
               {settings.taxEnabled && (
-                <div>
-                  <Label htmlFor="taxRate">نسبة الضريبة (%)</Label>
+                <div className="p-4 border rounded-lg bg-muted/20">
+                  <Label htmlFor="vatNumber">الرقم الضريبي (VAT Number)</Label>
                   <Input
-                    id="taxRate"
-                    type="number"
-                    step="0.01"
-                    value={settings.taxRate}
-                    onChange={(e) => updateSetting('taxRate', parseFloat(e.target.value))}
-                    placeholder="15"
+                    id="vatNumber"
+                    value={settings.vatNumber || ''}
+                    onChange={(e) => updateSetting('vatNumber', e.target.value)}
+                    placeholder="مثال: 300000000000003"
+                    className="mt-2"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">سيظهر هذا الرقم في الفواتير الضريبية المطبوعة</p>
+                </div>
+              )}
+
+              {settings.taxEnabled && (
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newTax: Tax = {
+                          id: Math.random().toString(36).substr(2, 9),
+                          name: 'ضريبة جديدة',
+                          rate: 15,
+                          enabled: true,
+                          mode: 'ALL',
+                          categories: [],
+                          products: [],
+                        };
+                        updateSetting('taxes', [...(settings.taxes || []), newTax]);
+                      }}
+                    >
+                      <Plus className="w-4 h-4 ml-2" />
+                      إضافة ضريبة
+                    </Button>
+                  </div>
+
+                  <Accordion type="single" collapsible className="w-full space-y-2">
+                    {(settings.taxes || []).map((tax, index) => (
+                      <AccordionItem key={tax.id} value={tax.id} className="border rounded-lg px-4">
+                        <div className="flex items-center justify-between py-4">
+                          <AccordionTrigger className="hover:no-underline py-0 flex-1">
+                            <div className="flex items-center gap-4">
+                              <span className="font-medium">{tax.name}</span>
+                              <span className="text-sm text-gray-500">({tax.rate}%)</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${tax.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {tax.enabled ? 'مفعل' : 'معطل'}
+                              </span>
+                            </div>
+                          </AccordionTrigger>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 mr-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newTaxes = [...(settings.taxes || [])];
+                              newTaxes.splice(index, 1);
+                              updateSetting('taxes', newTaxes);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        
+                        <AccordionContent className="pt-4 pb-4 space-y-4 border-t">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label>اسم الضريبة</Label>
+                              <Input
+                                value={tax.name}
+                                onChange={(e) => {
+                                  const newTaxes = [...(settings.taxes || [])];
+                                  newTaxes[index] = { ...tax, name: e.target.value };
+                                  updateSetting('taxes', newTaxes);
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <Label>نسبة الضريبة (%)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={tax.rate}
+                                onChange={(e) => {
+                                  const newTaxes = [...(settings.taxes || [])];
+                                  newTaxes[index] = { ...tax, rate: parseFloat(e.target.value) };
+                                  updateSetting('taxes', newTaxes);
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                            <Label>تفعيل هذه الضريبة</Label>
+                            <Switch
+                              checked={tax.enabled}
+                              onCheckedChange={(checked) => {
+                                const newTaxes = [...(settings.taxes || [])];
+                                newTaxes[index] = { ...tax, enabled: checked };
+                                updateSetting('taxes', newTaxes);
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            <Label>تطبيق الضريبة على</Label>
+                            <Select 
+                              value={tax.mode} 
+                              onValueChange={(value: 'ALL' | 'CATEGORY' | 'PRODUCT') => {
+                                const newTaxes = [...(settings.taxes || [])];
+                                newTaxes[index] = { ...tax, mode: value };
+                                updateSetting('taxes', newTaxes);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ALL">جميع المنتجات</SelectItem>
+                                <SelectItem value="CATEGORY">تصنيفات محددة</SelectItem>
+                                <SelectItem value="PRODUCT">منتجات محددة</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {tax.mode === 'CATEGORY' && (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <Label>اختر التصنيفات</Label>
+                                {(tax.categories || []).length > 0 && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="h-auto p-0 text-primary"
+                                    onClick={() => {
+                                      const categoryProductIds = products
+                                        .filter(p => p.categories?.some(c => (tax.categories || []).includes(c.id)))
+                                        .map(p => p.id);
+                                      
+                                      const newTaxes = [...(settings.taxes || [])];
+                                      newTaxes[index] = { 
+                                        ...tax, 
+                                        mode: 'PRODUCT', 
+                                        products: categoryProductIds,
+                                        categories: [] 
+                                      };
+                                      updateSetting('taxes', newTaxes);
+                                      
+                                      // Expand the selected categories in the new view
+                                      setExpandedCategories(prev => ({
+                                        ...prev,
+                                        [tax.id]: tax.categories || []
+                                      }));
+                                      
+                                      toast({
+                                        title: 'تم التحويل',
+                                        description: 'تم تحويل الاختيار إلى منتجات محددة. يمكنك الآن استبعاد منتجات معينة.',
+                                      });
+                                    }}
+                                  >
+                                    تخصيص المنتجات في هذه التصنيفات
+                                  </Button>
+                                )}
+                              </div>
+                              <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+                                {categories.map((category) => (
+                                  <div key={category.id} className="flex items-center space-x-2 space-x-reverse">
+                                    <input
+                                      type="checkbox"
+                                      id={`tax-${tax.id}-cat-${category.id}`}
+                                      checked={(tax.categories || []).includes(category.id)}
+                                      onChange={(e) => {
+                                        const current = tax.categories || [];
+                                        const updated = e.target.checked
+                                          ? [...current, category.id]
+                                          : current.filter(id => id !== category.id);
+                                        
+                                        const newTaxes = [...(settings.taxes || [])];
+                                        newTaxes[index] = { ...tax, categories: updated };
+                                        updateSetting('taxes', newTaxes);
+                                      }}
+                                      className="h-4 w-4 rounded border-gray-300"
+                                    />
+                                    <Label htmlFor={`tax-${tax.id}-cat-${category.id}`} className="cursor-pointer font-normal">
+                                      {category.nameAr || category.name}
+                                    </Label>
+                                  </div>
+                                ))}
+                                {categories.length === 0 && <p className="text-sm text-gray-500">لا توجد تصنيفات</p>}
+                              </div>
+                            </div>
+                          )}
+
+                          {tax.mode === 'PRODUCT' && (
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                  <Input
+                                    placeholder="بحث عن منتج أو تصنيف..."
+                                    value={taxSearch}
+                                    onChange={(e) => setTaxSearch(e.target.value)}
+                                    className="pr-10"
+                                  />
+                                </div>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    const allCategoryIds = categories.map(c => c.id);
+                                    const isAllExpanded = expandedCategories[tax.id]?.length === allCategoryIds.length;
+                                    setExpandedCategories(prev => ({
+                                      ...prev,
+                                      [tax.id]: isAllExpanded ? [] : allCategoryIds
+                                    }));
+                                  }}
+                                >
+                                  {expandedCategories[tax.id]?.length === categories.length ? 'طي الكل' : 'توسيع الكل'}
+                                </Button>
+                              </div>
+
+                              <div className="border rounded-md p-4 max-h-96 overflow-y-auto space-y-4">
+                                {/* Group products by category */}
+                                {categories
+                                  .filter(category => {
+                                    const matchesSearch = category.name.toLowerCase().includes(taxSearch.toLowerCase()) || 
+                                                        (category.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase());
+                                    const hasMatchingProducts = products.some(p => 
+                                      p.categories?.some(c => c.id === category.id) && 
+                                      (p.name.toLowerCase().includes(taxSearch.toLowerCase()) || (p.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase()))
+                                    );
+                                    return matchesSearch || hasMatchingProducts;
+                                  })
+                                  .map((category) => {
+                                    const categoryProducts = products.filter(p => 
+                                      p.categories?.some(c => c.id === category.id)
+                                    );
+                                    
+                                    if (categoryProducts.length === 0) return null;
+
+                                    const filteredProducts = categoryProducts.filter(p => 
+                                      p.name.toLowerCase().includes(taxSearch.toLowerCase()) || 
+                                      (p.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase()) ||
+                                      category.name.toLowerCase().includes(taxSearch.toLowerCase()) ||
+                                      (category.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase())
+                                    );
+
+                                    const allSelected = categoryProducts.every(p => (tax.products || []).includes(p.id));
+                                    const someSelected = categoryProducts.some(p => (tax.products || []).includes(p.id));
+                                    const isExpanded = expandedCategories[tax.id]?.includes(category.id) || taxSearch !== '';
+
+                                    return (
+                                      <div key={category.id} className="space-y-2">
+                                        <div className="flex items-center justify-between font-medium bg-gray-50 dark:bg-gray-900 p-2 rounded">
+                                          <div className="flex items-center space-x-2 space-x-reverse">
+                                            <input
+                                              type="checkbox"
+                                              id={`tax-${tax.id}-group-${category.id}`}
+                                              checked={allSelected}
+                                              ref={input => {
+                                                if (input) {
+                                                  input.indeterminate = someSelected && !allSelected;
+                                                }
+                                              }}
+                                              onChange={(e) => {
+                                                const current = tax.products || [];
+                                                const productIds = categoryProducts.map(p => p.id);
+                                                let updated;
+                                                
+                                                if (e.target.checked) {
+                                                  const toAdd = productIds.filter(id => !current.includes(id));
+                                                  updated = [...current, ...toAdd];
+                                                } else {
+                                                  updated = current.filter(id => !productIds.includes(id));
+                                                }
+                                                
+                                                const newTaxes = [...(settings.taxes || [])];
+                                                newTaxes[index] = { ...tax, products: updated };
+                                                updateSetting('taxes', newTaxes);
+                                              }}
+                                              className="h-4 w-4 rounded border-gray-300"
+                                            />
+                                            <Label htmlFor={`tax-${tax.id}-group-${category.id}`} className="cursor-pointer">
+                                              {category.nameAr || category.name}
+                                            </Label>
+                                          </div>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0"
+                                            onClick={() => {
+                                              setExpandedCategories(prev => {
+                                                const current = prev[tax.id] || [];
+                                                const updated = current.includes(category.id)
+                                                  ? current.filter(id => id !== category.id)
+                                                  : [...current, category.id];
+                                                return { ...prev, [tax.id]: updated };
+                                              });
+                                            }}
+                                          >
+                                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                          </Button>
+                                        </div>
+                                        
+                                        {isExpanded && (
+                                          <div className="mr-6 space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                            {filteredProducts.map((product) => (
+                                              <div key={product.id} className="flex items-center space-x-2 space-x-reverse">
+                                                <input
+                                                  type="checkbox"
+                                                  id={`tax-${tax.id}-prod-${product.id}`}
+                                                  checked={(tax.products || []).includes(product.id)}
+                                                  onChange={(e) => {
+                                                    const current = tax.products || [];
+                                                    const updated = e.target.checked
+                                                      ? [...current, product.id]
+                                                      : current.filter(id => id !== product.id);
+                                                    
+                                                    const newTaxes = [...(settings.taxes || [])];
+                                                    newTaxes[index] = { ...tax, products: updated };
+                                                    updateSetting('taxes', newTaxes);
+                                                  }}
+                                                  className="h-4 w-4 rounded border-gray-300"
+                                                />
+                                                <Label htmlFor={`tax-${tax.id}-prod-${product.id}`} className="cursor-pointer font-normal text-sm">
+                                                  {product.nameAr || product.name}
+                                                </Label>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                
+                                {/* Products with no category */}
+                                {(() => {
+                                  const uncategorizedProducts = products.filter(p => !p.categories || p.categories.length === 0);
+                                  if (uncategorizedProducts.length === 0) return null;
+
+                                  const filteredUncategorized = uncategorizedProducts.filter(p => 
+                                    p.name.toLowerCase().includes(taxSearch.toLowerCase()) || 
+                                    (p.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase())
+                                  );
+
+                                  if (filteredUncategorized.length === 0 && taxSearch !== '') return null;
+                                  
+                                  return (
+                                    <div className="space-y-2">
+                                      <div className="font-medium bg-gray-50 dark:bg-gray-900 p-2 rounded">
+                                        منتجات غير مصنفة
+                                      </div>
+                                      <div className="mr-6 space-y-1">
+                                        {filteredUncategorized.map((product) => (
+                                          <div key={product.id} className="flex items-center space-x-2 space-x-reverse">
+                                            <input
+                                              type="checkbox"
+                                              id={`tax-${tax.id}-prod-${product.id}`}
+                                              checked={(tax.products || []).includes(product.id)}
+                                              onChange={(e) => {
+                                                const current = tax.products || [];
+                                                const updated = e.target.checked
+                                                  ? [...current, product.id]
+                                                  : current.filter(id => id !== product.id);
+                                                
+                                                const newTaxes = [...(settings.taxes || [])];
+                                                newTaxes[index] = { ...tax, products: updated };
+                                                updateSetting('taxes', newTaxes);
+                                              }}
+                                              className="h-4 w-4 rounded border-gray-300"
+                                            />
+                                            <Label htmlFor={`tax-${tax.id}-prod-${product.id}`} className="cursor-pointer font-normal text-sm">
+                                              {product.nameAr || product.name}
+                                            </Label>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+
+                                {products.length === 0 && <p className="text-sm text-gray-500">لا توجد منتجات</p>}
+                                {taxSearch !== '' && categories.length > 0 && products.length > 0 && 
+                                  !categories.some(c => c.name.toLowerCase().includes(taxSearch.toLowerCase()) || (c.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase())) &&
+                                  !products.some(p => p.name.toLowerCase().includes(taxSearch.toLowerCase()) || (p.nameAr || '').toLowerCase().includes(taxSearch.toLowerCase())) && (
+                                  <p className="text-sm text-gray-500 text-center py-4">لا توجد نتائج مطابقة للبحث</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 </div>
               )}
             </CardContent>
@@ -701,12 +1254,8 @@ export default function Settings() {
                 </div>
                 <Switch 
                   checked={settings.paymentMethods.includes('CASH_ON_DELIVERY')}
-                  onCheckedChange={(checked) => {
-                    const methods = checked 
-                      ? [...settings.paymentMethods, 'CASH_ON_DELIVERY']
-                      : settings.paymentMethods.filter(m => m !== 'CASH_ON_DELIVERY');
-                    updateSetting('paymentMethods', methods);
-                  }}
+                  onCheckedChange={(checked) => updatePaymentMethod('CASH_ON_DELIVERY', checked)}
+                  disabled={saving}
                 />
               </div>
 
@@ -722,12 +1271,8 @@ export default function Settings() {
                 </div>
                 <Switch 
                   checked={settings.paymentMethods.includes('HYPERPAY')}
-                  onCheckedChange={(checked) => {
-                    const methods = checked 
-                      ? [...settings.paymentMethods, 'HYPERPAY']
-                      : settings.paymentMethods.filter(m => m !== 'HYPERPAY');
-                    updateSetting('paymentMethods', methods);
-                  }}
+                  onCheckedChange={(checked) => updatePaymentMethod('HYPERPAY', checked)}
+                  disabled={saving}
                 />
               </div>
 
@@ -773,12 +1318,25 @@ export default function Settings() {
                 </div>
                 <Switch 
                   checked={settings.paymentMethods.includes('BANK_TRANSFER')}
-                  onCheckedChange={(checked) => {
-                    const methods = checked 
-                      ? [...settings.paymentMethods, 'BANK_TRANSFER']
-                      : settings.paymentMethods.filter(m => m !== 'BANK_TRANSFER');
-                    updateSetting('paymentMethods', methods);
-                  }}
+                  onCheckedChange={(checked) => updatePaymentMethod('BANK_TRANSFER', checked)}
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
+                    <Wallet className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div>
+                    <Label>الدفع بالرصيد</Label>
+                    <p className="text-sm text-gray-500">السماح للعملاء بالدفع باستخدام رصيد المحفظة</p>
+                  </div>
+                </div>
+                <Switch 
+                  checked={settings.paymentMethods.includes('WALLET_PAYMENT')}
+                  onCheckedChange={(checked) => updatePaymentMethod('WALLET_PAYMENT', checked)}
+                  disabled={saving}
                 />
               </div>
             </CardContent>

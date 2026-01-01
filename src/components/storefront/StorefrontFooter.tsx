@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Facebook, Twitter, Instagram, Youtube, Mail, Phone, MapPin,
-  ArrowRight, Heart, ShieldCheck, Truck, CreditCard, Headphones,
-  Sparkles, ChevronRight
+  ArrowRight, Heart, Sparkles, ChevronRight
 } from 'lucide-react';
 import { coreApi } from '@/lib/api';
 import { VersionFooter } from '@/components/common/VersionFooter';
@@ -55,57 +54,8 @@ export function StorefrontFooter() {
   const socialLinks = siteConfig?.footer?.socialLinks || [];
   const footerButtons = siteConfig?.footer?.buttons || [];
 
-  const features = [
-    {
-      icon: Truck,
-      title: language === 'ar' ? 'شحن مجاني' : 'Free Shipping',
-      description: language === 'ar' ? 'للطلبات فوق 200 ر.س' : 'On orders over 200 SAR',
-    },
-    {
-      icon: ShieldCheck,
-      title: language === 'ar' ? 'دفع آمن' : 'Secure Payment',
-      description: language === 'ar' ? 'معاملات مشفرة 100%' : '100% encrypted transactions',
-    },
-    {
-      icon: Headphones,
-      title: language === 'ar' ? 'دعم 24/7' : '24/7 Support',
-      description: language === 'ar' ? 'نحن هنا لمساعدتك' : "We're here to help",
-    },
-    {
-      icon: CreditCard,
-      title: language === 'ar' ? 'طرق دفع متعددة' : 'Multiple Payment',
-      description: language === 'ar' ? 'فيزا، ماستركارد، مدى' : 'Visa, Mastercard, Mada',
-    },
-  ];
-
   return (
     <footer className="relative overflow-hidden">
-      {/* Features Bar */}
-      <div className="relative border-y border-border/50 bg-muted/30">
-        <div className="absolute inset-0 gradient-mesh opacity-20" />
-        <div className="container relative mx-auto px-4 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
-            {features.map((feature, index) => (
-              <div 
-                key={index} 
-                className="flex items-center gap-4 group cursor-pointer animate-fade-in"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="p-3 rounded-xl bg-primary/10 group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
-                  <feature.icon className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                    {feature.title}
-                  </h4>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Main Footer */}
       <div className="relative bg-card border-t border-border/50">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-muted/20" />
@@ -368,7 +318,7 @@ export function StorefrontFooter() {
                 {language === 'ar' ? 'طرق الدفع:' : 'Payment Methods:'}
               </span>
               <div className="flex items-center gap-2">
-                {['VISA', 'MADA', 'MASTER', 'APPLE'].map((method) => (
+                {['MADA'].map((method) => (
                   <div 
                     key={method}
                     className="px-3 py-1.5 bg-card rounded-lg border border-border/50 text-xs font-bold text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors cursor-default"

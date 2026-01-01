@@ -11,6 +11,8 @@ import { Product } from '@/services/types';
 import { useTranslation } from 'react-i18next';
 import { BRAND_NAME_AR, BRAND_NAME_EN } from '@/config/logo.config';
 
+import { StorefrontLoading } from '@/components/storefront/StorefrontLoading';
+
 interface Category {
   id: string;
   name: string;
@@ -33,6 +35,17 @@ export default function CategoryDetail() {
 
   useEffect(() => {
     loadCategoryAndProducts();
+    
+    // Listen for product updates
+    const handleProductsUpdate = () => {
+      loadCategoryAndProducts();
+    };
+    
+    window.addEventListener('productsUpdated', handleProductsUpdate);
+    
+    return () => {
+      window.removeEventListener('productsUpdated', handleProductsUpdate);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -56,15 +69,98 @@ export default function CategoryDetail() {
       setSubcategories(childCategories);
       
       // Load products in this category
-      console.log('Loading products for category:', id);
+      console.log('🔍 [Storefront] Loading products for category:', id);
+      
+      // First, try to get all products to see what we have
+      const allProductsData = await coreApi.getProducts({ 
+        limit: 1000
+      });
+      
+      console.log('🔍 [Storefront] All products response:', allProductsData);
+      
+      const allProductsList = Array.isArray(allProductsData) 
+        ? allProductsData 
+        : ((allProductsData as any)?.data || (allProductsData as any)?.products || []);
+      
+      console.log('🔍 [Storefront] All products list:', allProductsList.length, 'products');
+      
+      // Log first product's categories structure
+      if (allProductsList.length > 0) {
+        console.log('🔍 [Storefront] First product sample:', {
+          id: allProductsList[0].id,
+          name: allProductsList[0].name,
+          categories: allProductsList[0].categories,
+          categoriesType: typeof allProductsList[0].categories,
+          isArray: Array.isArray(allProductsList[0].categories),
+          categoryId: (allProductsList[0] as any).categoryId,
+          isAvailable: (allProductsList[0] as any).isAvailable,
+          isPublished: (allProductsList[0] as any).isPublished
+        });
+      }
+      
+      // Now try with category filter
       const productsData = await coreApi.getProducts({ 
         categoryId: id,
-        limit: 100
+        limit: 1000
       });
-      console.log('Products data received:', productsData);
-      const productsList = Array.isArray(productsData) ? productsData : ((productsData as any).products || []);
-      console.log('Products list:', productsList);
-      setProducts(productsList);
+      
+      console.log('🔍 [Storefront] Filtered products response (categoryId):', productsData);
+      
+      const productsList = Array.isArray(productsData) 
+        ? productsData 
+        : ((productsData as any)?.data || (productsData as any)?.products || []);
+      
+      console.log('🔍 [Storefront] Filtered products list:', productsList.length, 'products');
+      
+      // Process all products and filter by category
+      const processedProducts = allProductsList.map((p: any) => {
+        // Normalize categories - handle both formats
+        let normalizedCategories: any[] = [];
+        if (p.categories && Array.isArray(p.categories)) {
+          normalizedCategories = p.categories.map((cat: any) => {
+            if (typeof cat === 'string') {
+              return { categoryId: cat };
+            }
+            return {
+              categoryId: cat.categoryId || cat.id || cat.category?.id,
+              category: cat.category,
+              id: cat.id,
+            };
+          });
+        }
+        
+        return {
+          ...p,
+          categories: normalizedCategories,
+          price: Number(p.price) || 0,
+          compareAtPrice: p.compareAtPrice ? Number(p.compareAtPrice) : undefined,
+          isAvailable: (p.isAvailable !== false && p.isAvailable !== undefined) ? true : false,
+          isPublished: (p.isPublished !== false && p.isPublished !== undefined) ? true : false,
+        };
+      });
+      
+      // Filter products that belong to this category and are available and published
+      const filteredProducts = processedProducts.filter((p: any) => {
+        // Check if product is available and published
+        if (!p.isAvailable || !p.isPublished) {
+          return false;
+        }
+        
+        // Check if product belongs to this category
+        const hasCategory = p.categories?.some((cat: any) => {
+          const catId = cat.categoryId || cat.id || cat.category?.id;
+          return catId === id;
+        }) || p.categoryId === id;
+        
+        if (hasCategory) {
+          console.log('✅ [Storefront] Product belongs to category:', p.name, 'categories:', p.categories);
+        }
+        
+        return hasCategory;
+      });
+      
+      console.log('🔍 [Storefront] Final filtered products for category', id, ':', filteredProducts.length, 'products');
+      setProducts(filteredProducts);
     } catch (error) {
       console.error('Failed to load category:', error);
       toast({
@@ -100,15 +196,7 @@ export default function CategoryDetail() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="container py-20">
-          <div className="flex items-center justify-center">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          </div>
-        </div>
-      </div>
-    );
+    return <StorefrontLoading />;
   }
 
   if (!category) {

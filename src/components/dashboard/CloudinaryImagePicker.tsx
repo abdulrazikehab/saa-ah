@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { mediaService, type CloudinaryImage } from '@/services/media.service';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 
 interface CloudinaryImagePickerProps {
   open: boolean;
@@ -21,6 +22,7 @@ export function CloudinaryImagePicker({
   onSelect,
   multiple = true,
 }: CloudinaryImagePickerProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [folders, setFolders] = useState<string[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string>('');
@@ -49,10 +51,10 @@ export function CloudinaryImagePicker({
       const result = await mediaService.listFolders();
       setFolders(result.folders || []);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ أثناء تحميل المجلدات';
+      const errorMessage = error instanceof Error ? error.message : t('storefront.cloudinary.toasts.loadFoldersError');
       console.error('❌ Failed to load folders:', error);
       toast({
-        title: 'تعذر تحميل المجلدات',
+        title: t('storefront.cloudinary.toasts.loadFoldersError'),
         description: errorMessage,
         variant: 'destructive',
       });
@@ -60,7 +62,7 @@ export function CloudinaryImagePicker({
       setLoadingFolders(false);
       isLoadingFoldersRef.current = false;
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const loadImages = useCallback(async (folder: string, cursor?: string) => {
     if (isLoadingImagesRef.current && !cursor) return;
@@ -84,10 +86,10 @@ export function CloudinaryImagePicker({
       setNextCursor(result.next_cursor);
       setHasMore(!!result.next_cursor);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ أثناء تحميل الصور';
+      const errorMessage = error instanceof Error ? error.message : t('storefront.cloudinary.toasts.loadImagesError');
       console.error('❌ Failed to load images:', error);
       toast({
-        title: 'تعذر تحميل الصور',
+        title: t('storefront.cloudinary.toasts.loadImagesError'),
         description: errorMessage,
         variant: 'destructive',
       });
@@ -95,7 +97,7 @@ export function CloudinaryImagePicker({
       setLoading(false);
       isLoadingImagesRef.current = false;
     }
-  }, [toast]);
+  }, [toast, t]);
 
   // Initialize/Reset when dialog opens
   useEffect(() => {
@@ -177,8 +179,8 @@ export function CloudinaryImagePicker({
       if (selectedUrls.length === 0) {
         console.warn('🔵 [CloudinaryImagePicker] No images selected');
         toast({
-          title: 'لم يتم اختيار صور',
-          description: 'يرجى اختيار صورة واحدة على الأقل',
+          title: t('storefront.cloudinary.toasts.noSelection'),
+          description: t('storefront.cloudinary.toasts.noSelectionDesc'),
           variant: 'destructive',
         });
         return;
@@ -193,8 +195,8 @@ export function CloudinaryImagePicker({
     } catch (error) {
       console.error('🔴 [CloudinaryImagePicker] Error in handleSelect:', error);
       toast({
-        title: 'خطأ',
-        description: 'حدث خطأ أثناء اختيار الصور',
+        title: t('common.error'),
+        description: t('storefront.cloudinary.toasts.selectError'),
         variant: 'destructive',
       });
     }
@@ -215,10 +217,10 @@ export function CloudinaryImagePicker({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ImageIcon className="h-5 w-5" />
-            اختر الصور من Cloudinary
+            {t('storefront.cloudinary.title')}
           </DialogTitle>
           <DialogDescription>
-            اختر الصور من مجلدات Cloudinary. يمكنك اختيار {multiple ? 'عدة صور' : 'صورة واحدة'}.
+            {t('storefront.cloudinary.desc', { selectionText: multiple ? t('storefront.cloudinary.multiple') : t('storefront.cloudinary.single') })}
           </DialogDescription>
         </DialogHeader>
 
@@ -228,7 +230,7 @@ export function CloudinaryImagePicker({
             <div className="mb-4">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <Folder className="h-4 w-4" />
-                المجلدات
+                {t('storefront.cloudinary.folders')}
               </h3>
               {loadingFolders ? (
                 <div className="flex items-center justify-center py-8">
@@ -272,7 +274,7 @@ export function CloudinaryImagePicker({
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="ابحث عن صورة..."
+                  placeholder={t('storefront.cloudinary.search')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pr-10"
@@ -284,7 +286,10 @@ export function CloudinaryImagePicker({
             {selectedCount > 0 && (
               <div className="mb-4 flex-shrink-0">
                 <Badge variant="secondary">
-                  {selectedCount} {multiple ? 'صور محددة' : 'صورة محددة'}
+                  {multiple 
+                    ? t('storefront.cloudinary.selectedCount', { count: selectedCount })
+                    : t('storefront.cloudinary.selectedCountSingle')
+                  }
                 </Badge>
               </div>
             )}
@@ -298,7 +303,7 @@ export function CloudinaryImagePicker({
               ) : filteredImages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <ImageIcon className="h-12 w-12 mb-4 opacity-50" />
-                  <p>لا توجد صور في هذا المجلد</p>
+                  <p>{t('storefront.cloudinary.noImages')}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-4 gap-4 pb-4">
@@ -359,10 +364,10 @@ export function CloudinaryImagePicker({
                   {loading ? (
                     <>
                       <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                      جاري التحميل...
+                      {t('storefront.cloudinary.loading')}
                     </>
                   ) : (
-                    'تحميل المزيد'
+                    t('storefront.cloudinary.loadMore')
                   )}
                 </Button>
               </div>
@@ -372,14 +377,14 @@ export function CloudinaryImagePicker({
 
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            إلغاء
+            {t('storefront.cloudinary.cancel')}
           </Button>
           <Button 
             onClick={handleSelect} 
             disabled={selectedCount === 0}
             className={selectedCount > 0 ? '' : 'opacity-50 cursor-not-allowed'}
           >
-            حفظ {selectedCount > 0 && `(${selectedCount})`}
+            {t('storefront.cloudinary.save')} {selectedCount > 0 && `(${selectedCount})`}
           </Button>
         </div>
       </DialogContent>

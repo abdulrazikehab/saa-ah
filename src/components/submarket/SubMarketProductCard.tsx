@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { Product } from '@/services/types';
 import { motion } from 'framer-motion';
+import { OptimizedImage } from '@/components/ui/OptimizedImage';
 
 interface SubMarketProductCardProps {
   product: Product;
@@ -97,7 +98,7 @@ export const SubMarketProductCard = ({
                     -{discount}%
                   </Badge>
                 )}
-                <img
+                <OptimizedImage
                   src={imageUrl}
                   alt={product.name}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
@@ -212,7 +213,7 @@ export const SubMarketProductCard = ({
               </div>
             )}
 
-            <img
+            <OptimizedImage
               src={imageUrl}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
