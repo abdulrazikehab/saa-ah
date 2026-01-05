@@ -20,6 +20,7 @@ import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import { Product, ProductVariant, ProductImage, Category } from '@/services/types';
 import { BRAND_NAME_AR, BRAND_NAME_EN } from '@/config/logo.config';
+import { SafeHTML } from '@/components/common/SafeHTML';
 
 export default function ProductDetail() {
   const { t, i18n } = useTranslation();
@@ -379,13 +380,13 @@ export default function ProductDetail() {
               <h3 className="font-semibold text-lg mb-3">
                 {isRtl ? 'الوصف' : 'Description'}
               </h3>
-              <div 
+              {/* SECURITY FIX: Using SafeHTML to prevent XSS */}
+              <SafeHTML
+                html={isRtl 
+                  ? (product.descriptionAr || product.description || 'لا يوجد وصف متاح لهذا المنتج.')
+                  : (product.description || product.descriptionAr || 'No description available for this product.')
+                }
                 className="text-gray-600 dark:text-gray-400 leading-relaxed prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ 
-                  __html: isRtl 
-                    ? (product.descriptionAr || product.description || 'لا يوجد وصف متاح لهذا المنتج.')
-                    : (product.description || product.descriptionAr || 'No description available for this product.')
-                }}
               />
             </div>
 

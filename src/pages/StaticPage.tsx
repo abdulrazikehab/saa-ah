@@ -6,6 +6,7 @@ import { coreApi } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 import { StorefrontFooter } from '@/components/storefront/StorefrontFooter';
+import { SafeHTML } from '@/components/common/SafeHTML';
 
 interface PageContent {
   titleAr: string;
@@ -93,9 +94,10 @@ export default function StaticPage({ slug: propSlug }: { slug?: string }) {
               {title}
             </h1>
             
-            <div 
+            {/* SECURITY FIX: Using SafeHTML to prevent XSS */}
+            <SafeHTML
+              html={htmlContent}
               className="prose prose-lg dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
               dir={isRTL ? 'rtl' : 'ltr'}
             />
           </motion.div>

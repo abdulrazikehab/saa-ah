@@ -1,3 +1,5 @@
+import { SafeHTML } from '../common/SafeHTML';
+
 interface RichTextProps {
   content?: string;
   title?: string;
@@ -47,8 +49,9 @@ export function RichText({
             </p>
           )}
 
-          {/* Rich Content */}
-          <div
+          {/* Rich Content - SECURITY FIX: Using SafeHTML to prevent XSS */}
+          <SafeHTML
+            html={content || ''}
             className="prose prose-invert prose-lg max-w-none
               prose-headings:text-white prose-headings:font-bold
               prose-p:text-gray-300 prose-p:leading-relaxed prose-p:mb-4
@@ -61,7 +64,6 @@ export function RichText({
               prose-blockquote:border-r-4 prose-blockquote:border-purple-500 prose-blockquote:pr-4 prose-blockquote:italic prose-blockquote:text-gray-400
               prose-code:text-purple-400 prose-code:bg-gray-800 prose-code:px-2 prose-code:py-1 prose-code:rounded
             "
-            dangerouslySetInnerHTML={{ __html: content }}
           />
         </div>
       </div>

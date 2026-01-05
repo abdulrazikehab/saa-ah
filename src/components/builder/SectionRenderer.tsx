@@ -19,6 +19,7 @@ import { isErrorObject } from '@/lib/error-utils';
 import { cn } from '@/lib/utils';
 import { OptimizedImage } from '@/components/ui/OptimizedImage';
 import { GamingProductCard } from '@/components/storefront/GamingProductCard';
+import { SafeHTML } from '@/components/common/SafeHTML';
 
 // Safe cart hook that doesn't throw if context is unavailable
 const useSafeCart = () => {
@@ -638,9 +639,10 @@ export function SectionRenderer({ section, onToggleTheme }: SectionRendererProps
             <div className="max-w-4xl mx-auto prose prose-lg dark:prose-invert">
               {props.title && <h2 className="text-2xl font-bold mb-4">{props.title}</h2>}
               {props.content && (
-                <div 
+                /* SECURITY FIX: Using SafeHTML to prevent XSS */
+                <SafeHTML 
+                  html={props.content as string}
                   className="prose prose-lg dark:prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: props.content as string }}
                 />
               )}
             </div>

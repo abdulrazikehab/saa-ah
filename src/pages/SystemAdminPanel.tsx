@@ -2904,6 +2904,7 @@ function AdminApiKeySection({ adminPassword, onUpdate, theme, language, cardStyl
 
   useEffect(() => {
     loadCurrentApiKey();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadCurrentApiKey = async () => {
@@ -2928,14 +2929,35 @@ function AdminApiKeySection({ adminPassword, onUpdate, theme, language, cardStyl
     }
   };
 
+  const generateRandomKey = () => {
+    // Generate a strong random key: system-admin-{random}
+    const randomPart = Math.random().toString(36).substring(2, 15) + 
+                       Math.random().toString(36).substring(2, 15);
+    const newKey = `system-admin-${randomPart}`;
+    setNewApiKey(newKey);
+  };
+
   const handleUpdate = async () => {
-    if (!newApiKey.trim() || newApiKey.trim().length < 8) {
+    // SECURITY FIX: Require at least 20 characters (matching backend validation)
+    if (!newApiKey.trim() || newApiKey.trim().length < 20) {
       toast({
         variant: 'destructive',
         title: language === 'ar' ? 'خطأ' : 'Error',
         description: language === 'ar' 
-          ? 'يجب أن يكون مفتاح API 8 أحرف على الأقل'
-          : 'API key must be at least 8 characters long',
+          ? 'يجب أن يكون مفتاح API 20 حرف على الأقل'
+          : 'API key must be at least 20 characters long',
+      });
+      return;
+    }
+
+    // SECURITY FIX: Reject default/weak keys
+    if (newApiKey.trim() === 'Saeaa2025Admin!' || newApiKey.trim().length < 20) {
+      toast({
+        variant: 'destructive',
+        title: language === 'ar' ? 'خطأ' : 'Error',
+        description: language === 'ar' 
+          ? 'لا يمكن استخدام المفتاح الافتراضي. يرجى اختيار مفتاح قوي وآمن.'
+          : 'Cannot use default key. Please choose a strong, secure key.',
       });
       return;
     }
@@ -3048,15 +3070,34 @@ function AdminApiKeySection({ adminPassword, onUpdate, theme, language, cardStyl
           </div>
           <p className={`text-xs ${theme.textMuted} mt-1`}>
             {language === 'ar' 
-              ? 'يجب أن يكون المفتاح 8 أحرف على الأقل'
-              : 'Key must be at least 8 characters long'}
+              ? 'يجب أن يكون المفتاح 20 حرف على الأقل. استخدم مفتاح قوي وعشوائي.'
+              : 'Key must be at least 20 characters long. Use a strong, random key.'}
+          </p>
+          <button
+            onClick={generateRandomKey}
+            type="button"
+            className={`mt-2 px-3 py-1.5 text-xs ${theme.card} border ${theme.border} rounded-lg ${theme.textMuted} hover:${theme.accentText} transition-colors`}
+          >
+            {language === 'ar' ? '🎲 توليد مفتاح عشوائي' : '🎲 Generate Random Key'}
+          </button>
+        </div>
+
+        {/* Security Warning */}
+        <div className={`p-3 rounded-lg border ${theme.border} bg-yellow-500/10 border-yellow-500/30`}>
+          <p className={`text-xs ${theme.text} flex items-center gap-2`}>
+            <span>⚠️</span>
+            <span>
+              {language === 'ar' 
+                ? 'تأكد من حفظ المفتاح الجديد في مكان آمن. لن تتمكن من الوصول إلى لوحة الإدارة إذا فقدت المفتاح.'
+                : 'Make sure to save the new key in a secure place. You will lose access to the admin panel if you lose the key.'}
+            </span>
           </p>
         </div>
 
         {/* Update Button */}
         <button
           onClick={handleUpdate}
-          disabled={loading || !newApiKey.trim()}
+          disabled={loading || !newApiKey.trim() || newApiKey.trim().length < 20}
           className={`w-full px-4 py-2 ${theme.accent} ${theme.accentHover} text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
         >
           {loading 

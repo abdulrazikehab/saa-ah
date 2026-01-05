@@ -18,6 +18,7 @@ import { toast } from '@/hooks/use-toast';
 import { Product, ProductVariant, ProductImage } from '@/services/types';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { SafeHTML } from '@/components/common/SafeHTML';
 import { useStoreSettings } from '@/contexts/StoreSettingsContext';
 
 export default function SubMarketProductDetail() {
@@ -431,9 +432,10 @@ export default function SubMarketProductDetail() {
           
           <TabsContent value="description" className="mt-6">
             <Card className="p-6">
-              <div 
+              {/* SECURITY FIX: Using SafeHTML to prevent XSS */}
+              <SafeHTML
+                html={product.description || 'No description available.'}
                 className="prose max-w-none"
-                dangerouslySetInnerHTML={{ __html: product.description || 'No description available.' }}
               />
             </Card>
           </TabsContent>

@@ -5,10 +5,13 @@ let cacheExpiry: number = 0;
 let fetchPromise: Promise<string> | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
+// SECURITY FIX: No fallback key - must be fetched from backend or set in env
 // Initialize cache on module load
-const fallbackKey = import.meta.env.VITE_ADMIN_API_KEY || 'Saeaa2025Admin!';
-cachedApiKey = fallbackKey;
-cacheExpiry = Date.now() + CACHE_TTL;
+const fallbackKey = import.meta.env.VITE_ADMIN_API_KEY || null;
+if (fallbackKey) {
+  cachedApiKey = fallbackKey;
+  cacheExpiry = Date.now() + CACHE_TTL;
+}
 
 // Async version - fetches from backend if cache expired
 const getAdminApiKeyAsync = async (): Promise<string> => {

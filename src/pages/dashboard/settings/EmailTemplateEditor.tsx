@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { coreApi } from '@/lib/api';
+import { SafeHTML } from '@/components/common/SafeHTML';
 
 interface EmailTemplate {
   id?: string;
@@ -286,23 +287,22 @@ export default function EmailTemplateEditor() {
                 </CardHeader>
                 <CardContent>
                   {previewMode ? (
-                    <div
-                      className="border rounded-lg p-0 bg-[#f4f7f9] overflow-hidden shadow-inner min-h-[400px] text-left"
+                    /* SECURITY FIX: Using SafeHTML to prevent XSS */
+                    <SafeHTML
+                      html={currentTemplate.body
+                        .replace(/{{storeName}}/g, 'My Store')
+                        .replace(/{{storeLogo}}/g, 'https://via.placeholder.com/150')
+                        .replace(/{{storeDetails}}/g, 'Store Address, Phone, Email')
+                        .replace(/{{customerName}}/g, 'John Doe')
+                        .replace(/{{supplierResponseDays}}/g, '3')
+                        .replace(/{{problemDetails}}/g, 'Product delivery issue')
+                        .replace(/{{orderNumber}}/g, 'ORD-12345')
+                        .replace(/{{orderDate}}/g, new Date().toLocaleDateString())
+                        .replace(/{{productName}}/g, 'Sample Product')
+                        .replace(/{{refundAmount}}/g, '100.00')
+                        .replace(/{{currentYear}}/g, new Date().getFullYear().toString())}
+                      className="border rounded-lg p-4 bg-[#f4f7f9] overflow-hidden shadow-inner min-h-[400px] text-left"
                       style={{ color: '#1a1a1a' }}
-                      dangerouslySetInnerHTML={{
-                        __html: currentTemplate.body
-                          .replace(/{{storeName}}/g, 'My Store')
-                          .replace(/{{storeLogo}}/g, 'https://via.placeholder.com/150')
-                          .replace(/{{storeDetails}}/g, 'Store Address, Phone, Email')
-                          .replace(/{{customerName}}/g, 'John Doe')
-                          .replace(/{{supplierResponseDays}}/g, '3')
-                          .replace(/{{problemDetails}}/g, 'Product delivery issue')
-                          .replace(/{{orderNumber}}/g, 'ORD-12345')
-                          .replace(/{{orderDate}}/g, new Date().toLocaleDateString())
-                          .replace(/{{productName}}/g, 'Sample Product')
-                          .replace(/{{refundAmount}}/g, '100.00')
-                          .replace(/{{currentYear}}/g, new Date().getFullYear().toString()),
-                      }}
                     />
                   ) : (
                     <Textarea
@@ -347,24 +347,23 @@ export default function EmailTemplateEditor() {
                 </CardHeader>
                 <CardContent>
                   {previewMode ? (
-                    <div
-                      className="border rounded-lg p-0 bg-[#f4f7f9] overflow-hidden shadow-inner min-h-[400px]"
+                    /* SECURITY FIX: Using SafeHTML to prevent XSS */
+                    <SafeHTML
+                      html={(currentTemplate.bodyAr || '')
+                        .replace(/{{storeName}}/g, 'متجري')
+                        .replace(/{{storeLogo}}/g, 'https://via.placeholder.com/150')
+                        .replace(/{{storeDetails}}/g, 'عنوان المتجر، الهاتف، البريد الإلكتروني')
+                        .replace(/{{customerName}}/g, 'أحمد محمد')
+                        .replace(/{{supplierResponseDays}}/g, '3')
+                        .replace(/{{problemDetails}}/g, 'مشكلة في توصيل المنتج')
+                        .replace(/{{orderNumber}}/g, 'ORD-12345')
+                        .replace(/{{orderDate}}/g, new Date().toLocaleDateString('ar-SA'))
+                        .replace(/{{productName}}/g, 'منتج تجريبي')
+                        .replace(/{{refundAmount}}/g, '100.00')
+                        .replace(/{{currentYear}}/g, new Date().getFullYear().toString())}
+                      className="border rounded-lg p-4 bg-[#f4f7f9] overflow-hidden shadow-inner min-h-[400px]"
                       dir="rtl"
                       style={{ color: '#1a1a1a', textAlign: 'right' }}
-                      dangerouslySetInnerHTML={{
-                        __html: (currentTemplate.bodyAr || '')
-                          .replace(/{{storeName}}/g, 'متجري')
-                          .replace(/{{storeLogo}}/g, 'https://via.placeholder.com/150')
-                          .replace(/{{storeDetails}}/g, 'عنوان المتجر، الهاتف، البريد الإلكتروني')
-                          .replace(/{{customerName}}/g, 'أحمد محمد')
-                          .replace(/{{supplierResponseDays}}/g, '3')
-                          .replace(/{{problemDetails}}/g, 'مشكلة في توصيل المنتج')
-                          .replace(/{{orderNumber}}/g, 'ORD-12345')
-                          .replace(/{{orderDate}}/g, new Date().toLocaleDateString('ar-SA'))
-                          .replace(/{{productName}}/g, 'منتج تجريبي')
-                          .replace(/{{refundAmount}}/g, '100.00')
-                          .replace(/{{currentYear}}/g, new Date().getFullYear().toString()),
-                      }}
                     />
                   ) : (
                     <Textarea
