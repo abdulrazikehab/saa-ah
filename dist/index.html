@@ -20,13 +20,13 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@SaeaaPlatform" />
     <meta name="twitter:image" content="/branding/saeaa-logo.png" />
-    <link rel="icon" type="image/png" href="/branding/saeaa-logo.png?v=5" id="favicon" />
+    <link rel="icon" type="image/png" href="/branding/saeaa-logo.png?v=6" id="favicon" />
     <script>
       // Update favicon with cache-busting
       (function() {
         const favicon = document.getElementById('favicon');
         if (favicon) {
-          favicon.href = '/branding/saeaa-logo.png?v=5';
+          favicon.href = '/branding/saeaa-logo.png?v=6';
         }
       })();
     </script>
@@ -41,8 +41,22 @@
         document.documentElement.classList.add(dir);
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-CYSclVjD.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BbXVB7Oe.css">
+    <script>
+      // Apply theme immediately to prevent flash. Default to LIGHT mode.
+      (function() {
+        var savedDarkMode = localStorage.getItem('darkMode');
+        // Only apply dark mode if explicitly set to 'true', otherwise use light mode
+        if (savedDarkMode === 'true') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-CqwRODDm.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-GQg_dlsH.css">
   </head>
 
   <body>
