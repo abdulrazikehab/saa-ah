@@ -1,0 +1,12 @@
+/* App-specific styles - Most styles are in index.css */
+
+/* Legacy support - can be removed if not used */
+#root {
+  min-height: 100vh;
+}
+
+/* Utility overrides for full-width layouts */
+.full-width-layout #root {
+  max-width: none;
+  padding: 0;
+}

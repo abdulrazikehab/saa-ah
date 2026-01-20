@@ -1,0 +1,16 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://res.cloudinary.com https:; font-src 'self' data:; connect-src 'self' https://api.hyperpay.com https: wss: ws:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self';
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+/.env
+  X-Robots-Tag: noindex
+/.git
+  X-Robots-Tag: noindex
+/package.json
+  X-Robots-Tag: noindex
+

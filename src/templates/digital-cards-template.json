@@ -1,0 +1,313 @@
+{
+  "id": "digital-cards",
+  "name": "Digital Cards",
+  "nameAr": "البطاقات الرقمية",
+  "nameEn": "Digital Cards",
+  "description": "Complete digital cards marketplace with wallet, store, orders, and favorites",
+  "descriptionAr": "سوق بطاقات رقمية متكامل مع المحفظة والمتجر والطلبات والمفضلة",
+  "descriptionEn": "Complete digital cards marketplace with wallet, store, orders, and favorites",
+  "category": "cards",
+  "thumbnail": "/templates/digital-cards.png",
+  "colors": ["#0066CC", "#00CC66", "#FFB800"],
+  "features": ["محفظة", "متجر", "طلبات", "مفضلة", "تقارير"],
+  "featuresEn": ["Wallet", "Store", "Orders", "Favorites", "Reports"],
+  "pages": [
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "nameAr": "لوحة التحكم",
+      "nameEn": "Dashboard",
+      "slug": "/",
+      "sections": [
+        {
+          "id": "stats-cards",
+          "type": "stats",
+          "props": {
+            "title": "Quick Stats",
+            "titleAr": "إحصائيات سريعة",
+            "titleEn": "Quick Stats",
+            "cards": [
+              { "label": "عدد الطلبات", "labelEn": "Orders Count", "value": "0", "icon": "shopping-cart", "color": "primary" },
+              { "label": "إجمالي قيمة الطلبات", "labelEn": "Total Orders Value", "value": "0.00", "suffix": "دولار", "suffixEn": "USD", "icon": "wallet", "color": "success" },
+              { "label": "رصيد المحفظة", "labelEn": "Wallet Balance", "value": "0.00", "suffix": "دولار", "suffixEn": "USD", "icon": "credit-card", "color": "warning" }
+            ]
+          }
+        },
+        {
+          "id": "quick-actions",
+          "type": "quick-actions",
+          "props": {
+            "title": "Quick Actions",
+            "titleAr": "إجراءات سريعة",
+            "titleEn": "Quick Actions",
+            "actions": [
+              { "label": "إضافة منتج", "labelEn": "Add Product", "icon": "plus", "link": "/dashboard/products" },
+              { "label": "إدارة المنتجات", "labelEn": "Manage Products", "icon": "package", "link": "/dashboard/products" },
+              { "label": "إدارة الطلبات", "labelEn": "Manage Orders", "icon": "shopping-cart", "link": "/dashboard/orders" },
+              { "label": "إعدادات المتجر", "labelEn": "Store Settings", "icon": "settings", "link": "/dashboard/settings" },
+              { "label": "التقارير", "labelEn": "Reports", "icon": "bar-chart-3", "link": "/dashboard/reports" }
+            ]
+          }
+        },
+        {
+          "id": "pending-transactions",
+          "type": "table",
+          "props": {
+            "title": "Pending Cash Transactions",
+            "titleAr": "عمليات شحن الرصيد النقدي (المعلقة)",
+            "titleEn": "Pending Cash Transactions",
+            "columns": ["التاريخ", "رقم العملية", "البنك", "اسم المحول", "القيمة"],
+            "columnsEn": ["Date", "Transaction #", "Bank", "Sender Name", "Amount"],
+            "emptyMessage": "لا توجد بيانات",
+            "emptyMessageEn": "No data available"
+          }
+        },
+        {
+          "id": "pending-complaints",
+          "type": "table",
+          "props": {
+            "title": "Pending Complaints",
+            "titleAr": "الشكاوى المعلقة",
+            "titleEn": "Pending Complaints",
+            "columns": ["تاريخ الإضافة", "عنوان التذكرة", "رقم الطلب", "الحالة", "التعليق"],
+            "columnsEn": ["Date Added", "Ticket Title", "Order #", "Status", "Comment"],
+            "emptyMessage": "لا توجد بيانات",
+            "emptyMessageEn": "No data available"
+          }
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "nameAr": "المتجر",
+      "nameEn": "Store",
+      "slug": "/store",
+      "sections": [
+        {
+          "id": "brands-grid",
+          "type": "brands-grid",
+          "props": {
+            "title": "Select Brand",
+            "titleAr": "اختر العلامة التجارية",
+            "titleEn": "Select Brand",
+            "showCategories": true,
+            "showSearch": true
+          }
+        },
+        {
+          "id": "cart-sidebar",
+          "type": "cart-sidebar",
+          "props": {
+            "title": "Shopping Cart",
+            "titleAr": "سلة الشراء",
+            "titleEn": "Shopping Cart",
+            "showTotal": true,
+            "checkoutButton": "إتمام الطلب",
+            "checkoutButtonEn": "Checkout"
+          }
+        }
+      ]
+    },
+    {
+      "id": "favorites",
+      "name": "Favorites",
+      "nameAr": "البطاقات المفضلة",
+      "nameEn": "Favorite Cards",
+      "slug": "/favorites",
+      "sections": [
+        {
+          "id": "favorites-list",
+          "type": "favorites-list",
+          "props": {
+            "title": "Favorite Cards",
+            "titleAr": "البطاقات المفضلة",
+            "titleEn": "Favorite Cards",
+            "showSearch": true,
+            "showCart": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "orders",
+      "name": "Orders",
+      "nameAr": "طلباتي",
+      "nameEn": "My Orders",
+      "slug": "/orders",
+      "sections": [
+        {
+          "id": "orders-table",
+          "type": "orders-table",
+          "props": {
+            "title": "My Orders",
+            "titleAr": "طلباتي",
+            "titleEn": "My Orders",
+            "columns": ["رقم الطلب", "تاريخ الطلب", "عدد البطاقات", "القيمة", "الحالة", "بواسطة"],
+            "columnsAr": ["رقم الطلب", "تاريخ الطلب", "عدد البطاقات", "القيمة", "الحالة", "بواسطة"],
+            "columnsEn": ["Order #", "Order Date", "Cards Count", "Value", "Status", "Created By"],
+            "showCreateButton": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "products",
+      "name": "Products",
+      "nameAr": "قائمة المنتجات",
+      "nameEn": "Products List",
+      "slug": "/products",
+      "sections": [
+        {
+          "id": "products-table",
+          "type": "products-table",
+          "props": {
+            "title": "Products List",
+            "titleAr": "قائمة المنتجات",
+            "titleEn": "Products List",
+            "columns": ["الرقم التعريفي", "المنتج", "علامة تجارية", "سعر الجملة", "نسبة الربح", "السعر قبل الضريبة", "العملة", "سعر البيع المقترح"],
+            "columnsEn": ["ID", "Product", "Brand", "Wholesale Price", "Profit Margin", "Price Before Tax", "Currency", "Suggested Retail Price"],
+            "showSearch": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "charge-wallet",
+      "name": "Charge Wallet",
+      "nameAr": "شحن الرصيد",
+      "nameEn": "Charge Balance",
+      "slug": "/charge-wallet",
+      "sections": [
+        {
+          "id": "wallet-charge-form",
+          "type": "wallet-charge-form",
+          "props": {
+            "title": "Charge Balance",
+            "titleAr": "شحن الرصيد",
+            "titleEn": "Charge Balance",
+            "paymentMethods": ["نقدي", "فيزا"],
+            "paymentMethodsEn": ["Cash", "Visa"],
+            "currencies": ["ريال سعودي", "درهم إماراتي", "دينار كويتي", "دولار", "ريال قطري"],
+            "currenciesEn": ["Saudi Riyal", "UAE Dirham", "Kuwaiti Dinar", "USD", "Qatari Riyal"],
+            "showBankDetails": true,
+            "showReceiptUpload": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "balance-list",
+      "name": "Balance List",
+      "nameAr": "عمليات شحن الرصيد",
+      "nameEn": "Balance Operations",
+      "slug": "/balance-list",
+      "sections": [
+        {
+          "id": "balance-table",
+          "type": "balance-table",
+          "props": {
+            "title": "Balance Operations",
+            "titleAr": "عمليات شحن الرصيد",
+            "titleEn": "Balance Operations",
+            "columns": ["الرقم التعريفي", "تاريخ العملية", "الوصف", "الإجراء", "الحالة", "القيمة"],
+            "columnsEn": ["ID", "Transaction Date", "Description", "Action", "Status", "Amount"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "name": "Support",
+      "nameAr": "الدعم الفني",
+      "nameEn": "Support",
+      "slug": "/support",
+      "sections": [
+        {
+          "id": "support-tickets",
+          "type": "support-tickets",
+          "props": {
+            "title": "Support",
+            "titleAr": "الدعم الفني",
+            "titleEn": "Support",
+            "showCreateButton": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "employees",
+      "name": "Employees",
+      "nameAr": "الموظفين",
+      "nameEn": "Employees",
+      "slug": "/employees",
+      "sections": [
+        {
+          "id": "employees-list",
+          "type": "employees-page",
+          "props": {
+            "title": "Employees",
+            "titleAr": "الموظفين",
+            "titleEn": "Employees",
+            "showAddButton": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "reports",
+      "name": "Reports",
+      "nameAr": "التقارير",
+      "nameEn": "Reports",
+      "slug": "/reports",
+      "sections": [
+        {
+          "id": "reports-page",
+          "type": "reports-page",
+          "props": {
+            "title": "Reports",
+            "titleAr": "التقارير",
+            "titleEn": "Reports"
+          }
+        }
+      ]
+    },
+    {
+      "id": "profile",
+      "name": "Profile",
+      "nameAr": "الملف الشخصي",
+      "nameEn": "Profile",
+      "slug": "/profile",
+      "sections": [
+        {
+          "id": "profile-page",
+          "type": "profile-page",
+          "props": {
+            "title": "Profile",
+            "titleAr": "الملف الشخصي",
+            "titleEn": "Profile"
+          }
+        }
+      ]
+    },
+    {
+      "id": "bank-accounts",
+      "name": "Bank Accounts",
+      "nameAr": "الحسابات البنكية",
+      "nameEn": "Bank Accounts",
+      "slug": "/bank-accounts",
+      "sections": [
+        {
+          "id": "bank-accounts-page",
+          "type": "bank-accounts",
+          "props": {
+            "title": "Bank Accounts",
+            "titleAr": "الحسابات البنكية",
+            "titleEn": "Bank Accounts",
+            "showAddButton": true
+          }
+        }
+      ]
+    }
+  ]
+}
