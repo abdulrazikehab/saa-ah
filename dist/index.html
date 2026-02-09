@@ -2,14 +2,26 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>سعة - Saeaa | منصة التجارة الإلكترونية</title>
     <meta name="description" content="أنشئ متجرك الإلكتروني في دقائق مع سعة - Saeaa" />
     <meta name="author" content="سعة - Saeaa" />
     
-    <!-- Security Headers (fallback if server doesn't set them) -->
-    <meta http-equiv="X-Frame-Options" content="DENY" />
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MyStore" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="MyStore" />
+    <meta name="msapplication-TileColor" content="#6366f1" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    
+    <!-- Security Headers Note: X-Frame-Options and X-Content-Type-Options must be set via HTTP headers, not meta tags -->
+    <!-- Referrer-Policy can be set via meta tag as fallback -->
     <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
 
     <meta property="og:title" content="سعة - Saeaa | منصة التجارة الإلكترونية" />
@@ -55,8 +67,22 @@
         }
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-XMO--7kB.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BeGHFuTa.css">
+    <script>
+      // Register Service Worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('ServiceWorker registration successful');
+            })
+            .catch(function(err) {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-BqjHqrwA.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CfQ6YbVE.css">
   </head>
 
   <body>
