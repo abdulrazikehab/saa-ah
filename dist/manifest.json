@@ -1,7 +1,7 @@
 {
-  "name": "MyStore App",
-  "short_name": "MyStore",
-  "description": "Your Mobile Store App",
+  "name": "Koun Platform",
+  "short_name": "Koun",
+  "description": "Koun - Multidimensional Commerce Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
