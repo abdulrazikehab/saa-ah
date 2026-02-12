@@ -1,0 +1,54 @@
+{
+  "packageId": "com.saeaa.store",
+  "host": "your-store-domain.com",
+  "name": "Saeaa Store",
+  "launcherName": "Saeaa",
+  "display": "standalone",
+  "themeColor": "#6366f1",
+  "themeColorDark": "#4f46e5",
+  "navigationColor": "#ffffff",
+  "navigationColorDark": "#1f2937",
+  "navigationDividerColor": "#e5e7eb",
+  "navigationDividerColorDark": "#374151",
+  "backgroundColor": "#ffffff",
+  "enableNotifications": true,
+  "startUrl": "/store",
+  "iconUrl": "/icons/icon-512x512.png",
+  "maskableIconUrl": "/icons/icon-512x512.png",
+  "monochromeIconUrl": "/icons/icon-512x512.png",
+  "shortcuts": [
+    {
+      "name": "Categories",
+      "shortName": "Categories",
+      "url": "/store/categories",
+      "chosenIconUrl": "/icons/icon-192x192.png"
+    },
+    {
+      "name": "Cart",
+      "shortName": "Cart", 
+      "url": "/store/cart",
+      "chosenIconUrl": "/icons/icon-192x192.png"
+    }
+  ],
+  "signing": {
+    "keyPath": "./android.keystore",
+    "alias": "saeaa-store"
+  },
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": false
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "orientation": "portrait",
+  "appVersion": "1",
+  "appVersionName": "1.0.0",
+  "minSdkVersion": 23,
+  "splashScreenFadeOutDuration": 300,
+  "enableSiteSettingsShortcut": true
+}

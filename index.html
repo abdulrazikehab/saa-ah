@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>&#x0643;&#x0648;&#x0646; - Koun | &#x0639;&#x0627;&#x0644;&#x0645; &#x0627;&#x0644;&#x062a;&#x062c;&#x0627;&#x0631;&#x0629; &#x0645;&#x062a;&#x0639;&#x062f;&#x062f; &#x0627;&#x0644;&#x0623;&#x0628;&#x0639;&#x0627;&#x062f;</title>
+    <meta name="description" content="Koun - &#x0643;&#x0648;&#x0646; | &#x0627;&#x0644;&#x0645;&#x0646;&#x0635;&#x0629; &#x0627;&#x0644;&#x0623;&#x0633;&#x0647;&#x0644; &#x0644;&#x0625;&#x0646;&#x0634;&#x0627;&#x0621; &#x0648;&#x0625;&#x062f;&#x0627;&#x0631;&#x0629; &#x0645;&#x062a;&#x062c;&#x0631;&#x0643; &#x0627;&#x0644;&#x0625;&#x0644;&#x0643;&#x062a;&#x0631;&#x0648;&#x0646;&#x064a; &#x0641;&#x064a; &#x062f;&#x0642;&#x0627;&#x0626;&#x0642;" />
+    <meta name="author" content="&#x0643;&#x0648;&#x0646; - Koun" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Koun" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Koun" />
+    <meta name="msapplication-TileColor" content="#6366f1" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    
+    <!-- Security Headers Note: X-Frame-Options and X-Content-Type-Options must be set via HTTP headers, not meta tags -->
+    <!-- Referrer-Policy can be set via meta tag as fallback -->
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+
+    <meta property="og:title" content="&#x0643;&#x0648;&#x0646; - Koun | &#x0639;&#x0627;&#x0644;&#x0645; &#x0627;&#x0644;&#x062a;&#x062c;&#x0627;&#x0631;&#x0629; &#x0645;&#x062a;&#x0639;&#x062f;&#x062f; &#x0627;&#x0644;&#x0623;&#x0628;&#x0639;&#x0627;&#x062f;" />
+    <meta property="og:description" content="&#x0623;&#x0646;&#x0634;&#x0626; &#x0645;&#x062a;&#x062c;&#x0631;&#x0643; &#x0627;&#x0644;&#x0625;&#x0644;&#x0643;&#x062a;&#x0631;&#x0648;&#x0646;&#x064a; &#x0641;&#x064a; &#x062f;&#x0642;&#x0627;&#x0626;&#x0642; &#x0645;&#x0639; &#x0643;&#x0648;&#x0646;" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/branding/koun-logo.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@KounPlatform" />
+    <meta name="twitter:image" content="/branding/koun-logo.png" />
+    <link rel="icon" type="image/png" href="/branding/koun-logo.png?v=11" id="favicon" />
+    <script>
+      // Update favicon with cache-busting
+      (function() {
+        const favicon = document.getElementById('favicon');
+        if (favicon) {
+          favicon.href = '/branding/koun-logo.png?v=11';
+        }
+      })();
+    </script>
+    <script>
+      // Set direction before React loads based on saved language
+      (function() {
+        var lang = localStorage.getItem('language') || localStorage.getItem('i18nextLng') || 'ar';
+        var dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.documentElement.lang = lang;
+        document.documentElement.dir = dir;
+        document.documentElement.setAttribute('dir', dir);
+        document.documentElement.classList.add(dir);
+      })();
+    </script>
+    <script>
+      // Apply theme immediately to prevent flash. Default to LIGHT mode.
+      (function() {
+        var savedDarkMode = localStorage.getItem('darkMode');
+        // Only apply dark mode if explicitly set to 'true', otherwise use light mode
+        if (savedDarkMode === 'true') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
+    <script>
+      // Register Service Worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+              console.log('ServiceWorker registration successful');
+            })
+            .catch(function(err) {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script>
+      // Apply direction to body immediately
+      (function() {
+        var lang = localStorage.getItem('language') || localStorage.getItem('i18nextLng') || 'ar';
+        var dir = lang === 'ar' ? 'rtl' : 'ltr';
+        document.body.dir = dir;
+        document.body.setAttribute('dir', dir);
+        document.body.style.direction = dir;
+        document.body.classList.add(dir);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

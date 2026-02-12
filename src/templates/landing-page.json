@@ -1,0 +1,73 @@
+{
+  "sections": [
+    {
+      "id": "hero-1",
+      "type": "hero",
+      "props": {
+        "title": "Welcome to Your Store",
+        "subtitle": "Discover amazing products at great prices",
+        "buttonText": "Shop Now",
+        "buttonLink": "/products",
+        "backgroundColor": "#1a1a1a",
+        "textColor": "#ffffff"
+      }
+    },
+    {
+      "id": "features-1",
+      "type": "features",
+      "props": {
+        "title": "Why Shop With Us",
+        "items": [
+          {
+            "icon": "🚀",
+            "title": "Fast Shipping",
+            "description": "Get your orders delivered quickly"
+          },
+          {
+            "icon": "💳",
+            "title": "Secure Payments",
+            "description": "Your payment information is safe"
+          },
+          {
+            "icon": "🎁",
+            "title": "Gift Cards",
+            "description": "Perfect for any occasion"
+          }
+        ]
+      }
+    },
+    {
+      "id": "products-1",
+      "type": "products",
+      "props": {
+        "title": "Featured Products",
+        "limit": 8
+      }
+    },
+    {
+      "id": "cta-1",
+      "type": "cta",
+      "props": {
+        "title": "Ready to Start Shopping?",
+        "description": "Join thousands of happy customers today",
+        "buttonText": "Create Account",
+        "buttonLink": "/auth/signup",
+        "backgroundColor": "#3b82f6",
+        "textColor": "#ffffff"
+      }
+    },
+    {
+      "id": "footer-1",
+      "type": "footer",
+      "props": {
+        "companyName": "Your Store",
+        "links": [
+          { "label": "About Us", "url": "/about" },
+          { "label": "Contact", "url": "/contact" },
+          { "label": "Privacy Policy", "url": "/privacy" },
+          { "label": "Terms of Service", "url": "/terms" }
+        ]
+      }
+    }
+  ]
+}
