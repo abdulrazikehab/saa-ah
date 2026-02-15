@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">أسس</string>
-    <string name="title_activity_main">أسس</string>
-    <string name="package_name">com.blackbox.store</string>
-    <string name="custom_url_scheme">com.blackbox.store</string>
-</resources>
